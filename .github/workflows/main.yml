@@ -1,4 +1,4 @@
-name: Build APK — Capacitor
+name: Build APK — Teclado MIDI
 on:
   push:
     branches: [main, master]
@@ -17,19 +17,19 @@ jobs:
         with:
           node-version: 20
 
-      - name: Instalar dependências
-        run: npm ci
+      - name: Instalar dependências (com npm — gera lock se preciso)
+        run: npm install
 
-      - name: Build do projeto web
+      - name: Build do projeto
         run: npm run build
 
-      - name: Instalar Java 17 (para Android)
+      - name: Instalar Java 17
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Preparar Capacitor Android
+      - name: Preparar Android com Capacitor
         run: |
           npx capacitor sync android
           chmod +x android/gradlew
@@ -39,7 +39,7 @@ jobs:
           cd android
           ./gradlew assembleDebug
 
-      - name: Disponibilizar APK
+      - name: Baixar APK
         uses: actions/upload-artifact@v4
         with:
           name: Teclado-MIDI-APK
