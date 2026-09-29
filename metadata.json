@@ -1,0 +1,11 @@
+{
+  "name": "Teclado MIDI Controller",
+  "description": "Controlador e enviador de comandos MIDI exclusivo para Android e Web MIDI/BLE.",
+  "requestFramePermissions": [
+    "midi",
+    "bluetooth"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
