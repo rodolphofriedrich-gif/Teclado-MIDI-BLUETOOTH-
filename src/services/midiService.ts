@@ -1,10 +1,14 @@
 /**
- * MIDI Service - Controlador exclusivo para envio de comandos MIDI
- * Conexão com Web MIDI (MidiManager Android) e Web Bluetooth MIDI (BLE)
- * SEM geração nem reprodução de áudio.
+ * Camada MIDI do aplicativo.
+ *
+ * Android: usa a API nativa android.media.midi através do plugin Capacitor NativeMidi.
+ * Web/PWA: mantém Web MIDI quando o navegador oferecer a API.
+ * Não gera áudio.
  */
 
+import { Capacitor } from '@capacitor/core';
 import { MidiDestination, DestinationType } from '../types/midi';
+import { NativeMidi, NativeMidiDevice, NativeBleDevice } from './nativeMidi';
 
 export const MIDI_BLE_SERVICE_UUID = '03b80e5a-ede8-4b33-a020-514f0634123b';
 export const MIDI_BLE_CHAR_UUID = '7772e5db-3868-4112-a1a9-f2669d106bf3';
@@ -17,473 +21,268 @@ export function getNoteName(noteNumber: number): string {
   return `${NOTE_NAMES[noteIndex]}${octave}`;
 }
 
+function nativeTypeToDestinationType(type: NativeMidiDevice['type']): DestinationType {
+  if (type === 'usb') return 'usb';
+  if (type === 'ble') return 'ble';
+  return 'local';
+}
+
+function nativeDeviceToDestination(device: NativeMidiDevice): MidiDestination {
+  const type = nativeTypeToDestinationType(device.type);
+  return {
+    id: `native:${device.id}`,
+    name: device.name || 'Dispositivo MIDI',
+    displayName: device.name || 'Dispositivo MIDI',
+    type,
+    manufacturer: device.manufacturer,
+    nativeId: device.id,
+    inputPortCount: device.inputPortCount,
+    outputPortCount: device.outputPortCount,
+    portCount: Math.max(device.inputPortCount, device.outputPortCount),
+  };
+}
+
 export class MidiControllerManager {
   private midiAccess: MIDIAccess | null = null;
   private onStateChangeCallback: (() => void) | null = null;
   private onDisconnectCallback: ((destination: MidiDestination) => void) | null = null;
-
   private connectedDestination: MidiDestination | null = null;
-  private knownBleDevices: Map<string, any> = new Map();
-  private virtualOutputs: MidiDestination[] = [];
-  private lastOutputsHash: string = '';
-  private pollingTimer: any = null;
-
-  constructor() {
-    // Destinos locais garantidos para emulação e recepção por outros apps no aparelho
-    this.virtualOutputs = [
-      {
-        id: 'virtual-receiver-loopback',
-        name: 'Todos Receptores MIDI Locais',
-        type: 'local',
-        displayName: 'Todos Receptores MIDI Locais (neste aparelho)',
-        manufacturer: 'Android MidiManager / Broadcast',
-        isVirtual: true,
-      },
-      {
-        id: 'virtual-receiver-synth',
-        name: 'Sintetizador Virtual Interno',
-        type: 'local',
-        displayName: 'Sintetizador Virtual Interno (neste aparelho)',
-        manufacturer: 'Controlador MIDI Local',
-        isVirtual: true,
-      },
-    ];
-
-    // Carrega dispositivos BLE previamente pareados/memorizados
-    this.loadSavedBleDevices();
-    // Inicia monitoramento automático contínuo
-    this.startAutoDetection();
-  }
-
-  private loadSavedBleDevices() {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = localStorage.getItem('midi_known_ble_devices');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((d: { id: string; name: string }) => {
-              if (d && d.id && !this.knownBleDevices.has(d.id)) {
-                this.knownBleDevices.set(d.id, {
-                  id: d.id,
-                  name: d.name || 'Dispositivo BLE MIDI',
-                });
-              }
-            });
-          }
-        }
-      }
-    } catch {
-      // Ignora erro de storage
-    }
-  }
-
-  private saveBleDevice(id: string, name: string) {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const saved = localStorage.getItem('midi_known_ble_devices');
-        const list = saved ? JSON.parse(saved) : [];
-        if (!list.some((item: any) => item.id === id)) {
-          list.push({ id, name });
-          localStorage.setItem('midi_known_ble_devices', JSON.stringify(list));
-        }
-      }
-    } catch {
-      // Ignora erro de storage
-    }
-  }
+  private nativeDevices: NativeMidiDevice[] = [];
+  private scannedBleDevices: NativeBleDevice[] = [];
+  private nativeListeners: Array<{ remove: () => Promise<void> }> = [];
 
   public setCallbacks(
     onStateChange: () => void,
-    onDisconnect: (destination: MidiDestination) => void
+    onDisconnect: (destination: MidiDestination) => void,
   ) {
     this.onStateChangeCallback = onStateChange;
     this.onDisconnectCallback = onDisconnect;
   }
 
   public async initWebMidi(): Promise<boolean> {
+    if (Capacitor.getPlatform() === 'android') {
+      try {
+        await NativeMidi.initialize();
+        await this.refreshNativeDevices();
+
+        this.nativeListeners.forEach((listener) => listener.remove().catch(() => undefined));
+        this.nativeListeners = [];
+
+        this.nativeListeners.push(
+          await NativeMidi.addListener('devicesChanged', async () => {
+            await this.refreshNativeDevices();
+            this.onStateChangeCallback?.();
+          }),
+        );
+
+        this.nativeListeners.push(
+          await NativeMidi.addListener('midiMessage', (event) => {
+            // O monitor MIDI poderá consumir este evento posteriormente.
+            // Mantemos o callback de estado para permitir atualização da interface.
+            if (event) this.onStateChangeCallback?.();
+          }),
+        );
+
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     if (typeof navigator === 'undefined' || !navigator.requestMIDIAccess) {
       return false;
     }
 
     try {
-      // Tenta primeiro com sysex: true para compatibilidade ampla com todas as DAWs e apps
-      try {
-        this.midiAccess = await navigator.requestMIDIAccess({
-          sysex: true,
-          software: true,
-        });
-      } catch {
-        // Fallback sem sysex caso o navegador restrinja permissão
-        this.midiAccess = await navigator.requestMIDIAccess({
-          sysex: false,
-          software: true,
-        });
-      }
-
-      this.midiAccess.onstatechange = (e: Event) => {
-        const port = (e as any).port;
-        if (
-          this.connectedDestination &&
-          (this.connectedDestination.type === 'local' || this.connectedDestination.type === 'usb') &&
-          port &&
-          port.id === this.connectedDestination.id &&
-          port.state === 'disconnected'
-        ) {
-          const disconnected = this.connectedDestination;
-          this.connectedDestination = null;
-          if (this.onDisconnectCallback) {
-            this.onDisconnectCallback(disconnected);
-          }
-        }
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback();
-        }
-      };
-
-      // Carrega dispositivos BLE que o navegador já tem permissão
-      await this.checkPermittedBleDevices();
-
+      this.midiAccess = await navigator.requestMIDIAccess({ sysex: false, software: true });
+      this.midiAccess.onstatechange = () => this.onStateChangeCallback?.();
       return true;
     } catch {
       return false;
     }
   }
 
-  /**
-   * Consulta os dispositivos BLE já autorizados pelo navegador (Web Bluetooth getDevices)
-   */
-  public async checkPermittedBleDevices(): Promise<void> {
-    if (
-      typeof navigator !== 'undefined' &&
-      (navigator as any).bluetooth &&
-      (navigator as any).bluetooth.getDevices
-    ) {
-      try {
-        const devices = await (navigator as any).bluetooth.getDevices();
-        if (Array.isArray(devices)) {
-          let hasNew = false;
-          devices.forEach((d: any) => {
-            if (d && d.id && !this.knownBleDevices.has(d.id)) {
-              this.knownBleDevices.set(d.id, d);
-              this.saveBleDevice(d.id, d.name || 'Dispositivo BLE MIDI');
-              hasNew = true;
-            }
-          });
-          if (hasNew && this.onStateChangeCallback) {
-            this.onStateChangeCallback();
-          }
-        }
-      } catch {
-        // Ignora
-      }
+  private async refreshNativeDevices(): Promise<void> {
+    const result = await NativeMidi.getDevices();
+    this.nativeDevices = result.devices || [];
+  }
+
+  public async getBluetoothState(): Promise<boolean> {
+    if (Capacitor.getPlatform() === 'android') {
+      const result = await NativeMidi.isBluetoothEnabled();
+      return result.enabled;
     }
+
+    const bluetooth = (navigator as any)?.bluetooth;
+    if (bluetooth?.getAvailability) return bluetooth.getAvailability();
+    return false;
   }
 
-  /**
-   * Detecção e atualização automática contínua
-   */
-  private startAutoDetection() {
-    if (this.pollingTimer) return;
-    this.pollingTimer = setInterval(async () => {
-      // 1. Verifica se houve alteração em portas MIDI Web/Android
-      const currentOutputs = this.getAvailableDestinations();
-      const hash = currentOutputs.map((o) => `${o.id}-${o.displayName}`).join('|');
-      if (hash !== this.lastOutputsHash) {
-        this.lastOutputsHash = hash;
-        if (this.onStateChangeCallback) {
-          this.onStateChangeCallback();
-        }
-      }
+  public async requestEnableBluetooth(): Promise<boolean> {
+    if (Capacitor.getPlatform() !== 'android') {
+      return this.getBluetoothState();
+    }
 
-      // 2. Verifica silenciosamente dispositivos BLE autorizados
-      await this.checkPermittedBleDevices();
-    }, 2000);
+    const result = await NativeMidi.requestEnableBluetooth();
+    return result.enabled;
   }
 
-  /**
-   * Retorna TODOS os destinos MIDI disponíveis sem restrição
-   * Identifica: (neste aparelho), (BLE), (USB)
-   */
-  public getAvailableDestinations(): MidiDestination[] {
+  public async getAvailableDestinations(): Promise<MidiDestination[]> {
+    if (Capacitor.getPlatform() === 'android') {
+      await this.refreshNativeDevices();
+
+      const destinations = this.nativeDevices
+        .filter((device) => device.inputPortCount > 0)
+        .map(nativeDeviceToDestination);
+
+      const scanned = this.scannedBleDevices.map((device) => ({
+        id: `ble:${device.address}`,
+        name: device.name || 'Dispositivo BLE MIDI',
+        displayName: `${device.name || 'Dispositivo BLE MIDI'} (BLE)`,
+        type: 'ble' as const,
+        bleAddress: device.address,
+        inputPortCount: 1,
+        outputPortCount: 1,
+        portCount: 1,
+      }));
+
+      const seen = new Set(destinations.map((item) => item.id));
+      return [...destinations, ...scanned.filter((item) => !seen.has(item.id))];
+    }
+
     const list: MidiDestination[] = [];
-    const seenIds = new Set<string>();
-
-    // 1. Destinos do MidiManager Android / Web MIDI (Locais, USB, Bluetooth embutido)
     if (this.midiAccess) {
-      const outputs = this.midiAccess.outputs.values();
-      for (const output of outputs) {
-        if (!seenIds.has(output.id)) {
-          seenIds.add(output.id);
-
-          const rawName = (output.name || 'Dispositivo MIDI Local').trim();
-          const lowerName = rawName.toLowerCase();
-          const lowerManuf = (output.manufacturer || '').toLowerCase();
-
-          // Classificação automática do conector / receptor
-          const isBle =
-            lowerName.includes('ble') ||
-            lowerName.includes('bluetooth') ||
-            lowerManuf.includes('bluetooth');
-
-          const isUsb =
-            lowerName.includes('usb') ||
-            lowerName.includes('otg') ||
-            lowerName.includes('interface') ||
-            lowerManuf.includes('usb');
-
-          const type: DestinationType = isBle ? 'ble' : isUsb ? 'local' : 'local';
-
-          list.push({
-            id: output.id,
-            name: rawName,
-            type,
-            displayName: rawName,
-            manufacturer: output.manufacturer || (type === 'usb' ? 'Conector USB MIDI' : 'Android MidiManager'),
-            rawOutput: output,
-          });
-        }
-      }
-    }
-
-    // 2. Destinos Virtuais / Receptores do Aparelho (garante que apps no mesmo aparelho sempre funcionem)
-    for (const v of this.virtualOutputs) {
-      if (!seenIds.has(v.id)) {
-        seenIds.add(v.id);
-        list.push(v);
-      }
-    }
-
-    // 3. Destinos Bluetooth BLE externos
-    this.knownBleDevices.forEach((device, id) => {
-      const bleId = `ble-${id}`;
-      if (!seenIds.has(bleId)) {
-        seenIds.add(bleId);
-        const rawName = device.name || 'Dispositivo BLE MIDI';
+      for (const output of this.midiAccess.outputs.values()) {
         list.push({
-          id: bleId,
-          name: rawName,
-          type: 'ble',
-          displayName: rawName,
-          bleDevice: device,
+          id: output.id,
+          name: output.name || 'Dispositivo MIDI',
+          displayName: output.name || 'Dispositivo MIDI',
+          type: 'local',
+          manufacturer: output.manufacturer || undefined,
+          portCount: 1,
         });
       }
-    });
+    }
+    return list;
+  }
 
-    // Formata o displayName identificando claramente cada tipo: "(neste aparelho)", "(BLE)", "(USB)"
-    return list.map((item) => {
-      let suffix = '(neste aparelho)';
-      if (item.type === 'ble') {
-        suffix = '(BLE)';
-      } else if (item.type === 'usb') {
-        suffix = '(USB)';
-      }
-
-      // Evita duplicar se o nome já contiver o sufixo
-      const cleanName = item.name.replace(/\s*\((neste aparelho\vert{}BLE\vert{}USB)\)/gi, '').trim();
-
-      return {
-        ...item,
-        displayName: `${cleanName} ${suffix}`,
-      };
-    });
+  public async getAvailableDestinationsSync(): Promise<MidiDestination[]> {
+    return this.getAvailableDestinations();
   }
 
   public getConnectedDestination(): MidiDestination | null {
     return this.connectedDestination;
   }
 
-  /**
-   * Conecta a um destino MIDI exclusivo.
-   * Regra Obrigatória: Se já houver um destino conectado, desconecta automaticamente dele primeiro.
-   */
   public async connect(destination: MidiDestination): Promise<boolean> {
-    // 1. Desconecta o anterior automaticamente se for diferente
-    if (this.connectedDestination) {
-      if (this.connectedDestination.id === destination.id) {
-        // Já está conectado a este
-        return true;
-      }
-      await this.disconnect();
-    }
+    if (this.connectedDestination?.id === destination.id) return true;
+    if (this.connectedDestination) await this.disconnect();
 
     try {
-      if (destination.type === 'local' || destination.type === 'usb') {
-        if (destination.isVirtual) {
-          this.connectedDestination = destination;
-          return true;
+      if (Capacitor.getPlatform() === 'android') {
+        if (destination.id.startsWith('ble:') && destination.bleAddress) {
+          await NativeMidi.connectBluetooth({
+            address: destination.bleAddress,
+            port: 0,
+          });
+        } else if (destination.nativeId !== undefined) {
+          await NativeMidi.connect({
+            id: String(destination.nativeId),
+            port: 0,
+          });
+        } else {
+          throw new Error('Destino MIDI Android inválido. Atualize a lista de dispositivos.');
         }
-
-        if (destination.rawOutput) {
-          if (destination.rawOutput.open) {
-            await destination.rawOutput.open();
-          }
-          this.connectedDestination = destination;
-          return true;
-        }
-      } else if (destination.type === 'ble') {
-        // Conexão via Web Bluetooth
-        const device = destination.bleDevice;
-        
-        // CORREÇÃO: Se não houver dispositivo OU se for um mock do localStorage (sem .gatt)
-        if (!device || !device.gatt) {
-          const scanned = await this.scanBleDevice();
-          if (scanned) {
-            return this.connect(scanned);
-          }
-          throw new Error('Dispositivo BLE precisa ser emparelhado novamente. Toque em Buscar BLE.');
-        }
-
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(MIDI_BLE_SERVICE_UUID);
-        const char = await service.getCharacteristic(MIDI_BLE_CHAR_UUID);
-
-        // Trata desconexão inesperada sem travar o app
-        device.addEventListener(
-          'gattserverdisconnected',
-          () => {
-            if (this.connectedDestination?.id === destination.id) {
-              const disc = this.connectedDestination;
-              this.connectedDestination = null;
-              if (this.onDisconnectCallback) {
-                this.onDisconnectCallback(disc);
-              }
-              if (this.onStateChangeCallback) {
-                this.onStateChangeCallback();
-              }
-            }
-          },
-          { once: true }
-        );
-
-        this.connectedDestination = {
-          ...destination,
-          bleCharacteristic: char,
-        };
-        return true;
+      } else {
+        const output = this.midiAccess?.outputs.get(destination.id);
+        if (!output) throw new Error('Saída MIDI não encontrada.');
+        await output.open();
       }
-      return false;
-    } catch (err) {
+
+      this.connectedDestination = destination;
+      return true;
+    } catch (error) {
       this.connectedDestination = null;
-      throw err;
+      throw error;
     }
   }
 
-  /**
-   * Desconecta o destino atualmente ativo.
-   */
   public async disconnect(): Promise<void> {
-    if (!this.connectedDestination) return;
-
     const current = this.connectedDestination;
+    if (!current) return;
+
     this.connectedDestination = null;
 
-    if (current.type === 'ble' && current.bleDevice?.gatt?.connected) {
-      try {
-        current.bleDevice.gatt.disconnect();
-      } catch {
-        // ignore disconnect errors
-      }
-    }
-
-    if (this.onDisconnectCallback) {
-      this.onDisconnectCallback(current);
-    }
-  }
-
-  /**
-   * Busca e adiciona um dispositivo BLE pelo Web Bluetooth API
-   */
-  public async scanBleDevice(): Promise<MidiDestination | null> {
-    if (typeof navigator === 'undefined' || !(navigator as any).bluetooth) {
-      throw new Error('Web Bluetooth não é suportado neste navegador.');
-    }
-
     try {
-      const bluetooth = (navigator as any).bluetooth;
-      const device = await bluetooth.requestDevice({
-        filters: [{ services: [MIDI_BLE_SERVICE_UUID] }],
-        optionalServices: [MIDI_BLE_SERVICE_UUID],
-      });
-
-      if (device) {
-        this.knownBleDevices.set(device.id, device);
-        this.saveBleDevice(device.id, device.name || 'Dispositivo BLE MIDI');
-        const dest: MidiDestination = {
-          id: `ble-${device.id}`,
-          name: device.name || 'Dispositivo BLE MIDI',
-          displayName: `${device.name || 'Dispositivo BLE MIDI'} (BLE)`,
-          type: 'ble',
-          bleDevice: device,
-        };
-        return dest;
+      if (Capacitor.getPlatform() === 'android') {
+        await NativeMidi.disconnect();
+      } else {
+        const output = this.midiAccess?.outputs.get(current.id);
+        await output?.close();
       }
-      return null;
-    } catch (err: any) {
-      if (err.name === 'NotFoundError') {
-        // Usuário cancelou o seletor BLE
-        return null;
-      }
-      throw err;
+    } finally {
+      this.onDisconnectCallback?.(current);
     }
   }
 
-  /**
-   * Envia comando Note On (com velocidade fixa 64) no canal selecionado (1 a 16).
-   */
+  public async scanBleDevice(): Promise<MidiDestination | null> {
+    if (Capacitor.getPlatform() !== 'android') {
+      throw new Error('A busca BLE MIDI nativa está disponível no Android.');
+    }
+
+    const result = await NativeMidi.scanBluetoothMidi({ durationMs: 15000 });
+    this.scannedBleDevices = result.devices || [];
+
+    this.onStateChangeCallback?.();
+
+    if (this.scannedBleDevices.length === 0) return null;
+
+    const first = this.scannedBleDevices[0];
+    return {
+      id: `ble:${first.address}`,
+      name: first.name || 'Dispositivo BLE MIDI',
+      displayName: `${first.name || 'Dispositivo BLE MIDI'} (BLE)`,
+      type: 'ble',
+      bleAddress: first.address,
+      inputPortCount: 1,
+      outputPortCount: 1,
+      portCount: 1,
+    };
+  }
+
   public async sendNoteOn(channel: number, note: number): Promise<{ bytes: number[]; hex: string }> {
-    if (!this.connectedDestination) {
-      throw new Error('Nenhum destino MIDI conectado.');
-    }
-
-    // Status Byte: 0x90 + (channel - 1)
+    if (!this.connectedDestination) throw new Error('Nenhum destino MIDI conectado.');
     const statusByte = 0x90 | ((channel - 1) & 0x0f);
-    const velocity = 64; // Velocidade padrão (64)
-    const midiBytes = [statusByte, note, velocity];
-    const hex = midiBytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
-
+    const midiBytes = [statusByte, note & 0x7f, 64];
     await this.transmitBytes(midiBytes);
-    return { bytes: midiBytes, hex };
+    return {
+      bytes: midiBytes,
+      hex: midiBytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' '),
+    };
   }
 
-  /**
-   * Envia comando Note Off no canal selecionado (1 a 16).
-   */
   public async sendNoteOff(channel: number, note: number): Promise<{ bytes: number[]; hex: string }> {
-    if (!this.connectedDestination) {
-      throw new Error('Nenhum destino MIDI conectado.');
-    }
-
-    // Status Byte: 0x80 + (channel - 1)
+    if (!this.connectedDestination) throw new Error('Nenhum destino MIDI conectado.');
     const statusByte = 0x80 | ((channel - 1) & 0x0f);
-    const velocity = 0;
-    const midiBytes = [statusByte, note, velocity];
-    const hex = midiBytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
-
+    const midiBytes = [statusByte, note & 0x7f, 0];
     await this.transmitBytes(midiBytes);
-    return { bytes: midiBytes, hex };
+    return {
+      bytes: midiBytes,
+      hex: midiBytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' '),
+    };
   }
 
   private async transmitBytes(midiBytes: number[]): Promise<void> {
-    if (!this.connectedDestination) return;
+    if (!this.connectedDestination) throw new Error('Nenhum destino MIDI conectado.');
 
-    if (this.connectedDestination.type === 'local' || this.connectedDestination.type === 'usb') {
-      if (this.connectedDestination.rawOutput) {
-        this.connectedDestination.rawOutput.send(midiBytes);
-      }
-      // Se for virtual, comando foi registrado com sucesso
-    } else if (this.connectedDestination.type === 'ble') {
-      const char = this.connectedDestination.bleCharacteristic;
-      if (char) {
-        // BLE MIDI 1.0 Packet: [Header, Timestamp, ...MIDI bytes]
-        const packet = new Uint8Array([0x80, 0x80, ...midiBytes]);
-        if (char.writeValueWithoutResponse) {
-          await char.writeValueWithoutResponse(packet);
-        } else {
-          await char.writeValue(packet);
-        }
-      }
+    if (Capacitor.getPlatform() === 'android') {
+      await NativeMidi.send({ data: midiBytes });
+      return;
     }
+
+    const output = this.midiAccess?.outputs.get(this.connectedDestination.id);
+    if (!output) throw new Error('Saída MIDI não encontrada.');
+    output.send(midiBytes);
   }
 }
 
