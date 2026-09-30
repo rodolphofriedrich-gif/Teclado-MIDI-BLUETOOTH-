@@ -172,20 +172,24 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
               type="button"
               onClick={() => {
                 onScanBle();
-                setIsOpen(false);
+                // Removido o setIsOpen(false) para manter o dropdown aberto e mostrar o estado de 'isScanningBle'
               }}
               disabled={isScanningBle}
-              className="w-full text-left px-3 py-2 text-xs font-semibold text-sky-300 bg-sky-950/60 hover:bg-sky-900/60 border border-sky-800/80 rounded flex items-center justify-between transition active:scale-[0.99]"
+              className={`w-full text-left px-3 py-2 text-xs font-semibold border rounded flex items-center justify-between transition active:scale-[0.99] ${
+                isScanningBle 
+                  ? 'text-slate-400 bg-slate-800 border-slate-700 cursor-wait' 
+                  : 'text-sky-300 bg-sky-950/60 hover:bg-sky-900/60 border-sky-800/80'
+              }`}
             >
               <span className="flex items-center gap-1.5">
-                <span>📡</span>
+                <span className={isScanningBle ? 'animate-pulse' : ''}>📡</span>
                 <span>
                   {isScanningBle
                     ? 'Buscando dispositivos BLE...'
                     : '+ Buscar dispositivo BLE ao alcance'}
                 </span>
               </span>
-              <span className="text-[10px] uppercase font-bold text-sky-400">BLE</span>
+              <span className={`text-[10px] uppercase font-bold ${isScanningBle ? 'text-slate-500' : 'text-sky-400'}`}>BLE</span>
             </button>
           </div>
         </div>
