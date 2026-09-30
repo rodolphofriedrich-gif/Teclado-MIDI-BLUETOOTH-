@@ -81,11 +81,15 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
 
   const handleKeyUp = useCallback(
     (note: number) => {
-      if (!isConnected) return;
+      // CORREÇÃO: Removemos o bloqueio de "isConnected" no topo.
+      // A tecla deve sempre levantar visualmente e limpar o estado, 
+      // enviando o comando MIDI apenas se ainda estiver conectado.
       if (activeNotesRef.current.has(note)) {
         activeNotesRef.current.delete(note);
         setActiveNotes(new Set(activeNotesRef.current));
-        onNoteOff(note);
+        if (isConnected) {
+          onNoteOff(note);
+        }
       }
     },
     [isConnected, onNoteOff]
@@ -160,9 +164,8 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
         </div>
       </div>
 
-      {/* Área Gráfica das Teclas: Ocupa todo o restante da tela */}
+      {/* Área Gráfica das Teclas */}
       <div className="relative flex-1 w-full min-h-[140px] bg-slate-950 rounded-lg overflow-hidden border border-slate-800 select-none touch-none shadow-inner">
-        {/* Aviso se desconectado: fica no fundo (z-10) com pointer-events-none, NUNCA sobrepõe nem bloqueia a lista suspensa */}
         {!isConnected && (
           <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center text-center p-3 transition-all">
             <div className="bg-slate-950/90 border border-amber-500/40 text-amber-400 px-4 py-2 rounded-xl text-xs font-bold shadow-2xl flex items-center gap-2 animate-pulse">
