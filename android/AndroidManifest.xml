@@ -2,17 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.midi.controller.keyboard">
 
-    <!-- Requisito de hardware MIDI para Android 10+ -->
+    <!-- Requisito de hardware MIDI e BLE -->
     <uses-feature android:name="android.hardware.midi" android:required="true" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <!-- Permissões de Rede e Web -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Permissões de Bluetooth e BLE para Android 10, 11 e Android 12+ -->
+    <!-- Permissões de Bluetooth e Localização para Android 11 e inferiores -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
 
     <!-- Android 12+ (API 31+) Permissões Granulares de Bluetooth -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
