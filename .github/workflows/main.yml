@@ -23,11 +23,11 @@ jobs:
       - name: Build do projeto
         run: npm run build
 
-      - name: Instalar Java 17
+      - name: Instalar Java 21
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Preparar Android com Capacitor
         run: |
