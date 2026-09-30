@@ -95,16 +95,8 @@ export default function App() {
 
     init();
 
-    // Atualização contínua automática para sempre exibir todos os destinos disponíveis
-    const autoRefreshTimer = setInterval(() => {
-      if (isMounted) {
-        refreshDestinations();
-      }
-    }, 2000);
-
     return () => {
       isMounted = false;
-      clearInterval(autoRefreshTimer);
     };
   }, [refreshDestinations, showMessage]);
 
@@ -146,8 +138,8 @@ export default function App() {
     }
   };
 
-  // Disparo de Note On com velocidade padrão (64)
-  const handleNoteOn = async (note: number) => {
+  // Disparo de Note On com velocidade padrão (64) otimizado para evitar re-renders na referência
+  const handleNoteOn = useCallback(async (note: number) => {
     if (!connectedDestination) {
       showMessage('Selecione um destino MIDI', 'warn', 2500);
       return;
@@ -169,10 +161,10 @@ export default function App() {
     } catch (err: any) {
       showMessage(`Erro ao transmitir Note On: ${err?.message}`, 'error', 2500);
     }
-  };
+  }, [connectedDestination, showMessage]);
 
-  // Disparo de Note Off
-  const handleNoteOff = async (note: number) => {
+  // Disparo de Note Off otimizado
+  const handleNoteOff = useCallback(async (note: number) => {
     if (!connectedDestination) return;
 
     try {
@@ -191,11 +183,11 @@ export default function App() {
     } catch {
       // Note off silencioso
     }
-  };
+  }, [connectedDestination]);
 
-  const handleDisabledPress = () => {
+  const handleDisabledPress = useCallback(() => {
     showMessage('Selecione um destino MIDI', 'warn', 2500);
-  };
+  }, [showMessage]);
 
   return (
     <div className="h-[100dvh] w-full bg-slate-950 text-slate-100 flex flex-col font-sans select-none overflow-hidden antialiased">
@@ -252,7 +244,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Alerta / Mensagem Flutuante na parte inferior (nunca cobre o dropdown superior) */}
+      {/* Alerta / Mensagem Flutuante na parte inferior */}
       {statusMessage && (
         <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
           <div
@@ -289,7 +281,6 @@ export default function App() {
 
       {/* 
         Abaixo: Teclado ocupando o restante da tela
-        Ajuste automático para os modos RETRATO e PAISAGEM
       */}
       <main className="flex-1 w-full min-h-0 p-2 sm:p-3 flex flex-col gap-1.5 overflow-hidden">
         <MidiKeyboard
