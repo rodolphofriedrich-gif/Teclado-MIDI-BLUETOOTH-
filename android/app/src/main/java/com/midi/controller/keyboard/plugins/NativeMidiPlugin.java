@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.midi.MidiDevice;
 import android.media.midi.MidiDeviceInfo;
+import android.media.midi.MidiDeviceStatus;
 import android.media.midi.MidiInputPort;
 import android.media.midi.MidiManager;
 import android.media.midi.MidiOutputPort;
@@ -44,7 +45,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @CapacitorPlugin(
@@ -73,7 +74,9 @@ public class NativeMidiPlugin extends Plugin {
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bleScanner;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final Executor deviceCallbackExecutor = Executors.newSingleThreadExecutor();
+    
+    // CORREÇÃO: Alterado de Executor para ExecutorService
+    private final ExecutorService deviceCallbackExecutor = Executors.newSingleThreadExecutor();
 
     private MidiManager.DeviceCallback deviceCallback;
     private boolean deviceCallbackRegistered = false;
@@ -114,7 +117,7 @@ public class NativeMidiPlugin extends Plugin {
             }
 
             @Override
-            public void onDeviceStatusChanged(android.media.midi.MidiDeviceStatus status) {
+            public void onDeviceStatusChanged(MidiDeviceStatus status) {
                 notifyDevicesChanged();
             }
         };
@@ -649,7 +652,12 @@ public class NativeMidiPlugin extends Plugin {
             } catch (Exception ignored) {
             }
         }
-        deviceCallbackExecutor.shutdownNow();
+        
+        // CORREÇÃO: Check de segurança antes de fazer o shutdown
+        if (deviceCallbackExecutor != null && !deviceCallbackExecutor.isShutdown()) {
+            deviceCallbackExecutor.shutdownNow();
+        }
+        
         super.handleOnDestroy();
     }
 }
