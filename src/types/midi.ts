@@ -1,6 +1,4 @@
-/**
- * Tipos e interfaces para o Teclado Controlador MIDI
- */
+/** Tipos usados pelo controlador MIDI. */
 
 export type DestinationType = 'local' | 'ble' | 'usb';
 
@@ -10,10 +8,11 @@ export interface MidiDestination {
   type: DestinationType;
   displayName: string;
   manufacturer?: string;
-  rawOutput?: MIDIOutput;
-  bleDevice?: any;
-  bleCharacteristic?: any;
-  isVirtual?: boolean;
+  portCount?: number;
+  inputPortCount?: number;
+  outputPortCount?: number;
+  nativeId?: number;
+  bleAddress?: string;
 }
 
 export interface MidiLogEntry {
