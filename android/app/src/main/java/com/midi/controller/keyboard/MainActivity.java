@@ -1,5 +1,14 @@
 package com.midi.controller.keyboard;
 
-import com.getcapacitor.BridgeActivity;
+import android.os.Bundle;
 
-public class MainActivity extends BridgeActivity {}
+import com.getcapacitor.BridgeActivity;
+import com.midi.controller.keyboard.plugins.NativeMidiPlugin;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(NativeMidiPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+}
