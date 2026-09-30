@@ -58,8 +58,8 @@ export default function App() {
   }, []);
 
   // Atualiza lista de destinos disponíveis
-  const refreshDestinations = useCallback(() => {
-    const list = midiManager.getAvailableDestinations();
+  const refreshDestinations = useCallback(async () => {
+    const list = await midiManager.getAvailableDestinations();
     setDestinations(list);
     const active = midiManager.getConnectedDestination();
     setConnectedDestination(active);
@@ -71,12 +71,12 @@ export default function App() {
 
     midiManager.setCallbacks(
       () => {
-        if (isMounted) refreshDestinations();
+        if (isMounted) void refreshDestinations();
       },
       (disconnectedDest) => {
         if (isMounted) {
           setConnectedDestination(null);
-          refreshDestinations();
+          void refreshDestinations();
           showMessage(
             `Destino "${disconnectedDest.displayName}" foi desconectado. Status: ⚪ Desconectado`,
             'warn',
@@ -89,7 +89,7 @@ export default function App() {
     const init = async () => {
       await midiManager.initWebMidi();
       if (isMounted) {
-        refreshDestinations();
+        void refreshDestinations();
       }
     };
 
@@ -105,7 +105,7 @@ export default function App() {
     try {
       await midiManager.connect(dest);
       setConnectedDestination(dest);
-      refreshDestinations();
+      void refreshDestinations();
       showMessage(`Conectado com sucesso a: ${dest.displayName}`, 'success', 2500);
     } catch (err: any) {
       showMessage(`Falha ao conectar: ${err?.message || 'Erro desconhecido'}`, 'error', 4000);
@@ -118,7 +118,7 @@ export default function App() {
     const name = connectedDestination.displayName;
     await midiManager.disconnect();
     setConnectedDestination(null);
-    refreshDestinations();
+    void refreshDestinations();
     showMessage(`Desconectado de: ${name}. Status: ⚪ Desconectado`, 'info', 2500);
   };
 
@@ -128,7 +128,7 @@ export default function App() {
     try {
       const newBleDest = await midiManager.scanBleDevice();
       if (newBleDest) {
-        refreshDestinations();
+        await refreshDestinations();
         await handleConnect(newBleDest);
       }
     } catch (err: any) {
@@ -235,7 +235,7 @@ export default function App() {
               onDisconnect={handleDisconnect}
               onScanBle={handleScanBle}
               onRefresh={() => {
-                refreshDestinations();
+                void refreshDestinations();
                 showMessage('Lista de dispositivos atualizada', 'info', 1500);
               }}
               isScanningBle={isScanningBle}
