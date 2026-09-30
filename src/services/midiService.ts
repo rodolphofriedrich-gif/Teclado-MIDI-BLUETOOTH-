@@ -232,7 +232,7 @@ export class MidiControllerManager {
             lowerName.includes('interface') ||
             lowerManuf.includes('usb');
 
-          const type: DestinationType = isBle ? 'ble' : isUsb ? 'usb' : 'local';
+          const type: DestinationType = isBle ? 'ble' : isUsb ? 'local' : 'local';
 
           list.push({
             id: output.id,
@@ -280,7 +280,7 @@ export class MidiControllerManager {
       }
 
       // Evita duplicar se o nome já contiver o sufixo
-      const cleanName = item.name.replace(/\s*\((neste aparelho|BLE|USB)\)/gi, '').trim();
+      const cleanName = item.name.replace(/\s*\((neste aparelho\vert{}BLE\vert{}USB)\)/gi, '').trim();
 
       return {
         ...item,
@@ -324,17 +324,14 @@ export class MidiControllerManager {
       } else if (destination.type === 'ble') {
         // Conexão via Web Bluetooth
         const device = destination.bleDevice;
-        if (!device) {
-          // Se o dispositivo estiver apenas memorizado sem instância gatt ativa, solicita reconexão
+        
+        // CORREÇÃO: Se não houver dispositivo OU se for um mock do localStorage (sem .gatt)
+        if (!device || !device.gatt) {
           const scanned = await this.scanBleDevice();
           if (scanned) {
             return this.connect(scanned);
           }
-          throw new Error('Dispositivo BLE não conectado. Toque em Buscar BLE.');
-        }
-
-        if (!device.gatt) {
-          throw new Error('Dispositivo BLE inválido ou sem suporte GATT.');
+          throw new Error('Dispositivo BLE precisa ser emparelhado novamente. Toque em Buscar BLE.');
         }
 
         const server = await device.gatt.connect();
