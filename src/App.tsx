@@ -11,7 +11,6 @@ import {
   getNoteName,
 } from './services/midiService';
 import { ChannelDropdown } from './components/ChannelDropdown';
-import { DestinationDropdown } from './components/DestinationDropdown';
 import { MidiKeyboard } from './components/MidiKeyboard';
 import { PWAInstallButton } from './components/PWAInstallButton';
 
@@ -25,6 +24,10 @@ export default function App() {
   const [isLandscape, setIsLandscape] = useState<boolean>(
     typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : true
   );
+
+  // Estados para controlar os dois dropdowns separados (USB/Virtual vs BLE)
+  const [isUsbOpen, setIsUsbOpen] = useState<boolean>(false);
+  const [isBleOpen, setIsBleOpen] = useState<boolean>(false);
 
   // Armazena canal em ref para uso imediato em eventos de toque sem atraso
   const channelRef = useRef<number>(selectedChannel);
@@ -105,6 +108,8 @@ export default function App() {
       await midiManager.connect(dest);
       setConnectedDestination(dest);
       void refreshDestinations();
+      setIsUsbOpen(false);
+      setIsBleOpen(false);
       showMessage(`Conectado com sucesso a: ${dest.displayName}`, 'success', 2500);
     } catch (err: any) {
       showMessage(`Falha ao conectar: ${err?.message || 'Erro desconhecido'}`, 'error', 4000);
@@ -118,6 +123,8 @@ export default function App() {
     await midiManager.disconnect();
     setConnectedDestination(null);
     void refreshDestinations();
+    setIsUsbOpen(false);
+    setIsBleOpen(false);
     showMessage(`Desconectado de: ${name}. Status: ⚪ Desconectado`, 'info', 2500);
   };
 
@@ -129,6 +136,8 @@ export default function App() {
       if (newBleDest) {
         await refreshDestinations();
         await handleConnect(newBleDest);
+      } else {
+        showMessage('Nenhum dispositivo BLE encontrado na busca.', 'info', 2500);
       }
     } catch (err: any) {
       showMessage(`Erro na busca BLE: ${err?.message || 'Bluetooth cancelado ou indisponível'}`, 'error', 3500);
@@ -137,7 +146,7 @@ export default function App() {
     }
   };
 
-  // Disparo de Note On com velocidade padrão (64) otimizado para evitar re-renders na referência
+  // Disparo de Note On com velocidade padrão (64)
   const handleNoteOn = useCallback(async (note: number) => {
     if (!connectedDestination) {
       showMessage('Selecione um destino MIDI', 'warn', 2500);
@@ -162,7 +171,7 @@ export default function App() {
     }
   }, [connectedDestination, showMessage]);
 
-  // Disparo de Note Off otimizado
+  // Disparo de Note Off
   const handleNoteOff = useCallback(async (note: number) => {
     if (!connectedDestination) return;
 
@@ -180,7 +189,7 @@ export default function App() {
         bytesHex: res.hex,
       });
     } catch {
-      // Note off silencioso
+      // Silencioso
     }
   }, [connectedDestination]);
 
@@ -188,19 +197,27 @@ export default function App() {
     showMessage('Selecione um destino MIDI', 'warn', 2500);
   }, [showMessage]);
 
+  // Separação dos destinos por tipo
+  const usbAndVirtualDestinations = destinations.filter(
+    (d) => d.type === 'usb' || d.type === 'virtual' || d.type === 'local'
+  );
+  const bleDestinations = destinations.filter((d) => d.type === 'ble');
+
+  const isUsbConnected = connectedDestination && (connectedDestination.type === 'usb' || connectedDestination.type === 'virtual' || connectedDestination.type === 'local');
+  const isBleConnected = connectedDestination && connectedDestination.type === 'ble';
+
   return (
     <div className="h-[100dvh] w-full bg-slate-950 text-slate-100 flex flex-col font-sans select-none overflow-hidden antialiased">
       {/* 
-        Linha Superior:
-        ← Esquerda  |  Canal MIDI [▼]
-        → Direita   |  Dispositivo [▼] (Botão BLE removido)
+        Cabeçalho Superior com Controles Compactos e Organizados
       */}
-      <header className="w-full bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2 shrink-0 relative z-50 shadow-md">
-        <div className="w-full flex items-center justify-between gap-2 sm:gap-3">
-          {/* ← LADO ESQUERDO: Canal MIDI [▼] - shrink-0 impede que seja esmagado */}
-          <div className="flex flex-col items-start gap-1 shrink-0">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-              Canal MIDI
+      <header className="w-full bg-slate-900 border-b border-slate-800 px-3 py-2 shrink-0 relative z-50 shadow-md">
+        <div className="w-full flex items-center justify-between gap-2">
+          
+          {/* LADO ESQUERDO: Canal MIDI */}
+          <div className="flex flex-col items-start gap-0.5 shrink-0">
+            <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">
+              Canal
             </span>
             <ChannelDropdown
               selectedChannel={selectedChannel}
@@ -211,37 +228,151 @@ export default function App() {
             />
           </div>
 
-          {/* Centro: PWA Install (opcional para Android) */}
-          <div className="hidden sm:flex items-center gap-2 shrink-0">
-            <PWAInstallButton />
-          </div>
-
-          {/* → LADO DIREITO: Dispositivo [▼] - min-w-0 flex-1 força o limite na tela */}
-          <div className="flex flex-col items-end justify-center min-w-0 flex-1">
-            {/* Lista suspensa de dispositivos envelopada para respeitar larguras menores */}
-            <div className="w-full min-w-0 flex justify-end">
-              <DestinationDropdown
-                destinations={destinations}
-                connectedDestination={connectedDestination}
-                onConnect={handleConnect}
-                onDisconnect={handleDisconnect}
-                onScanBle={handleScanBle}
-                onRefresh={() => {
+          {/* CENTRO / DIREITA: Botões Separados para USB/Virtual e Bluetooth BLE */}
+          <div className="flex items-center gap-1.5 min-w-0">
+            
+            {/* BOTÃO 1: USB / INTERNOS / VIRTUAIS */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUsbOpen(!isUsbOpen);
+                  setIsBleOpen(false);
                   void refreshDestinations();
-                  showMessage('Lista de dispositivos atualizada', 'info', 1500);
                 }}
-                isScanningBle={isScanningBle}
-              />
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                  isUsbConnected
+                    ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
+                }`}
+              >
+                <span>🔌</span>
+                <span className="truncate max-w-[110px] sm:max-w-[140px]">
+                  {isUsbConnected && connectedDestination ? connectedDestination.displayName : 'USB / Internos'}
+                </span>
+                <span className="text-[9px]">▼</span>
+              </button>
+
+              {/* Dropdown USB / Virtuais */}
+              {isUsbOpen && (
+                <div className="absolute right-0 mt-1 w-64 bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] py-1">
+                  <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400 bg-slate-950 flex justify-between items-center">
+                    <span>Dispositivos USB / Internos</span>
+                    <button onClick={refreshDestinations} className="text-sky-400 hover:underline">↻</button>
+                  </div>
+                  {connectedDestination && isUsbConnected && (
+                    <button
+                      onClick={handleDisconnect}
+                      className="w-full text-left px-3 py-1.5 text-xs text-rose-300 bg-rose-950/50 hover:bg-rose-950 border-b border-slate-800 font-semibold"
+                    >
+                      ✕ Desconectar atual
+                    </button>
+                  )}
+                  {usbAndVirtualDestinations.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-slate-500 italic">Nenhum encontrado.</div>
+                  ) : (
+                    usbAndVirtualDestinations.map((dest) => (
+                      <button
+                        key={dest.id}
+                        onClick={() => handleConnect(dest)}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-800 ${
+                          connectedDestination?.id === dest.id ? 'text-emerald-400 font-bold bg-emerald-950/40' : 'text-slate-200'
+                        }`}
+                      >
+                        <span className="truncate">{dest.displayName}</span>
+                        <span>{connectedDestination?.id === dest.id ? '🟢' : '⚪'}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* BOTÃO 2: BLUETOOTH BLE */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBleOpen(!isBleOpen);
+                  setIsUsbOpen(false);
+                  void refreshDestinations();
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                  isBleConnected
+                    ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200'
+                    : 'bg-sky-950/60 hover:bg-sky-900/60 border-sky-800/80 text-sky-200'
+                }`}
+              >
+                <span>📡</span>
+                <span className="truncate max-w-[110px] sm:max-w-[140px]">
+                  {isBleConnected && connectedDestination ? connectedDestination.displayName : 'Bluetooth BLE'}
+                </span>
+                <span className="text-[9px]">▼</span>
+              </button>
+
+              {/* Dropdown BLE */}
+              {isBleOpen && (
+                <div className="absolute right-0 mt-1 w-64 bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] py-1">
+                  <div className="px-3 py-1 text-[10px] uppercase font-bold text-sky-400 bg-slate-950 flex justify-between items-center">
+                    <span>Conexões Bluetooth BLE</span>
+                    <button onClick={refreshDestinations} className="text-sky-400 hover:underline">↻</button>
+                  </div>
+
+                  {connectedDestination && isBleConnected && (
+                    <button
+                      onClick={handleDisconnect}
+                      className="w-full text-left px-3 py-1.5 text-xs text-rose-300 bg-rose-950/50 hover:bg-rose-950 border-b border-slate-800 font-semibold"
+                    >
+                      ✕ Desconectar atual
+                    </button>
+                  )}
+
+                  {bleDestinations.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-slate-500 italic">Nenhum pareado/encontrado.</div>
+                  ) : (
+                    bleDestinations.map((dest) => (
+                      <button
+                        key={dest.id}
+                        onClick={() => handleConnect(dest)}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-800 ${
+                          connectedDestination?.id === dest.id ? 'text-emerald-400 font-bold bg-emerald-950/40' : 'text-slate-200'
+                        }`}
+                      >
+                        <span className="truncate">{dest.displayName}</span>
+                        <span>{connectedDestination?.id === dest.id ? '🟢' : '⚪'}</span>
+                      </button>
+                    ))
+                  )}
+
+                  {/* Botão de Buscar BLE */}
+                  <div className="p-1.5 bg-slate-950 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={handleScanBle}
+                      disabled={isScanningBle}
+                      className="w-full text-center px-3 py-1.5 text-xs font-semibold text-sky-300 bg-sky-950 hover:bg-sky-900 border border-sky-800 rounded transition"
+                    >
+                      {isScanningBle ? 'Buscando BLE...' : '📡 Buscar Novos BLE'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* PWA Button em telas maiores */}
+            <div className="hidden sm:flex items-center">
+              <PWAInstallButton />
             </div>
           </div>
+
         </div>
       </header>
 
-      {/* Alerta / Mensagem Flutuante na parte inferior */}
+      {/* Alerta / Mensagem Flutuante */}
       {statusMessage && (
         <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
           <div
-            className={`pointer-events-auto px-4 py-1.5 rounded-lg text-xs font-bold shadow-xl border flex items-center gap-2 max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-150 ${
+            className={`pointer-events-auto px-4 py-1.5 rounded-lg text-xs font-bold shadow-xl border flex items-center gap-2 max-w-sm ${
               statusMessage.type === 'warn'
                 ? 'bg-amber-950/95 text-amber-200 border-amber-500/60'
                 : statusMessage.type === 'error'
@@ -251,31 +382,14 @@ export default function App() {
                 : 'bg-slate-900/95 text-slate-200 border-slate-700'
             }`}
           >
-            <span>
-              {statusMessage.type === 'warn'
-                ? '⚠️'
-                : statusMessage.type === 'error'
-                ? '❌'
-                : statusMessage.type === 'success'
-                ? '✅'
-                : 'ℹ️'}
-            </span>
+            <span>{statusMessage.type === 'warn' ? '⚠️' : statusMessage.type === 'error' ? '❌' : statusMessage.type === 'success' ? '✅' : 'ℹ️'}</span>
             <span className="flex-1 truncate">{statusMessage.text}</span>
-            <button
-              type="button"
-              onClick={() => setStatusMessage(null)}
-              className="text-xs opacity-70 hover:opacity-100 px-1 ml-1"
-            >
-              ✕
-            </button>
           </div>
         </div>
       )}
 
-      {/* 
-        Abaixo: Teclado ocupando o restante da tela
-      */}
-      <main className="flex-1 w-full min-h-0 p-2 sm:p-3 flex flex-col gap-1.5 overflow-hidden">
+      {/* Área do Teclado Compacta */}
+      <main className="flex-1 w-full min-h-0 p-2 flex flex-col gap-1 overflow-hidden">
         <MidiKeyboard
           isConnected={!!connectedDestination}
           onNoteOn={handleNoteOn}
@@ -283,7 +397,7 @@ export default function App() {
           onDisabledPress={handleDisabledPress}
         />
 
-        {/* Indicador sutil de comando TX na parte inferior */}
+        {/* Rodapé TX */}
         <div className="shrink-0 flex items-center justify-between px-2 py-0.5 text-[10px] text-slate-500 font-mono">
           <div className="flex items-center gap-1.5">
             <span className={lastTxCommand ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
@@ -298,7 +412,7 @@ export default function App() {
             )}
           </div>
           <div>
-            <span>{isLandscape ? 'Modo Paisagem' : 'Modo Retrato'}</span>
+            <span>{isLandscape ? 'Paisagem' : 'Retrato'}</span>
           </div>
         </div>
       </main>
