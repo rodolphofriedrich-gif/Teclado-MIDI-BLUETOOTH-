@@ -24,6 +24,7 @@ export function getNoteName(noteNumber: number): string {
 function nativeTypeToDestinationType(type: NativeMidiDevice['type']): DestinationType {
   if (type === 'usb') return 'usb';
   if (type === 'ble') return 'ble';
+  if (type === 'virtual') return 'virtual';
   return 'local';
 }
 
@@ -77,8 +78,6 @@ export class MidiControllerManager {
 
         this.nativeListeners.push(
           await NativeMidi.addListener('midiMessage', (event) => {
-            // O monitor MIDI poderá consumir este evento posteriormente.
-            // Mantemos o callback de estado para permitir atualização da interface.
             if (event) this.onStateChangeCallback?.();
           }),
         );
