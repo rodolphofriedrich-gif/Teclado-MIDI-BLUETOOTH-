@@ -198,9 +198,9 @@ export default function App() {
                        Dispositivo [▼]
       */}
       <header className="w-full bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2 shrink-0 relative z-50 shadow-md">
-        <div className="w-full flex items-center justify-between gap-3">
-          {/* ← LADO ESQUERDO: Canal MIDI [▼] */}
-          <div className="flex flex-col items-start gap-1">
+        <div className="w-full flex items-center justify-between gap-2 sm:gap-3">
+          {/* ← LADO ESQUERDO: Canal MIDI [▼] - shrink-0 impede que seja esmagado */}
+          <div className="flex flex-col items-start gap-1 shrink-0">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
               Canal MIDI
             </span>
@@ -214,32 +214,34 @@ export default function App() {
           </div>
 
           {/* Centro: PWA Install (opcional para Android) & Orientação atual */}
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
             <PWAInstallButton />
           </div>
 
-          {/* → LADO DIREITO: [Botão BLE] acima de Dispositivo [▼] */}
-          <div className="flex flex-col items-end gap-1.5">
+          {/* → LADO DIREITO: [Botão BLE] acima de Dispositivo [▼] - min-w-0 flex-1 força o limite na tela */}
+          <div className="flex flex-col items-end gap-1.5 min-w-0 flex-1">
             {/* Botão BLE posicionado ACIMA da lista suspensa de dispositivos */}
-            <div className="flex items-center justify-end w-full">
+            <div className="flex items-center justify-end w-full shrink-0">
               <BleButton
                 onBluetoothDisabledAlert={(msg) => showMessage(msg, 'warn', 4500)}
               />
             </div>
 
-            {/* Lista suspensa de dispositivos */}
-            <DestinationDropdown
-              destinations={destinations}
-              connectedDestination={connectedDestination}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-              onScanBle={handleScanBle}
-              onRefresh={() => {
-                void refreshDestinations();
-                showMessage('Lista de dispositivos atualizada', 'info', 1500);
-              }}
-              isScanningBle={isScanningBle}
-            />
+            {/* Lista suspensa de dispositivos envelopada para respeitar larguras menores */}
+            <div className="w-full min-w-0 flex justify-end">
+              <DestinationDropdown
+                destinations={destinations}
+                connectedDestination={connectedDestination}
+                onConnect={handleConnect}
+                onDisconnect={handleDisconnect}
+                onScanBle={handleScanBle}
+                onRefresh={() => {
+                  void refreshDestinations();
+                  showMessage('Lista de dispositivos atualizada', 'info', 1500);
+                }}
+                isScanningBle={isScanningBle}
+              />
+            </div>
           </div>
         </div>
       </header>
