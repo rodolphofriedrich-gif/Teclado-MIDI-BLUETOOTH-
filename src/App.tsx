@@ -11,7 +11,6 @@ import {
   getNoteName,
 } from './services/midiService';
 import { ChannelDropdown } from './components/ChannelDropdown';
-import { BleButton } from './components/BleButton';
 import { DestinationDropdown } from './components/DestinationDropdown';
 import { MidiKeyboard } from './components/MidiKeyboard';
 import { PWAInstallButton } from './components/PWAInstallButton';
@@ -194,8 +193,7 @@ export default function App() {
       {/* 
         Linha Superior:
         ← Esquerda  |  Canal MIDI [▼]
-        → Direita   |  [Botão BLE]
-                       Dispositivo [▼]
+        → Direita   |  Dispositivo [▼] (Botão BLE removido)
       */}
       <header className="w-full bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2 shrink-0 relative z-50 shadow-md">
         <div className="w-full flex items-center justify-between gap-2 sm:gap-3">
@@ -213,20 +211,13 @@ export default function App() {
             />
           </div>
 
-          {/* Centro: PWA Install (opcional para Android) & Orientação atual */}
+          {/* Centro: PWA Install (opcional para Android) */}
           <div className="hidden sm:flex items-center gap-2 shrink-0">
             <PWAInstallButton />
           </div>
 
-          {/* → LADO DIREITO: [Botão BLE] acima de Dispositivo [▼] - min-w-0 flex-1 força o limite na tela */}
-          <div className="flex flex-col items-end gap-1.5 min-w-0 flex-1">
-            {/* Botão BLE posicionado ACIMA da lista suspensa de dispositivos */}
-            <div className="flex items-center justify-end w-full shrink-0">
-              <BleButton
-                onBluetoothDisabledAlert={(msg) => showMessage(msg, 'warn', 4500)}
-              />
-            </div>
-
+          {/* → LADO DIREITO: Dispositivo [▼] - min-w-0 flex-1 força o limite na tela */}
+          <div className="flex flex-col items-end justify-center min-w-0 flex-1">
             {/* Lista suspensa de dispositivos envelopada para respeitar larguras menores */}
             <div className="w-full min-w-0 flex justify-end">
               <DestinationDropdown
