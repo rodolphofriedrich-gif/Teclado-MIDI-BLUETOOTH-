@@ -324,7 +324,7 @@ public class NativeMidiPlugin extends Plugin {
             final BluetoothDevice target = device;
             midiManager.openBluetoothDevice(target, midiDevice -> {
                 if (midiDevice == null) {
-                    call.reject("O Android não conseguiu abrir o dispositivo Bluetooth MIDI.");
+                    call.reject("O Android não conseguiu abrir o canal BLE MIDI com este dispositivo.");
                     return;
                 }
                 openPortsAndResolve(midiDevice, port, call);
@@ -374,7 +374,7 @@ public class NativeMidiPlugin extends Plugin {
 
             if (connectedInputPort == null) {
                 closeConnectedDevice();
-                call.reject("A porta MIDI está ocupada por outra aplicação ou o cabo USB não suporta envio.");
+                call.reject("A porta MIDI está ocupada por outra aplicação ou o dispositivo não suporta envio.");
                 return;
             }
 
@@ -501,7 +501,6 @@ public class NativeMidiPlugin extends Plugin {
             final List<JSObject> found = new ArrayList<>();
             final Set<String> addresses = new HashSet<>();
 
-            // CORREÇÃO: Filtro vazio para achar dispositivos que "escondem" o UUID
             List<ScanFilter> filters = new ArrayList<>();
 
             ScanSettings settings = new ScanSettings.Builder()
