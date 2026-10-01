@@ -351,6 +351,7 @@ public class NativeMidiPlugin extends Plugin {
         }, mainHandler);
     }
 
+    // AQUI ESTÁ A CORREÇÃO PRINCIPAL COM O FALLBACK DE PORTAS
     private void openPortsAndResolve(MidiDevice device, int port, PluginCall call) {
         try {
             closeConnectedDevice();
@@ -363,14 +364,30 @@ public class NativeMidiPlugin extends Plugin {
 
             connectedDevice = device;
             connectedDeviceId = device.getInfo().getId();
+            
+            // Tenta abrir a porta padrão
             connectedInputPort = device.openInputPort(port);
 
+            // FALLBACK: Se falhar (ocupada ou bug do cabo), procura outra porta livre
+            if (connectedInputPort == null) {
+                for (int i = 0; i < device.getInfo().getInputPortCount(); i++) {
+                    if (i != port) {
+                        connectedInputPort = device.openInputPort(i);
+                        if (connectedInputPort != null) {
+                            break; // Conseguiu abrir uma porta alternativa!
+                        }
+                    }
+                }
+            }
+
+            // Se todas falharem, cancelamos
             if (connectedInputPort == null) {
                 closeConnectedDevice();
-                call.reject("A porta MIDI de entrada está indisponível ou ocupada.");
+                call.reject("A porta MIDI está ocupada por outra aplicação ou o cabo USB não suporta envio.");
                 return;
             }
 
+            // Tenta abrir a porta de saída
             if (device.getInfo().getOutputPortCount() > 0) {
                 connectedOutputPort = device.openOutputPort(0);
                 if (connectedOutputPort != null) {
