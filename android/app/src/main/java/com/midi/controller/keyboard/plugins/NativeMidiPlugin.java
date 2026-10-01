@@ -514,12 +514,23 @@ public class NativeMidiPlugin extends Plugin {
                     String address = device.getAddress();
                     if (address == null || addresses.contains(address)) return;
 
+                    String name = safeDeviceName(device);
+                    
+                    // FILTRAGEM INTELIGENTE: Ignora acessórios óbvios que não são MIDI
+                    if (name != null) {
+                        String lowerName = name.toLowerCase();
+                        if (lowerName.contains("mi band") || lowerName.contains("band") || lowerName.contains("watch") || 
+                            lowerName.contains("phone") || lowerName.contains("redmi") || lowerName.contains("galaxy buds")) {
+                            return;
+                        }
+                    }
+
                     addresses.add(address);
                     scannedBluetoothDevices.put(address, device);
 
                     JSObject item = new JSObject();
                     item.put("address", address);
-                    item.put("name", safeDeviceName(device));
+                    item.put("name", name);
                     found.add(item);
                 }
 
