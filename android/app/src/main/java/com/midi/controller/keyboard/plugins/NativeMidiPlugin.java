@@ -22,7 +22,6 @@ import android.media.midi.MidiReceiver;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.ParcelUuid;
 
 import androidx.activity.result.ActivityResult;
 import androidx.core.content.ContextCompat;
@@ -68,14 +67,11 @@ import java.util.concurrent.Executors;
 )
 public class NativeMidiPlugin extends Plugin {
 
-    private static final String MIDI_BLE_SERVICE_UUID = "03b80e5a-ede8-4b33-a020-514f0634123b";
-
     private MidiManager midiManager;
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bleScanner;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     
-    // CORREÇÃO: Alterado de Executor para ExecutorService
     private final ExecutorService deviceCallbackExecutor = Executors.newSingleThreadExecutor();
 
     private MidiManager.DeviceCallback deviceCallback;
@@ -225,7 +221,6 @@ public class NativeMidiPlugin extends Plugin {
             JSArray array = new JSArray();
 
             for (MidiDeviceInfo info : devices) {
-                // O aplicativo é um controlador/transmissor: precisamos de uma porta de entrada.
                 if (info.getInputPortCount() <= 0) continue;
 
                 JSObject item = new JSObject();
@@ -351,7 +346,6 @@ public class NativeMidiPlugin extends Plugin {
         }, mainHandler);
     }
 
-    // AQUI ESTÁ A CORREÇÃO PRINCIPAL COM O FALLBACK DE PORTAS
     private void openPortsAndResolve(MidiDevice device, int port, PluginCall call) {
         try {
             closeConnectedDevice();
@@ -365,29 +359,25 @@ public class NativeMidiPlugin extends Plugin {
             connectedDevice = device;
             connectedDeviceId = device.getInfo().getId();
             
-            // Tenta abrir a porta padrão
             connectedInputPort = device.openInputPort(port);
 
-            // FALLBACK: Se falhar (ocupada ou bug do cabo), procura outra porta livre
             if (connectedInputPort == null) {
                 for (int i = 0; i < device.getInfo().getInputPortCount(); i++) {
                     if (i != port) {
                         connectedInputPort = device.openInputPort(i);
                         if (connectedInputPort != null) {
-                            break; // Conseguiu abrir uma porta alternativa!
+                            break;
                         }
                     }
                 }
             }
 
-            // Se todas falharem, cancelamos
             if (connectedInputPort == null) {
                 closeConnectedDevice();
                 call.reject("A porta MIDI está ocupada por outra aplicação ou o cabo USB não suporta envio.");
                 return;
             }
 
-            // Tenta abrir a porta de saída
             if (device.getInfo().getOutputPortCount() > 0) {
                 connectedOutputPort = device.openOutputPort(0);
                 if (connectedOutputPort != null) {
@@ -511,10 +501,8 @@ public class NativeMidiPlugin extends Plugin {
             final List<JSObject> found = new ArrayList<>();
             final Set<String> addresses = new HashSet<>();
 
+            // CORREÇÃO: Filtro vazio para achar dispositivos que "escondem" o UUID
             List<ScanFilter> filters = new ArrayList<>();
-            filters.add(new ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid.fromString(MIDI_BLE_SERVICE_UUID))
-                .build());
 
             ScanSettings settings = new ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -670,7 +658,6 @@ public class NativeMidiPlugin extends Plugin {
             }
         }
         
-        // CORREÇÃO: Check de segurança antes de fazer o shutdown
         if (deviceCallbackExecutor != null && !deviceCallbackExecutor.isShutdown()) {
             deviceCallbackExecutor.shutdownNow();
         }
