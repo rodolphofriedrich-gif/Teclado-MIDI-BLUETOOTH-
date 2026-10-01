@@ -10,8 +10,10 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        // REGRA DO CAPACITOR: Registrar plugins ANTES do super.onCreate
         registerPlugin(NativeMidiPlugin.class);
+        
+        super.onCreate(savedInstanceState);
     }
 
     @Override
@@ -29,7 +31,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void hideSystemUI() {
-        // Ativa o Modo Imersivo para ecrã completo absoluto
+        // Ativa o Modo Imersivo para tela cheia
         View decorView = getWindow().getDecorView();
         decorView.setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
