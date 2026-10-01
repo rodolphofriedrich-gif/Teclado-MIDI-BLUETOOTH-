@@ -81,9 +81,6 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
 
   const handleKeyUp = useCallback(
     (note: number) => {
-      // CORREÇÃO: Removemos o bloqueio de "isConnected" no topo.
-      // A tecla deve sempre levantar visualmente e limpar o estado, 
-      // enviando o comando MIDI apenas se ainda estiver conectado.
       if (activeNotesRef.current.has(note)) {
         activeNotesRef.current.delete(note);
         setActiveNotes(new Set(activeNotesRef.current));
@@ -129,9 +126,9 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
   };
 
   return (
-    <div className="flex-1 w-full h-full flex flex-col min-h-0 bg-slate-900 border border-slate-800 rounded-xl p-2 sm:p-3 shadow-md select-none relative z-10">
+    <div className="flex-1 w-full h-full flex flex-col min-h-0 bg-slate-900 border border-slate-800 rounded-xl p-2 sm:p-2.5 shadow-md select-none relative z-10">
       {/* Barra de Controle de Oitavas do Teclado */}
-      <div className="flex items-center justify-between pb-2 shrink-0">
+      <div className="flex items-center justify-between pb-1.5 shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold tracking-wider uppercase text-slate-400 flex items-center gap-1.5">
             <span className="text-amber-400">🎹</span> Teclado MIDI
@@ -144,7 +141,7 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
             type="button"
             onClick={() => setBaseOctave((prev) => Math.max(1, prev - 1))}
             disabled={baseOctave <= 1}
-            className="px-2.5 py-0.5 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-30 bg-slate-800 rounded active:scale-95 transition"
+            className="px-2 py-0.5 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-30 bg-slate-800 rounded active:scale-95 transition"
             title="Oitava anterior"
           >
             -
@@ -156,7 +153,7 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
             type="button"
             onClick={() => setBaseOctave((prev) => Math.min(6, prev + 1))}
             disabled={baseOctave >= 6}
-            className="px-2.5 py-0.5 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-30 bg-slate-800 rounded active:scale-95 transition"
+            className="px-2 py-0.5 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-30 bg-slate-800 rounded active:scale-95 transition"
             title="Próxima oitava"
           >
             +
@@ -164,16 +161,16 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
         </div>
       </div>
 
-      {/* Área Gráfica das Teclas */}
-      <div className="relative flex-1 w-full min-h-[140px] bg-slate-950 rounded-lg overflow-hidden border border-slate-800 select-none touch-none shadow-inner">
+      {/* Área Gráfica das Teclas (Altura reduzida para otimizar o espaço vertical) */}
+      <div className="relative flex-1 w-full min-h-[110px] bg-slate-950 rounded-lg overflow-hidden border border-slate-800 select-none touch-none shadow-inner">
         {!isConnected && (
-          <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center text-center p-3 transition-all">
-            <div className="bg-slate-950/90 border border-amber-500/40 text-amber-400 px-4 py-2 rounded-xl text-xs font-bold shadow-2xl flex items-center gap-2 animate-pulse">
+          <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center text-center p-2 transition-all">
+            <div className="bg-slate-950/90 border border-amber-500/40 text-amber-400 px-3 py-1 rounded-lg text-xs font-bold shadow-2xl flex items-center gap-1.5 animate-pulse">
               <span>⚠️</span>
               <span>Selecione um destino MIDI</span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-2 bg-slate-950/70 px-2 py-0.5 rounded">
-              Teclas inativas até que um destino seja conectado na lista suspensa acima.
+            <p className="text-[10px] text-slate-400 mt-1.5 bg-slate-950/70 px-2 py-0.5 rounded">
+              Teclas inativas até que um destino seja conectado acima.
             </p>
           </div>
         )}
@@ -201,10 +198,10 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
                   e.preventDefault();
                   handleKeyUp(key.midiNote);
                 }}
-                className={`relative flex-1 h-full border-r border-slate-300/80 rounded-b-md transition-colors flex flex-col justify-end items-center pb-2 cursor-pointer select-none active:scale-[0.99] origin-top ${
+                className={`relative flex-1 h-full border-r border-slate-300/80 rounded-b-md transition-colors flex flex-col justify-end items-center pb-1.5 cursor-pointer select-none active:scale-[0.99] origin-top ${
                   isPressed
                     ? 'bg-amber-400 shadow-inner'
-                    : 'bg-white hover:bg-slate-100 shadow-[inset_0_-8px_0_rgba(0,0,0,0.1)]'
+                    : 'bg-white hover:bg-slate-100 shadow-[inset_0_-6px_0_rgba(0,0,0,0.1)]'
                 }`}
               >
                 <span
@@ -254,10 +251,10 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
                   e.stopPropagation();
                   handleKeyUp(key.midiNote);
                 }}
-                className={`absolute top-0 h-full pointer-events-auto rounded-b-md transition-colors flex flex-col justify-end items-center pb-1.5 cursor-pointer select-none z-10 ${
+                className={`absolute top-0 h-full pointer-events-auto rounded-b-md transition-colors flex flex-col justify-end items-center pb-1 cursor-pointer select-none z-10 ${
                   isPressed
                     ? 'bg-amber-500 ring-2 ring-amber-300'
-                    : 'bg-slate-950 border-x border-b border-slate-800 shadow-[inset_0_-4px_0_rgba(255,255,255,0.15)] hover:bg-slate-900'
+                    : 'bg-slate-950 border-x border-b border-slate-800 shadow-[inset_0_-3px_0_rgba(255,255,255,0.15)] hover:bg-slate-900'
                 }`}
               >
                 <span
