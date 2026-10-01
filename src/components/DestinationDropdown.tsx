@@ -42,20 +42,23 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
     const nextState = !isOpen;
     setIsOpen(nextState);
     if (nextState) {
-      // Ao abrir, atualiza imediatamente para garantir lista fresca
       onRefresh();
     }
   };
 
   const handleSelect = (dest: MidiDestination) => {
     onConnect(dest);
-    setIsOpen(false); // fecha automaticamente ao escolher
+    setIsOpen(false);
   };
 
   const handleDisconnectClick = () => {
     onDisconnect();
     setIsOpen(false);
   };
+
+  // Separa os destinos entre USB/Virtual e BLE com base no tipo
+  const usbDestinations = destinations.filter((dest) => dest.type === 'usb' || dest.type === 'virtual');
+  const bleDestinations = destinations.filter((dest) => dest.type === 'ble');
 
   // Label do botão principal da lista suspensa
   const buttonLabel = connectedDestination
@@ -67,7 +70,7 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
       className={`relative inline-block text-left ${isOpen ? 'z-[100]' : 'z-20'}`}
       ref={containerRef}
     >
-      {/* Botão de Lista Suspensa: Valor atual + seta para baixo à direita */}
+      {/* Botão Principal */}
       <button
         type="button"
         onClick={handleToggle}
@@ -91,31 +94,29 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
         </span>
       </button>
 
-      {/* Menu Suspenso de Destinos Disponíveis: SÓLIDO, OPACO, Z-INDEX MÁXIMO */}
+      {/* Menu Suspenso */}
       {isOpen && (
         <div
           role="listbox"
           style={{ backgroundColor: '#0f172a' }}
-          className="absolute right-0 mt-1.5 w-72 sm:w-84 max-h-[70vh] sm:max-h-84 overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] py-1.5 divide-y divide-slate-800 animate-in fade-in duration-100 opacity-100"
+          className="absolute right-0 mt-1.5 w-72 sm:w-84 max-h-[75vh] overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] py-1.5 divide-y divide-slate-800 animate-in fade-in duration-100 opacity-100"
         >
-          {/* Barra de cabeçalho da lista com atualização imediata */}
+          {/* Cabeçalho */}
           <div className="px-3 py-1.5 flex items-center justify-between gap-2 text-xs bg-slate-950/80">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-              Todos os Destinos MIDI ({destinations.length})
+              Gerenciar Conexões MIDI
             </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="text-[11px] text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 transition"
-                title="Atualizar lista de dispositivos"
-              >
-                ↻ Atualizar
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="text-[11px] text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 transition"
+              title="Atualizar lista de dispositivos"
+            >
+              ↻ Atualizar
+            </button>
           </div>
 
-          {/* Opção de Desconectar se houver destino ativo */}
+          {/* Opção de Desconectar */}
           {connectedDestination && (
             <div className="p-1.5 bg-slate-900">
               <button
@@ -129,14 +130,17 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
             </div>
           )}
 
-          {/* Lista de TODOS os dispositivos detectados */}
+          {/* SEÇÃO 1: Dispositivos USB / Locais */}
           <div className="py-1 bg-slate-900">
-            {destinations.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-slate-400 italic">
-                Nenhum destino MIDI detectado neste instante.
+            <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400 bg-slate-950/40 flex items-center gap-1.5">
+              <span>🔌</span> Dispositivos USB / Locais ({usbDestinations.length})
+            </div>
+            {usbDestinations.length === 0 ? (
+              <div className="px-3 py-1.5 text-xs text-slate-500 italic">
+                Nenhum dispositivo USB conectado.
               </div>
             ) : (
-              destinations.map((dest) => {
+              usbDestinations.map((dest) => {
                 const isSelected = connectedDestination?.id === dest.id;
                 return (
                   <button
@@ -150,9 +154,11 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
                     }`}
                   >
                     <div className="truncate pr-2">
-                      <div className="truncate font-medium">{dest.displayName}</div>
+                      <div className="truncate font-medium flex items-center gap-1.5">
+                        <span>🔌</span> {dest.displayName}
+                      </div>
                       {dest.manufacturer && (
-                        <div className="text-[10px] text-slate-400 truncate">
+                        <div className="text-[10px] text-slate-400 truncate pl-5">
                           {dest.manufacturer}
                         </div>
                       )}
@@ -166,13 +172,54 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
             )}
           </div>
 
-          {/* Opção para Buscar/Parear dispositivos BLE ao alcance */}
+          {/* SEÇÃO 2: Dispositivos Bluetooth BLE */}
+          <div className="py-1 bg-slate-900">
+            <div className="px-3 py-1 text-[10px] uppercase font-bold text-sky-400 bg-sky-950/30 flex items-center gap-1.5">
+              <span>📡</span> Dispositivos Bluetooth BLE ({bleDestinations.length})
+            </div>
+            {bleDestinations.length === 0 ? (
+              <div className="px-3 py-1.5 text-xs text-slate-500 italic">
+                Nenhum dispositivo BLE pareado. Use a busca abaixo.
+              </div>
+            ) : (
+              bleDestinations.map((dest) => {
+                const isSelected = connectedDestination?.id === dest.id;
+                return (
+                  <button
+                    key={dest.id}
+                    type="button"
+                    onClick={() => handleSelect(dest)}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-950/60 text-emerald-300 font-bold border-l-2 border-emerald-400'
+                        : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="truncate pr-2">
+                      <div className="truncate font-medium flex items-center gap-1.5">
+                        <span>📡</span> {dest.displayName}
+                      </div>
+                      {dest.manufacturer && (
+                        <div className="text-[10px] text-slate-400 truncate pl-5">
+                          {dest.manufacturer}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-xs shrink-0 font-medium">
+                      {isSelected ? '🟢 Conectado' : '⚪'}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* Botão de Busca BLE */}
           <div className="p-1.5 bg-slate-950">
             <button
               type="button"
               onClick={() => {
                 onScanBle();
-                // Removido o setIsOpen(false) para manter o dropdown aberto e mostrar o estado de 'isScanningBle'
               }}
               disabled={isScanningBle}
               className={`w-full text-left px-3 py-2 text-xs font-semibold border rounded flex items-center justify-between transition active:scale-[0.99] ${
