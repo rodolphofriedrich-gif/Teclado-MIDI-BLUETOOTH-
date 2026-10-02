@@ -40,17 +40,20 @@ export default function App() {
     return localStorage.getItem('midi_palette_id') || 'custom-blue';
   });
 
-  // Aplicação instantânea do tema
+  // Determina se o tema ativo é escuro
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+
   useEffect(() => {
     localStorage.setItem('midi_theme_mode', themeMode);
-    const root = document.documentElement;
     
-    let isDark = themeMode === 'dark';
+    let dark = themeMode === 'dark';
     if (themeMode === 'system') {
-      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
+    setIsDarkMode(dark);
 
-    if (isDark) {
+    const root = document.documentElement;
+    if (dark) {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
@@ -76,15 +79,24 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Atualiza e limpa duplicatas rigorosamente
   const refreshDestinations = useCallback(async () => {
     const list = await midiManager.getAvailableDestinations();
     
-    // Evita duplicação filtrando por ID único ou endereço BLE
     const uniqueMap = new Map();
     list.forEach((item) => {
-      const uniqueKey = item.bleAddress ? `ble:${item.bleAddress}` : item.id;
+      // Cria uma chave única baseada no endereço BLE ou ID/Nome normalizado para evitar cópias
+      const cleanName = item.displayName.replace(/\s*\(BLE\)/g, '').trim().toLowerCase();
+      const uniqueKey = item.bleAddress ? `ble:${item.bleAddress}` : `dev:${cleanName}`;
+      
       if (!uniqueMap.has(uniqueKey)) {
         uniqueMap.set(uniqueKey, item);
+      } else {
+        // Se já existe, prefere o que tem endereço BLE direto ou nome mais limpo
+        const existing = uniqueMap.get(uniqueKey);
+        if (!existing.bleAddress && item.bleAddress) {
+          uniqueMap.set(uniqueKey, item);
+        }
       }
     });
 
@@ -226,12 +238,16 @@ export default function App() {
   const isBleConnected = connectedDestination && connectedDestination.type === 'ble';
 
   return (
-    <div className="h-[100dvh] w-full bg-slate-950 dark:bg-slate-950 text-slate-100 flex flex-col font-sans select-none overflow-hidden antialiased">
-      <header className="w-full bg-slate-900 border-b border-slate-800 px-3 py-2 shrink-0 relative z-50 shadow-md flex items-center justify-between">
+    <div className={`h-[100dvh] w-full flex flex-col font-sans select-none overflow-hidden antialiased transition-colors ${
+      isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'
+    }`}>
+      <header className={`w-full border-b px-3 py-2 shrink-0 relative z-50 shadow-md flex items-center justify-between transition-colors ${
+        isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+      }`}>
         
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-start gap-0.5 shrink-0">
-            <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">
+            <span className={`text-[9px] uppercase font-bold tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
               Canal
             </span>
             <ChannelDropdown
@@ -259,7 +275,7 @@ export default function App() {
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
                 isUsbConnected
                   ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
-                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
+                  : isDarkMode ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200' : 'bg-slate-200 hover:bg-slate-300 border-slate-300 text-slate-800'
               }`}
             >
               <span>🔌</span>
@@ -382,7 +398,9 @@ export default function App() {
                 setIsUsbOpen(false);
                 setIsBleOpen(false);
               }}
-              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold transition"
+              className={`px-2.5 py-1.5 border rounded-lg text-xs font-semibold transition ${
+                isDarkMode ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200' : 'bg-slate-200 hover:bg-slate-300 border-slate-300 text-slate-800'
+              }`}
               title="Configurações de Tema e Cores"
             >
               ⚙️
