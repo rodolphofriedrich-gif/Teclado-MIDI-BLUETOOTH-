@@ -425,9 +425,9 @@ export default function App() {
             </button>
 
             {isSettingsOpen && (
-              <div className="absolute right-0 mt-1 w-72 bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] p-3 text-xs text-slate-200 space-y-3">
-                <div className="font-bold text-slate-300 border-b border-slate-800 pb-1.5 flex justify-between">
-                  <span>⚙️ Configurações</span>
+              <div className="absolute right-0 mt-1 w-80 max-h-[85dvh] overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] p-3 text-xs text-slate-200 space-y-3 custom-scrollbar">
+                <div className="font-bold text-slate-300 border-b border-slate-800 pb-1.5 flex justify-between sticky top-0 bg-slate-900 z-10">
+                  <span>⚙️️ Configurações</span>
                   <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white">✕</button>
                 </div>
 
