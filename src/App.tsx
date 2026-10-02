@@ -251,20 +251,19 @@ export default function App() {
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
     try {
-      // Importação dinâmica para evitar erros de compilação do Vite/Rolldown
-      const appModule = await import('@capacitor/app');
-      if (appModule && appModule.App) {
-        await appModule.App.exitApp();
+      const win = window as any;
+      if (win.Capacitor && win.Capacitor.Plugins && win.Capacitor.Plugins.App) {
+        await win.Capacitor.Plugins.App.exitApp();
         return;
       }
     } catch {
-      // Fallback para navegador web caso não esteja no Android nativo
+      // Ignora fora do app nativo
     }
 
     try {
       window.close();
     } catch {
-      // Fallback final
+      // Fallback
     }
   };
 
