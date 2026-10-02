@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { App as CapacitorApp } from '@capacitor/app';
 import { MidiDestination, MidiLogEntry } from './types/midi';
 import {
   midiManager,
@@ -249,12 +248,15 @@ export default function App() {
     showMessage('Selecione um destino MIDI', 'warn', 2500);
   }, [showMessage]);
 
-  const handleConfirmExit = async () => {
+  const handleConfirmExit = () => {
     try {
-      await CapacitorApp.exitApp();
-    } catch {
+      // Fecha a janela webview do app no Android / Navegador
       window.close();
+    } catch {
+      // Fallback
     }
+    // Se o WebView ignorar o window.close(), limpa a tela de exibição
+    document.body.innerHTML = '<div style="background:#020617;color:#fff;height:100vh;display:flex;align-items:center;justify-content:center;font-family:sans-serif;">Aplicativo encerrado.</div>';
   };
 
   const usbAndVirtualDestinations = destinations.filter(
@@ -572,7 +574,7 @@ export default function App() {
                 : 'bg-slate-900/95 text-slate-200 border-slate-700'
             }`}
           >
-            <span>{statusMessage.type === 'warn' ? '⚠️' : statusMessage.type === 'error' ? '❌' : statusMessage.type === 'success' ? '✅' : 'ℹ️'}</span>
+            <span>{statusMessage.type === 'warn' ? '⚠️' : statusMessage.type === 'error' ? '❌' : statusMessage.type === 'success' ? '✅' : 'ℹ️️'}</span>
             <span className="flex-1 truncate">{statusMessage.text}</span>
           </div>
         </div>
