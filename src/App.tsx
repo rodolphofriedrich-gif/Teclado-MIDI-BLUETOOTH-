@@ -1,7 +1,6 @@
 /**
  * Teclado MIDI Controller - Aplicativo Android / Web MIDI
  * Foco exclusivo: controlador e transmissor de comandos MIDI.
- * Com suporte a Temas (Claro/Escuro/Sistema) e Cores Personalizadas das Teclas.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -14,7 +13,6 @@ import { ChannelDropdown } from './components/ChannelDropdown';
 import { MidiKeyboard } from './components/MidiKeyboard';
 import { PWAInstallButton } from './components/PWAInstallButton';
 
-// Paletas de cores disponíveis para o teclado
 export const KEYBOARD_PALETTES = [
   { id: 'default', name: 'Clássico / Padrão', white: '#ffffff', black: '#1e293b' },
   { id: 'custom-blue', name: 'Azul Personalizado (#D6E6F7 / #0F3D73)', white: '#D6E6F7', black: '#0F3D73' },
@@ -30,12 +28,10 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'warn' | 'error' | 'success' } | null>(null);
   const [lastTxCommand, setLastTxCommand] = useState<MidiLogEntry | null>(null);
 
-  // Estados de Dropdowns da Header
   const [isUsbOpen, setIsUsbOpen] = useState<boolean>(false);
   const [isBleOpen, setIsBleOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
-  // Configurações salvas (Tema e Cores)
   const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'system'>(() => {
     return (localStorage.getItem('midi_theme_mode') as any) || 'dark';
   });
@@ -44,7 +40,7 @@ export default function App() {
     return localStorage.getItem('midi_palette_id') || 'custom-blue';
   });
 
-  // Aplica o tema visual no HTML/Body
+  // Aplicação instantânea do tema
   useEffect(() => {
     localStorage.setItem('midi_theme_mode', themeMode);
     const root = document.documentElement;
@@ -61,7 +57,6 @@ export default function App() {
     }
   }, [themeMode]);
 
-  // Salva a paleta escolhida
   useEffect(() => {
     localStorage.setItem('midi_palette_id', selectedPaletteId);
   }, [selectedPaletteId]);
@@ -83,7 +78,17 @@ export default function App() {
 
   const refreshDestinations = useCallback(async () => {
     const list = await midiManager.getAvailableDestinations();
-    setDestinations(list);
+    
+    // Evita duplicação filtrando por ID único ou endereço BLE
+    const uniqueMap = new Map();
+    list.forEach((item) => {
+      const uniqueKey = item.bleAddress ? `ble:${item.bleAddress}` : item.id;
+      if (!uniqueMap.has(uniqueKey)) {
+        uniqueMap.set(uniqueKey, item);
+      }
+    });
+
+    setDestinations(Array.from(uniqueMap.values()));
     const active = midiManager.getConnectedDestination();
     setConnectedDestination(active);
   }, []);
@@ -221,12 +226,9 @@ export default function App() {
   const isBleConnected = connectedDestination && connectedDestination.type === 'ble';
 
   return (
-    <div className="h-[100dvh] w-full bg-slate-950 dark:bg-slate-950 bg-slate-100 text-slate-900 dark:text-slate-100 flex flex-col font-sans select-none overflow-hidden antialiased transition-colors">
-      
-      {/* HEADER PRINCIPAL */}
+    <div className="h-[100dvh] w-full bg-slate-950 dark:bg-slate-950 text-slate-100 flex flex-col font-sans select-none overflow-hidden antialiased">
       <header className="w-full bg-slate-900 border-b border-slate-800 px-3 py-2 shrink-0 relative z-50 shadow-md flex items-center justify-between">
         
-        {/* Esquerda: Canal MIDI */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-start gap-0.5 shrink-0">
             <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">
@@ -242,7 +244,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Direita: Conexões USB, BLE e Configurações */}
         <div className="flex items-center gap-1.5 min-w-0">
           
           {/* Botão USB / Internos */}
@@ -372,7 +373,7 @@ export default function App() {
             )}
           </div>
 
-          {/* Botão de Configurações (Tema & Cores) */}
+          {/* Botão de Configurações */}
           <div className="relative">
             <button
               type="button"
@@ -394,7 +395,6 @@ export default function App() {
                   <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white">✕</button>
                 </div>
 
-                {/* Seleção de Tema */}
                 <div>
                   <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Tema da Aplicação</span>
                   <div className="grid grid-cols-3 gap-1">
@@ -419,7 +419,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Seleção de Paleta de Cores das Teclas */}
                 <div>
                   <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Cores do Teclado MIDI</span>
                   <div className="space-y-1">
@@ -452,7 +451,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Alerta / Mensagem Flutuante */}
       {statusMessage && (
         <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
           <div
@@ -472,7 +470,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Main & Teclado MIDI com cores dinâmicas passadas por propriedade */}
       <main className="flex-1 w-full h-[calc(100dvh-60px)] p-2 flex flex-col gap-1 overflow-hidden">
         <div className="w-full h-full flex flex-col">
           <MidiKeyboard
