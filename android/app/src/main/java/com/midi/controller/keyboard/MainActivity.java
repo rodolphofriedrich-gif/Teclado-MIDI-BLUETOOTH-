@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.view.View;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.plugin.App; // Importa o plugin nativo de App do Capacitor
 import com.midi.controller.keyboard.plugins.NativeMidiPlugin;
 
 public class MainActivity extends BridgeActivity {
@@ -12,6 +13,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // REGRA DO CAPACITOR: Registrar plugins ANTES do super.onCreate
         registerPlugin(NativeMidiPlugin.class);
+        registerPlugin(App.class); // Registra o plugin App para permitir fechar o aplicativo
         
         super.onCreate(savedInstanceState);
         
