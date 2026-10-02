@@ -38,6 +38,7 @@ export default function App() {
   const [isUsbOpen, setIsUsbOpen] = useState<boolean>(false);
   const [isBleOpen, setIsBleOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
 
   const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'system'>(() => {
     return (localStorage.getItem('midi_theme_mode') as any) || 'dark';
@@ -247,6 +248,17 @@ export default function App() {
     showMessage('Selecione um destino MIDI', 'warn', 2500);
   }, [showMessage]);
 
+  const handleConfirmExit = () => {
+    try {
+      // Fecha a janela ou sai do aplicativo no Android/Web
+      window.close();
+    } catch {
+      // Fallback
+    }
+    // Se o navegador bloquear o window.close(), minimiza ou redireciona
+    window.location.href = 'about:blank';
+  };
+
   const usbAndVirtualDestinations = destinations.filter(
     (d) => d.type === 'usb' || d.type === 'virtual' || d.type === 'local'
   );
@@ -263,10 +275,14 @@ export default function App() {
         isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
       }`}>
         
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col items-start gap-0.5 shrink-0">
+        {/* Esquerda: Nome do App em cima e Canal MIDI embaixo */}
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-sky-400 flex items-center gap-1">
+            <span>🎹</span> MIDI Controller
+          </span>
+          <div className="flex items-center gap-2">
             <span className={`text-[9px] uppercase font-bold tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-              Canal
+              Canal:
             </span>
             <ChannelDropdown
               selectedChannel={selectedChannel}
@@ -278,6 +294,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Direita: Conexões USB, BLE, Configurações e Botão Sair */}
         <div className="flex items-center gap-1.5 min-w-0">
           
           {/* Botão USB / Internos */}
@@ -426,9 +443,9 @@ export default function App() {
 
             {isSettingsOpen && (
               <div className="absolute right-0 mt-1 w-80 max-h-[85dvh] overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] p-3 text-xs text-slate-200 space-y-3 custom-scrollbar">
-                <div className="font-bold text-slate-300 border-b border-slate-800 pb-1.5 flex justify-between sticky top-0 bg-slate-900 z-10">
-                  <span>⚙️️ Configurações</span>
-                  <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+                <div className="font-bold text-slate-300 border-b border-slate-800 pb-1.5 flex justify-between items-center bg-slate-900 sticky top-0 py-1 z-20">
+                  <span>⚙️ Configurações</span>
+                  <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white px-1">✕</button>
                 </div>
 
                 {/* Tema */}
@@ -500,12 +517,49 @@ export default function App() {
             )}
           </div>
 
+          {/* Botão Fechar App */}
+          <button
+            type="button"
+            onClick={() => setShowExitConfirm(true)}
+            className="px-2.5 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/80 text-rose-200 rounded-lg text-xs font-semibold transition"
+            title="Fechar Aplicativo"
+          >
+            🚪 Sair
+          </button>
+
           <div className="hidden sm:flex items-center">
             <PWAInstallButton />
           </div>
 
         </div>
       </header>
+
+      {/* Modal de Confirmação para Fechar o App */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 max-w-sm w-full shadow-2xl text-center space-y-4">
+            <div className="text-3xl">⚠️</div>
+            <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">Deseja realmente fechar o aplicativo?</h3>
+            <p className="text-xs text-slate-400">As conexões MIDI ativas serão encerradas.</p>
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowExitConfirm(false)}
+                className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-semibold text-xs border border-slate-700 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmExit}
+                className="py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-semibold text-xs transition shadow-lg"
+              >
+                Sim, Sair
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {statusMessage && (
         <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
