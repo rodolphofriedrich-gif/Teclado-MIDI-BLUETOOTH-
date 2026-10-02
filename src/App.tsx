@@ -20,6 +20,13 @@ export const KEYBOARD_PALETTES = [
   { id: 'wood-vintage', name: 'Vintage / Creme', white: '#fef3c7', black: '#451a03' },
 ];
 
+export const VELOCITY_OPTIONS = [
+  { id: 30, name: 'Suave (30)' },
+  { id: 64, name: 'Médio / Padrão (64)' },
+  { id: 100, name: 'Forte (100)' },
+  { id: 127, name: 'Máximo (127)' },
+];
+
 export default function App() {
   const [selectedChannel, setSelectedChannel] = useState<number>(1);
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
@@ -40,7 +47,11 @@ export default function App() {
     return localStorage.getItem('midi_palette_id') || 'custom-blue';
   });
 
-  // Determina se o tema ativo é escuro
+  const [selectedVelocity, setSelectedVelocity] = useState<number>(() => {
+    const saved = localStorage.getItem('midi_velocity');
+    return saved ? parseInt(saved, 10) : 64;
+  });
+
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
 
   useEffect(() => {
@@ -64,12 +75,21 @@ export default function App() {
     localStorage.setItem('midi_palette_id', selectedPaletteId);
   }, [selectedPaletteId]);
 
+  useEffect(() => {
+    localStorage.setItem('midi_velocity', selectedVelocity.toString());
+  }, [selectedVelocity]);
+
   const activePalette = KEYBOARD_PALETTES.find((p) => p.id === selectedPaletteId) || KEYBOARD_PALETTES[1];
 
   const channelRef = useRef<number>(selectedChannel);
   useEffect(() => {
     channelRef.current = selectedChannel;
   }, [selectedChannel]);
+
+  const velocityRef = useRef<number>(selectedVelocity);
+  useEffect(() => {
+    velocityRef.current = selectedVelocity;
+  }, [selectedVelocity]);
 
   const showMessage = useCallback((text: string, type: 'info' | 'warn' | 'error' | 'success' = 'info', durationMs = 3500) => {
     setStatusMessage({ text, type });
@@ -79,20 +99,17 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Atualiza e limpa duplicatas rigorosamente
   const refreshDestinations = useCallback(async () => {
     const list = await midiManager.getAvailableDestinations();
     
     const uniqueMap = new Map();
     list.forEach((item) => {
-      // Cria uma chave única baseada no endereço BLE ou ID/Nome normalizado para evitar cópias
       const cleanName = item.displayName.replace(/\s*\(BLE\)/g, '').trim().toLowerCase();
       const uniqueKey = item.bleAddress ? `ble:${item.bleAddress}` : `dev:${cleanName}`;
       
       if (!uniqueMap.has(uniqueKey)) {
         uniqueMap.set(uniqueKey, item);
       } else {
-        // Se já existe, prefere o que tem endereço BLE direto ou nome mais limpo
         const existing = uniqueMap.get(uniqueKey);
         if (!existing.bleAddress && item.bleAddress) {
           uniqueMap.set(uniqueKey, item);
@@ -188,7 +205,8 @@ export default function App() {
 
     try {
       const channel = channelRef.current;
-      const res = await midiManager.sendNoteOn(channel, note);
+      const velocity = velocityRef.current;
+      const res = await midiManager.sendNoteOnCustomVelocity(channel, note, velocity);
       setLastTxCommand({
         id: Math.random().toString(36).substring(2, 7),
         timestamp: new Date().toLocaleTimeString(),
@@ -196,7 +214,7 @@ export default function App() {
         channel,
         note,
         noteName: getNoteName(note),
-        velocity: 64,
+        velocity,
         bytesHex: res.hex,
       });
     } catch (err: any) {
@@ -413,6 +431,7 @@ export default function App() {
                   <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white">✕</button>
                 </div>
 
+                {/* Tema */}
                 <div>
                   <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Tema da Aplicação</span>
                   <div className="grid grid-cols-3 gap-1">
@@ -437,6 +456,25 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Velocity */}
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Intensidade (Velocity)</span>
+                  <div className="grid grid-cols-2 gap-1">
+                    {VELOCITY_OPTIONS.map((vel) => (
+                      <button
+                        key={vel.id}
+                        onClick={() => setSelectedVelocity(vel.id)}
+                        className={`py-1 px-2 rounded border font-medium text-center truncate ${
+                          selectedVelocity === vel.id ? 'bg-emerald-600 border-emerald-500 text-white font-bold' : 'bg-slate-800 border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        {vel.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cores do Teclado */}
                 <div>
                   <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Cores do Teclado MIDI</span>
                   <div className="space-y-1">
