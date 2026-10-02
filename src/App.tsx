@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { MidiDestination, MidiLogEntry } from './types/midi';
 import {
   midiManager,
@@ -248,15 +249,12 @@ export default function App() {
     showMessage('Selecione um destino MIDI', 'warn', 2500);
   }, [showMessage]);
 
-  const handleConfirmExit = () => {
+  const handleConfirmExit = async () => {
     try {
-      // Fecha a janela ou sai do aplicativo no Android/Web
-      window.close();
+      await CapacitorApp.exitApp();
     } catch {
-      // Fallback
+      window.close();
     }
-    // Se o navegador bloquear o window.close(), minimiza ou redireciona
-    window.location.href = 'about:blank';
   };
 
   const usbAndVirtualDestinations = destinations.filter(
