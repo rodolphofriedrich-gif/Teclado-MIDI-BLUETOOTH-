@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { App as CapacitorApp } from '@capacitor/app';
 import { MidiDestination, MidiLogEntry } from './types/midi';
 import {
   midiManager,
@@ -252,9 +251,20 @@ export default function App() {
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
     try {
-      await CapacitorApp.exitApp();
+      // Importação dinâmica para evitar erros de compilação do Vite/Rolldown
+      const appModule = await import('@capacitor/app');
+      if (appModule && appModule.App) {
+        await appModule.App.exitApp();
+        return;
+      }
     } catch {
+      // Fallback para navegador web caso não esteja no Android nativo
+    }
+
+    try {
       window.close();
+    } catch {
+      // Fallback final
     }
   };
 
