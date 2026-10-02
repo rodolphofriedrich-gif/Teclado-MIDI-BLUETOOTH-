@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { App as CapacitorApp } from '@capacitor/app';
 import { MidiDestination, MidiLogEntry } from './types/midi';
 import {
   midiManager,
@@ -252,9 +251,20 @@ export default function App() {
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
     try {
-      await CapacitorApp.exitApp();
+      // Usa o plugin App injetado globalmente pelo Capacitor nativo
+      const win = window as any;
+      if (win.Capacitor && win.Capacitor.Plugins && win.Capacitor.Plugins.App) {
+        await win.Capacitor.Plugins.App.exitApp();
+        return;
+      }
     } catch {
+      // Ignora erro fora do Android
+    }
+
+    try {
       window.close();
+    } catch {
+      // Fallback
     }
   };
 
