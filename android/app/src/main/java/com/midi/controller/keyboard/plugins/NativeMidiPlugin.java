@@ -83,6 +83,9 @@ public class NativeMidiPlugin extends Plugin {
     private MidiReceiver connectedReceiver;
     private int connectedDeviceId = -1;
 
+    // Servidor Virtual MIDI para receber conexões de outros dispositivos (como o iPad)
+    private MidiDevice virtualServerDevice;
+
     private final Map<String, BluetoothDevice> scannedBluetoothDevices = new HashMap<>();
 
     @Override
@@ -93,6 +96,22 @@ public class NativeMidiPlugin extends Plugin {
             bluetoothAdapter = bluetoothManager.getAdapter();
         }
         registerMidiDeviceCallback();
+        createVirtualMidiServer();
+    }
+
+    private void createVirtualMidiServer() {
+        if (midiManager == null) return;
+        try {
+            // Cria um dispositivo MIDI virtual para que outros aparelhos possam enxergar este celular como destino
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                virtualServerDevice = midiManager.createVirtualDevice(
+                    "MidiController Server",
+                    1, // input port count
+                    1  // output port count
+                );
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void registerMidiDeviceCallback() {
@@ -516,7 +535,6 @@ public class NativeMidiPlugin extends Plugin {
 
                     String name = safeDeviceName(device);
                     
-                    // FILTRAGEM INTELIGENTE: Ignora acessórios óbvios que não são MIDI
                     if (name != null) {
                         String lowerName = name.toLowerCase();
                         if (lowerName.contains("mi band") || lowerName.contains("band") || lowerName.contains("watch") || 
@@ -661,6 +679,12 @@ public class NativeMidiPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         closeConnectedDevice();
+        if (virtualServerDevice != null) {
+            try {
+                virtualServerDevice.close();
+            } catch (Exception ignored) {
+            }
+        }
         if (midiManager != null && deviceCallbackRegistered && deviceCallback != null) {
             try {
                 midiManager.unregisterDeviceCallback(deviceCallback);
