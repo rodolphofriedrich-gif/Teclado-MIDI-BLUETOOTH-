@@ -250,9 +250,13 @@ export class MidiControllerManager {
   }
 
   public async sendNoteOn(channel: number, note: number): Promise<{ bytes: number[]; hex: string }> {
+    return this.sendNoteOnCustomVelocity(channel, note, 64);
+  }
+
+  public async sendNoteOnCustomVelocity(channel: number, note: number, velocity: number): Promise<{ bytes: number[]; hex: string }> {
     if (!this.connectedDestination) throw new Error('Nenhum destino MIDI conectado.');
     const statusByte = 0x90 | ((channel - 1) & 0x0f);
-    const midiBytes = [statusByte, note & 0x7f, 64];
+    const midiBytes = [statusByte, note & 0x7f, velocity & 0x7f];
     await this.transmitBytes(midiBytes);
     return {
       bytes: midiBytes,
