@@ -6,6 +6,8 @@ interface MidiKeyboardProps {
   onNoteOn: (note: number) => void;
   onNoteOff: (note: number) => void;
   onDisabledPress: () => void;
+  customWhiteKeyColor?: string;
+  customBlackKeyColor?: string;
 }
 
 interface KeyDef {
@@ -20,6 +22,8 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
   onNoteOn,
   onNoteOff,
   onDisabledPress,
+  customWhiteKeyColor = '#ffffff',
+  customBlackKeyColor = '#09090b',
 }) => {
   const [baseOctave, setBaseOctave] = useState<number>(3); // Padrão: C3 (48) a C5 (72)
   const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
@@ -161,7 +165,7 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
         </div>
       </div>
 
-      {/* Área Gráfica das Teclas (Altura reduzida para otimizar o espaço vertical) */}
+      {/* Área Gráfica das Teclas */}
       <div className="relative flex-1 w-full min-h-[110px] bg-slate-950 rounded-lg overflow-hidden border border-slate-800 select-none touch-none shadow-inner">
         {!isConnected && (
           <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center text-center p-2 transition-all">
@@ -198,15 +202,16 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
                   e.preventDefault();
                   handleKeyUp(key.midiNote);
                 }}
-                className={`relative flex-1 h-full border-r border-slate-300/80 rounded-b-md transition-colors flex flex-col justify-end items-center pb-1.5 cursor-pointer select-none active:scale-[0.99] origin-top ${
-                  isPressed
-                    ? 'bg-amber-400 shadow-inner'
-                    : 'bg-white hover:bg-slate-100 shadow-[inset_0_-6px_0_rgba(0,0,0,0.1)]'
+                style={{
+                  backgroundColor: isPressed ? '#fbbf24' : customWhiteKeyColor,
+                }}
+                className={`relative flex-1 h-full border-r border-slate-400/40 rounded-b-md transition-colors flex flex-col justify-end items-center pb-1.5 cursor-pointer select-none active:scale-[0.99] origin-top ${
+                  isPressed ? 'shadow-inner' : 'shadow-[inset_0_-6px_0_rgba(0,0,0,0.15)] hover:opacity-90'
                 }`}
               >
                 <span
                   className={`text-[9px] font-mono font-bold ${
-                    isPressed ? 'text-slate-950' : 'text-slate-500'
+                    isPressed ? 'text-slate-950' : 'text-slate-600'
                   }`}
                 >
                   {key.name}
@@ -230,7 +235,10 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
             return (
               <div
                 key={key.midiNote}
-                style={style}
+                style={{
+                  ...style,
+                  backgroundColor: isPressed ? '#f59e0b' : customBlackKeyColor,
+                }}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -253,13 +261,13 @@ export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
                 }}
                 className={`absolute top-0 h-full pointer-events-auto rounded-b-md transition-colors flex flex-col justify-end items-center pb-1 cursor-pointer select-none z-10 ${
                   isPressed
-                    ? 'bg-amber-500 ring-2 ring-amber-300'
-                    : 'bg-slate-950 border-x border-b border-slate-800 shadow-[inset_0_-3px_0_rgba(255,255,255,0.15)] hover:bg-slate-900'
+                    ? 'ring-2 ring-amber-300'
+                    : 'border-x border-b border-slate-700 shadow-[inset_0_-3px_0_rgba(255,255,255,0.15)] hover:opacity-90'
                 }`}
               >
                 <span
                   className={`text-[8px] font-mono font-bold leading-none ${
-                    isPressed ? 'text-slate-950' : 'text-slate-400'
+                    isPressed ? 'text-slate-950' : 'text-slate-300'
                   }`}
                 >
                   {key.name}
