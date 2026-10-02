@@ -14,6 +14,9 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NativeMidiPlugin.class);
         
         super.onCreate(savedInstanceState);
+        
+        // Aplica o Modo Imersivo logo na inicialização
+        hideSystemUI();
     }
 
     @Override
