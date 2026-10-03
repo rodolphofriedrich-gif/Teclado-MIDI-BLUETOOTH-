@@ -392,8 +392,8 @@ export default function App() {
 
   return (
     <div
-      className={`h-[100dvh] w-full flex flex-col font-sans select-none overflow-hidden antialiased transition-colors ${
-        isDarkMode
+      className={`fixed inset-0 w-full h-full flex flex-col font-sans select-none overflow-hidden antialiased transition-colors ${
+      isDarkMode
           ? 'bg-slate-950 text-slate-100'
           : 'bg-slate-100 text-slate-900'
       }`}
