@@ -12,6 +12,7 @@ import {
 import { ChannelDropdown } from './components/ChannelDropdown';
 import { MidiKeyboard } from './components/MidiKeyboard';
 import { PWAInstallButton } from './components/PWAInstallButton';
+import { NativeMidi } from './services/nativeMidi';
 
 export const KEYBOARD_PALETTES = [
   { id: 'default', name: 'Clássico / Padrão', white: '#ffffff', black: '#1e293b' },
@@ -250,21 +251,18 @@ export default function App() {
 
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
-    try {
-      // Usa o plugin App injetado globalmente pelo Capacitor nativo
-      const win = window as any;
-      if (win.Capacitor && win.Capacitor.Plugins && win.Capacitor.Plugins.App) {
-        await win.Capacitor.Plugins.App.exitApp();
-        return;
-      }
-    } catch {
-      // Ignora erro fora do Android
-    }
 
     try {
-      window.close();
+      // Usa o plugin NativeMidi já registrado nativamente no Android.
+      // O método encerra a Activity e remove a tarefa do Android.
+      await NativeMidi.fecharApp();
     } catch {
-      // Fallback
+      // Fora do Android, tenta o comportamento padrão do navegador.
+      try {
+        window.close();
+      } catch {
+        // Ignora o fallback quando o navegador não permite fechar a janela.
+      }
     }
   };
 
