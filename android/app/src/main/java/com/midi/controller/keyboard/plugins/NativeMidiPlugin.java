@@ -1147,8 +1147,8 @@ public class NativeMidiPlugin extends Plugin {
                             safeDeviceName(device);
 
                         /*
-                         * Mantém o filtro anterior para evitar
-                         * relógios, pulseiras, fones etc.
+                         * CORREÇÃO: O filtro agressivo de nomes ("phone", "redmi", etc) foi removido.
+                         * Ele estava bloqueando outros dispositivos Android de aparecerem na busca.
                          */
                         if (name != null) {
 
@@ -1156,11 +1156,7 @@ public class NativeMidiPlugin extends Plugin {
                                 name.toLowerCase();
 
                             if (
-                                lowerName.contains("mi band")
-                                || lowerName.contains("band")
-                                || lowerName.contains("watch")
-                                || lowerName.contains("phone")
-                                || lowerName.contains("redmi")
+                                lowerName.equals("mi band")
                                 || lowerName.contains("galaxy buds")
                             ) {
                                 return;
