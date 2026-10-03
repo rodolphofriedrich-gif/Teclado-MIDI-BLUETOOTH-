@@ -839,7 +839,7 @@ export default function App() {
         </div>
       )}
 
-      <main className="flex-1 w-full h-[calc(100dvh-60px)] p-2 flex flex-col gap-1 overflow-hidden">
+      <main className="flex-1 min-h-0 w-full p-2 flex flex-col gap-1 overflow-hidden">
         <div className="w-full h-full flex flex-col">
           <MidiKeyboard
             isConnected={!!connectedDestination}
