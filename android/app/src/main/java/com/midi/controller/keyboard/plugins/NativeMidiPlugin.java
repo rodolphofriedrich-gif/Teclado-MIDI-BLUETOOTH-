@@ -1,9 +1,11 @@
+```java
 package com.midi.controller.keyboard.plugins;
 
 import android.Manifest;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattServer;
@@ -49,6 +51,7 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -81,33 +84,30 @@ import java.util.concurrent.Executors;
 public class NativeMidiPlugin extends Plugin {
 
     // =========================================================
-    // BLE MIDI STANDARD
+    // BLE MIDI PADRÃO
     // =========================================================
 
-    /*
-     * UUID oficial do serviço MIDI over Bluetooth LE.
-     *
-     * IMPORTANTE:
-     * O UUID usado anteriormente estava incorreto.
-     */
-    private static final UUID MIDI_BLE_SERVICE_UUID =
-        UUID.fromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
+    private static final UUID BLE_MIDI_SERVICE_UUID =
+        UUID.fromString("03b80e5a-ede8-4b33-a020-514f0634123b");
 
-    private static final UUID MIDI_BLE_CHARACTERISTIC_UUID =
-        UUID.fromString("7772E5DB-3868-4112-A1A9-F2669D106BF3");
+    private static final UUID BLE_MIDI_CHARACTERISTIC_UUID =
+        UUID.fromString("7772e5db-3868-4112-a1a9-f2669d106bf3");
 
-    private static final UUID CLIENT_CHARACTERISTIC_CONFIG_UUID =
-        UUID.fromString("00002902-0000-1000-8000-00805F9B34FB");
+    private static final UUID CLIENT_CONFIGURATION_DESCRIPTOR_UUID =
+        UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+
+    private static final byte[] ENABLE_NOTIFICATION_VALUE =
+        BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE;
 
     // =========================================================
-    // ANDROID MIDI
+    // MIDI NATIVO
     // =========================================================
 
     private MidiManager midiManager;
-
     private BluetoothAdapter bluetoothAdapter;
 
     private BluetoothLeScanner bleScanner;
+    private BluetoothLeAdvertiser bleAdvertiser;
 
     private final Handler mainHandler =
         new Handler(Looper.getMainLooper());
@@ -116,56 +116,44 @@ public class NativeMidiPlugin extends Plugin {
         Executors.newSingleThreadExecutor();
 
     private MidiManager.DeviceCallback deviceCallback;
-
     private boolean deviceCallbackRegistered = false;
 
     private MidiDevice connectedDevice;
-
     private MidiInputPort connectedInputPort;
-
     private MidiOutputPort connectedOutputPort;
-
     private MidiReceiver connectedReceiver;
-
     private int connectedDeviceId = -1;
-
-    // =========================================================
-    // BLE CLIENT / SCANNER
-    // =========================================================
 
     private final Map<String, BluetoothDevice> scannedBluetoothDevices =
         new HashMap<>();
 
     // =========================================================
-    // BLE MIDI PERIPHERAL / GATT SERVER
+    // SERVIDOR BLE MIDI
     // =========================================================
 
-    private BluetoothGattServer bluetoothGattServer;
+    private BluetoothGattServer bleGattServer;
+    private BluetoothGattService bleMidiService;
+    private BluetoothGattCharacteristic bleMidiCharacteristic;
+
+    private final Set<BluetoothDevice> bleClients =
+        new HashSet<>();
+
+    private final Set<String> bleNotificationClients =
+        new HashSet<>();
 
     private BluetoothLeAdvertiser bluetoothLeAdvertiser;
-
-    private BluetoothGattCharacteristic midiGattCharacteristic;
-
     private AdvertiseCallback advertiseCallback;
 
-    private boolean bleMidiPeripheralRunning = false;
-
-    private final Set<BluetoothDevice> bleMidiConnectedClients =
-        new HashSet<>();
-
-    private final Set<BluetoothDevice> bleMidiNotificationClients =
-        new HashSet<>();
+    private boolean bleMidiServerRunning = false;
 
     // =========================================================
-    // LOAD
+    // CONSTRUÇÃO / LOAD
     // =========================================================
 
     @Override
     public void load() {
-
         midiManager =
-            (MidiManager) getContext()
-                .getSystemService(Activity.MIDI_SERVICE);
+            (MidiManager) getContext().getSystemService(Activity.MIDI_SERVICE);
 
         BluetoothManager bluetoothManager =
             (BluetoothManager) getContext()
@@ -179,46 +167,35 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // =========================================================
-    // FECHAR APLICATIVO
+    // FECHAR APP
     // =========================================================
 
     @PluginMethod
     public void fecharApp(PluginCall call) {
-
         Activity activity = getActivity();
 
         if (activity == null) {
-            call.reject(
-                "Não foi possível obter a Activity principal."
-            );
+            call.reject("Não foi possível obter a Activity principal.");
             return;
         }
 
         call.resolve();
 
         activity.runOnUiThread(() -> {
-
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-
                 activity.finishAndRemoveTask();
-
             } else {
-
                 activity.finishAffinity();
-
             }
         });
     }
 
     // =========================================================
-    // MIDI DEVICE CALLBACK
+    // CALLBACK MIDI NATIVO
     // =========================================================
 
     private void registerMidiDeviceCallback() {
-
-        if (midiManager == null || deviceCallbackRegistered) {
-            return;
-        }
+        if (midiManager == null || deviceCallbackRegistered) return;
 
         deviceCallback = new MidiManager.DeviceCallback() {
 
@@ -229,7 +206,6 @@ public class NativeMidiPlugin extends Plugin {
 
             @Override
             public void onDeviceRemoved(MidiDeviceInfo device) {
-
                 if (connectedDeviceId == device.getId()) {
                     closeConnectedDevice();
                 }
@@ -265,7 +241,6 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     private void notifyDevicesChanged() {
-
         notifyListeners(
             "devicesChanged",
             new JSObject()
@@ -280,28 +255,22 @@ public class NativeMidiPlugin extends Plugin {
     public void initialize(PluginCall call) {
 
         if (midiManager == null) {
-
             call.reject(
                 "O serviço MIDI do Android não está disponível neste aparelho."
             );
-
             return;
         }
 
         /*
-         * O aplicativo tenta iniciar automaticamente seu
-         * periférico BLE MIDI.
-         *
-         * Se Android 12+ ainda não concedeu BLUETOOTH_ADVERTISE,
-         * solicitamos as permissões primeiro.
+         * Android 12+:
+         * o aplicativo precisa das permissões de SCAN,
+         * CONNECT e ADVERTISE para trabalhar nos dois sentidos.
          */
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 
-            if (
-                !hasBluetoothScanPermission() ||
-                !hasBluetoothConnectPermission() ||
-                !hasBluetoothAdvertisePermission()
-            ) {
+            if (!hasBluetoothScanPermission()
+                || !hasBluetoothConnectPermission()
+                || !hasBluetoothAdvertisePermission()) {
 
                 requestPermissionForAlias(
                     "bluetooth",
@@ -313,7 +282,7 @@ public class NativeMidiPlugin extends Plugin {
             }
         }
 
-        startBleMidiPeripheral();
+        startBleMidiServerSafely();
 
         call.resolve();
     }
@@ -323,25 +292,20 @@ public class NativeMidiPlugin extends Plugin {
         PluginCall call
     ) {
 
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            getPermissionState("bluetooth") != PermissionState.GRANTED
-        ) {
+        if (getPermissionState("bluetooth")
+            != PermissionState.GRANTED) {
 
-            call.reject(
-                "Permissões Bluetooth necessárias não foram concedidas."
-            );
-
+            call.reject("Permissão Bluetooth negada.");
             return;
         }
 
-        startBleMidiPeripheral();
+        startBleMidiServerSafely();
 
         call.resolve();
     }
 
     // =========================================================
-    // BLUETOOTH STATE
+    // BLUETOOTH
     // =========================================================
 
     @PluginMethod
@@ -350,11 +314,10 @@ public class NativeMidiPlugin extends Plugin {
         try {
 
             boolean enabled =
-                bluetoothAdapter != null &&
-                bluetoothAdapter.isEnabled();
+                bluetoothAdapter != null
+                && bluetoothAdapter.isEnabled();
 
             JSObject result = new JSObject();
-
             result.put("enabled", enabled);
 
             call.resolve(result);
@@ -368,26 +331,18 @@ public class NativeMidiPlugin extends Plugin {
         }
     }
 
-    // =========================================================
-    // REQUEST ENABLE BLUETOOTH
-    // =========================================================
-
     @PluginMethod
     public void requestEnableBluetooth(PluginCall call) {
 
         if (bluetoothAdapter == null) {
-
             call.reject(
                 "Bluetooth não está disponível neste aparelho."
             );
-
             return;
         }
 
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            !hasBluetoothConnectPermission()
-        ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && !hasBluetoothConnectPermission()) {
 
             requestPermissionForAlias(
                 "bluetooth",
@@ -406,37 +361,26 @@ public class NativeMidiPlugin extends Plugin {
         PluginCall call
     ) {
 
-        if (
-            getPermissionState("bluetooth") !=
-            PermissionState.GRANTED
-        ) {
+        if (getPermissionState("bluetooth")
+            != PermissionState.GRANTED) {
 
-            call.reject(
-                "Permissão Bluetooth negada."
-            );
-
+            call.reject("Permissão Bluetooth negada.");
             return;
         }
 
         launchBluetoothEnableIntent(call);
     }
 
-    private void launchBluetoothEnableIntent(
-        PluginCall call
-    ) {
+    private void launchBluetoothEnableIntent(PluginCall call) {
 
         try {
 
             if (bluetoothAdapter.isEnabled()) {
 
-                startBleMidiPeripheral();
-
                 JSObject result = new JSObject();
-
                 result.put("enabled", true);
 
                 call.resolve(result);
-
                 return;
             }
 
@@ -471,36 +415,31 @@ public class NativeMidiPlugin extends Plugin {
         try {
 
             enabled =
-                bluetoothAdapter != null &&
-                bluetoothAdapter.isEnabled();
+                bluetoothAdapter != null
+                && bluetoothAdapter.isEnabled();
 
         } catch (SecurityException ignored) {
         }
 
-        if (enabled) {
-            startBleMidiPeripheral();
-        }
-
         JSObject response = new JSObject();
-
         response.put("enabled", enabled);
 
         call.resolve(response);
+
+        if (enabled) {
+            startBleMidiServerSafely();
+        }
     }
 
     // =========================================================
-    // GET MIDI DEVICES
+    // DISPOSITIVOS MIDI NATIVOS
     // =========================================================
 
     @PluginMethod
     public void getDevices(PluginCall call) {
 
         if (midiManager == null) {
-
-            call.reject(
-                "MidiManager não disponível."
-            );
-
+            call.reject("MidiManager não disponível.");
             return;
         }
 
@@ -519,31 +458,20 @@ public class NativeMidiPlugin extends Plugin {
 
                 JSObject item = new JSObject();
 
-                item.put(
-                    "id",
-                    info.getId()
-                );
-
-                item.put(
-                    "name",
-                    getDeviceName(info)
-                );
-
+                item.put("id", info.getId());
+                item.put("name", getDeviceName(info));
                 item.put(
                     "manufacturer",
                     getDeviceManufacturer(info)
                 );
-
                 item.put(
                     "type",
                     mapDeviceType(info.getType())
                 );
-
                 item.put(
                     "inputPortCount",
                     info.getInputPortCount()
                 );
-
                 item.put(
                     "outputPortCount",
                     info.getOutputPortCount()
@@ -553,11 +481,7 @@ public class NativeMidiPlugin extends Plugin {
             }
 
             JSObject result = new JSObject();
-
-            result.put(
-                "devices",
-                array
-            );
+            result.put("devices", array);
 
             call.resolve(result);
 
@@ -582,10 +506,8 @@ public class NativeMidiPlugin extends Plugin {
         Set<MidiDeviceInfo> devices =
             new HashSet<>();
 
-        for (
-            MidiDeviceInfo info :
-            midiManager.getDevices()
-        ) {
+        for (MidiDeviceInfo info :
+            midiManager.getDevices()) {
 
             devices.add(info);
         }
@@ -594,7 +516,7 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // =========================================================
-    // CONNECT NORMAL MIDI
+    // CONEXÃO MIDI NATIVA
     // =========================================================
 
     @PluginMethod
@@ -607,11 +529,9 @@ public class NativeMidiPlugin extends Plugin {
             call.getInt("port", 0);
 
         if (idString == null) {
-
             call.reject(
                 "ID do dispositivo MIDI não informado."
             );
-
             return;
         }
 
@@ -640,14 +560,12 @@ public class NativeMidiPlugin extends Plugin {
 
         } catch (NumberFormatException e) {
 
-            call.reject(
-                "ID MIDI inválido."
-            );
+            call.reject("ID MIDI inválido.");
         }
     }
 
     // =========================================================
-    // CONNECT BLUETOOTH MIDI CLIENT
+    // CONEXÃO BLE MIDI COMO CLIENTE
     // =========================================================
 
     @PluginMethod
@@ -659,10 +577,8 @@ public class NativeMidiPlugin extends Plugin {
         int port =
             call.getInt("port", 0);
 
-        if (
-            address == null ||
-            address.trim().isEmpty()
-        ) {
+        if (address == null
+            || address.trim().isEmpty()) {
 
             call.reject(
                 "Endereço Bluetooth não informado."
@@ -671,10 +587,8 @@ public class NativeMidiPlugin extends Plugin {
             return;
         }
 
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            !hasBluetoothConnectPermission()
-        ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && !hasBluetoothConnectPermission()) {
 
             requestPermissionForAlias(
                 "bluetooth",
@@ -697,15 +611,10 @@ public class NativeMidiPlugin extends Plugin {
         PluginCall call
     ) {
 
-        if (
-            getPermissionState("bluetooth") !=
-            PermissionState.GRANTED
-        ) {
+        if (getPermissionState("bluetooth")
+            != PermissionState.GRANTED) {
 
-            call.reject(
-                "Permissão Bluetooth negada."
-            );
-
+            call.reject("Permissão Bluetooth negada.");
             return;
         }
 
@@ -716,11 +625,9 @@ public class NativeMidiPlugin extends Plugin {
             call.getInt("port", 0);
 
         if (address == null) {
-
             call.reject(
                 "Endereço Bluetooth não informado."
             );
-
             return;
         }
 
@@ -737,10 +644,8 @@ public class NativeMidiPlugin extends Plugin {
         PluginCall call
     ) {
 
-        if (
-            bluetoothAdapter == null ||
-            midiManager == null
-        ) {
+        if (bluetoothAdapter == null
+            || midiManager == null) {
 
             call.reject(
                 "Bluetooth MIDI não está disponível."
@@ -755,7 +660,6 @@ public class NativeMidiPlugin extends Plugin {
                 scannedBluetoothDevices.get(address);
 
             if (device == null) {
-
                 device =
                     bluetoothAdapter.getRemoteDevice(address);
             }
@@ -801,10 +705,6 @@ public class NativeMidiPlugin extends Plugin {
         }
     }
 
-    // =========================================================
-    // OPEN NORMAL MIDI DEVICE
-    // =========================================================
-
     private void openMidiDevice(
         MidiDeviceInfo target,
         int port,
@@ -834,10 +734,6 @@ public class NativeMidiPlugin extends Plugin {
         );
     }
 
-    // =========================================================
-    // OPEN MIDI PORTS
-    // =========================================================
-
     private void openPortsAndResolve(
         MidiDevice device,
         int port,
@@ -848,12 +744,8 @@ public class NativeMidiPlugin extends Plugin {
 
             closeConnectedDevice();
 
-            if (
-                port < 0 ||
-                port >= device
-                    .getInfo()
-                    .getInputPortCount()
-            ) {
+            if (port < 0
+                || port >= device.getInfo().getInputPortCount()) {
 
                 device.close();
 
@@ -877,9 +769,7 @@ public class NativeMidiPlugin extends Plugin {
 
                 for (
                     int i = 0;
-                    i < device
-                        .getInfo()
-                        .getInputPortCount();
+                    i < device.getInfo().getInputPortCount();
                     i++
                 ) {
 
@@ -888,9 +778,7 @@ public class NativeMidiPlugin extends Plugin {
                         connectedInputPort =
                             device.openInputPort(i);
 
-                        if (
-                            connectedInputPort != null
-                        ) {
+                        if (connectedInputPort != null) {
                             break;
                         }
                     }
@@ -908,11 +796,7 @@ public class NativeMidiPlugin extends Plugin {
                 return;
             }
 
-            if (
-                device
-                    .getInfo()
-                    .getOutputPortCount() > 0
-            ) {
+            if (device.getInfo().getOutputPortCount() > 0) {
 
                 connectedOutputPort =
                     device.openOutputPort(0);
@@ -958,14 +842,6 @@ public class NativeMidiPlugin extends Plugin {
                                     "midiMessage",
                                     event
                                 );
-
-                                /*
-                                 * Se o nosso aplicativo também
-                                 * estiver atuando como periférico
-                                 * BLE MIDI, repassamos o MIDI
-                                 * recebido para o cliente BLE.
-                                 */
-                                sendBleMidiNotification(copy);
                             }
                         };
 
@@ -980,16 +856,12 @@ public class NativeMidiPlugin extends Plugin {
 
             result.put(
                 "id",
-                String.valueOf(
-                    connectedDeviceId
-                )
+                String.valueOf(connectedDeviceId)
             );
 
             result.put(
                 "name",
-                getDeviceName(
-                    device.getInfo()
-                )
+                getDeviceName(device.getInfo())
             );
 
             call.resolve(result);
@@ -1001,15 +873,15 @@ public class NativeMidiPlugin extends Plugin {
             closeConnectedDevice();
 
             call.reject(
-                "Falha ao abrir o dispositivo MIDI: " +
-                e.getMessage(),
+                "Falha ao abrir o dispositivo MIDI: "
+                + e.getMessage(),
                 e
             );
         }
     }
 
     // =========================================================
-    // SEND MIDI
+    // ENVIO MIDI
     // =========================================================
 
     @PluginMethod
@@ -1042,17 +914,14 @@ public class NativeMidiPlugin extends Plugin {
             ) {
 
                 int number =
-                    ((Number) values.get(i))
-                        .intValue();
+                    ((Number) values.get(i)).intValue();
 
-                if (
-                    number < 0 ||
-                    number > 255
-                ) {
+                if (number < 0
+                    || number > 255) {
 
                     throw new IllegalArgumentException(
-                        "Byte MIDI fora da faixa: " +
-                        number
+                        "Byte MIDI fora da faixa: "
+                        + number
                     );
                 }
 
@@ -1062,9 +931,10 @@ public class NativeMidiPlugin extends Plugin {
 
             boolean sent = false;
 
-            /*
-             * Caminho MIDI nativo Android.
-             */
+            // -------------------------------------------------
+            // Saída MIDI nativa existente
+            // -------------------------------------------------
+
             if (connectedInputPort != null) {
 
                 connectedInputPort.send(
@@ -1076,12 +946,14 @@ public class NativeMidiPlugin extends Plugin {
                 sent = true;
             }
 
-            /*
-             * Caminho BLE MIDI periférico.
-             */
-            if (!bleMidiNotificationClients.isEmpty()) {
+            // -------------------------------------------------
+            // Novo: envia também para clientes BLE MIDI
+            // conectados ao nosso celular.
+            // -------------------------------------------------
 
-                sendBleMidiNotification(data);
+            if (!bleClients.isEmpty()) {
+
+                sendBleMidiToClients(data);
 
                 sent = true;
             }
@@ -1100,15 +972,15 @@ public class NativeMidiPlugin extends Plugin {
         } catch (Exception e) {
 
             call.reject(
-                "Falha ao enviar MIDI: " +
-                e.getMessage(),
+                "Falha ao enviar MIDI: "
+                + e.getMessage(),
                 e
             );
         }
     }
 
     // =========================================================
-    // DISCONNECT MIDI
+    // DESCONECTAR
     // =========================================================
 
     @PluginMethod
@@ -1122,20 +994,16 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // =========================================================
-    // BLE MIDI SCAN
+    // BUSCA BLE
     // =========================================================
 
     @PluginMethod
-    public void scanBluetoothMidi(
-        PluginCall call
-    ) {
+    public void scanBluetoothMidi(PluginCall call) {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 
-            if (
-                !hasBluetoothScanPermission() ||
-                !hasBluetoothConnectPermission()
-            ) {
+            if (!hasBluetoothScanPermission()
+                || !hasBluetoothConnectPermission()) {
 
                 requestPermissionForAlias(
                     "bluetooth",
@@ -1146,18 +1014,15 @@ public class NativeMidiPlugin extends Plugin {
                 return;
             }
 
-        } else {
+        } else if (!hasLocationPermission()) {
 
-            if (!hasLocationPermission()) {
+            requestPermissionForAlias(
+                "location",
+                call,
+                "locationPermissionForScanResult"
+            );
 
-                requestPermissionForAlias(
-                    "location",
-                    call,
-                    "locationPermissionForScanResult"
-                );
-
-                return;
-            }
+            return;
         }
 
         startBleMidiScan(call);
@@ -1168,10 +1033,8 @@ public class NativeMidiPlugin extends Plugin {
         PluginCall call
     ) {
 
-        if (
-            getPermissionState("bluetooth") !=
-            PermissionState.GRANTED
-        ) {
+        if (getPermissionState("bluetooth")
+            != PermissionState.GRANTED) {
 
             call.reject(
                 "Permissão Bluetooth negada."
@@ -1188,10 +1051,8 @@ public class NativeMidiPlugin extends Plugin {
         PluginCall call
     ) {
 
-        if (
-            getPermissionState("location") !=
-            PermissionState.GRANTED
-        ) {
+        if (getPermissionState("location")
+            != PermissionState.GRANTED) {
 
             call.reject(
                 "Permissão de localização necessária para a busca BLE neste Android."
@@ -1202,10 +1063,6 @@ public class NativeMidiPlugin extends Plugin {
 
         startBleMidiScan(call);
     }
-
-    // =========================================================
-    // START BLE MIDI SCAN
-    // =========================================================
 
     private void startBleMidiScan(
         final PluginCall call
@@ -1232,8 +1089,7 @@ public class NativeMidiPlugin extends Plugin {
             }
 
             bleScanner =
-                bluetoothAdapter
-                    .getBluetoothLeScanner();
+                bluetoothAdapter.getBluetoothLeScanner();
 
             if (bleScanner == null) {
 
@@ -1251,24 +1107,14 @@ public class NativeMidiPlugin extends Plugin {
                 new HashSet<>();
 
             /*
-             * Agora filtramos diretamente pelo serviço
-             * MIDI BLE padrão.
+             * Mantemos a busca geral para não quebrar a descoberta
+             * de dispositivos que funcionavam anteriormente.
              *
-             * Isso elimina boa parte dos falsos positivos
-             * encontrados pela busca BLE genérica.
+             * A identificação MIDI é feita também pelo serviço
+             * quando o dispositivo anuncia o UUID padrão.
              */
             List<ScanFilter> filters =
                 new ArrayList<>();
-
-            filters.add(
-                new ScanFilter.Builder()
-                    .setServiceUuid(
-                        new ParcelUuid(
-                            MIDI_BLE_SERVICE_UUID
-                        )
-                    )
-                    .build()
-            );
 
             ScanSettings settings =
                 new ScanSettings.Builder()
@@ -1289,32 +1135,38 @@ public class NativeMidiPlugin extends Plugin {
                         BluetoothDevice device =
                             result.getDevice();
 
-                        if (device == null) {
-                            return;
-                        }
+                        String address =
+                            device.getAddress();
 
-                        String address;
-
-                        try {
-
-                            address =
-                                device.getAddress();
-
-                        } catch (SecurityException e) {
-
-                            return;
-                        }
-
-                        if (
-                            address == null ||
-                            addresses.contains(address)
-                        ) {
+                        if (address == null
+                            || addresses.contains(address)) {
 
                             return;
                         }
 
                         String name =
                             safeDeviceName(device);
+
+                        /*
+                         * Mantém o filtro anterior para evitar
+                         * relógios, pulseiras, fones etc.
+                         */
+                        if (name != null) {
+
+                            String lowerName =
+                                name.toLowerCase();
+
+                            if (
+                                lowerName.contains("mi band")
+                                || lowerName.contains("band")
+                                || lowerName.contains("watch")
+                                || lowerName.contains("phone")
+                                || lowerName.contains("redmi")
+                                || lowerName.contains("galaxy buds")
+                            ) {
+                                return;
+                            }
+                        }
 
                         addresses.add(address);
 
@@ -1347,8 +1199,8 @@ public class NativeMidiPlugin extends Plugin {
                         stopScanSafely(this);
 
                         call.reject(
-                            "Falha na busca BLE. Código Android: " +
-                            errorCode
+                            "Falha na busca BLE. Código Android: "
+                            + errorCode
                         );
                     }
                 };
@@ -1377,7 +1229,9 @@ public class NativeMidiPlugin extends Plugin {
             mainHandler.postDelayed(
                 () -> {
 
-                    stopScanSafely(callback);
+                    stopScanSafely(
+                        callback
+                    );
 
                     JSArray resultArray =
                         new JSArray();
@@ -1386,7 +1240,6 @@ public class NativeMidiPlugin extends Plugin {
                         JSObject item :
                         found
                     ) {
-
                         resultArray.put(item);
                     }
 
@@ -1399,7 +1252,6 @@ public class NativeMidiPlugin extends Plugin {
                     );
 
                     call.resolve(result);
-
                 },
                 duration
             );
@@ -1424,9 +1276,7 @@ public class NativeMidiPlugin extends Plugin {
         ScanCallback callback
     ) {
 
-        if (bleScanner == null) {
-            return;
-        }
+        if (bleScanner == null) return;
 
         try {
 
@@ -1442,50 +1292,37 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // =========================================================
-    // BLE MIDI PERIPHERAL
+    // =========================================================
+    // SERVIDOR BLE MIDI
+    // =========================================================
     // =========================================================
 
-    /**
-     * Inicia o celular como um dispositivo BLE MIDI.
-     *
-     * O tablet/PC/iPad poderá encontrar este celular como
-     * periférico BLE MIDI.
-     */
-    private void startBleMidiPeripheral() {
+    private void startBleMidiServerSafely() {
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return;
+        }
 
         if (bluetoothAdapter == null) {
             return;
         }
 
-        if (!bluetoothAdapter.isEnabled()) {
-            return;
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-
-            if (
-                !hasBluetoothAdvertisePermission() ||
-                !hasBluetoothConnectPermission()
-            ) {
-                return;
-            }
-        }
-
-        if (bleMidiPeripheralRunning) {
-            return;
-        }
-
         try {
 
-            if (
-                !bluetoothAdapter
-                    .isMultipleAdvertisementSupported()
-            ) {
+            if (!bluetoothAdapter.isEnabled()) {
+                return;
+            }
 
-                notifyBlePeripheralError(
-                    "Este aparelho não suporta BLE advertising."
-                );
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 
+                if (!hasBluetoothConnectPermission()
+                    || !hasBluetoothAdvertisePermission()) {
+
+                    return;
+                }
+            }
+
+            if (bleMidiServerRunning) {
                 return;
             }
 
@@ -1496,228 +1333,101 @@ public class NativeMidiPlugin extends Plugin {
                     );
 
             if (bluetoothManager == null) {
-
-                notifyBlePeripheralError(
-                    "BluetoothManager não disponível."
-                );
-
                 return;
             }
 
-            /*
-             * =================================================
-             * GATT SERVER
-             * =================================================
-             */
-
-            bluetoothGattServer =
+            bleGattServer =
                 bluetoothManager.openGattServer(
                     getContext(),
-                    gattServerCallback
+                    bleGattServerCallback
                 );
 
-            if (bluetoothGattServer == null) {
-
-                notifyBlePeripheralError(
-                    "Não foi possível abrir o servidor BLE GATT."
-                );
-
+            if (bleGattServer == null) {
                 return;
             }
 
-            BluetoothGattService midiService =
+            bleMidiService =
                 new BluetoothGattService(
-                    MIDI_BLE_SERVICE_UUID,
+                    BLE_MIDI_SERVICE_UUID,
                     BluetoothGattService.SERVICE_TYPE_PRIMARY
                 );
 
-            /*
-             * A característica MIDI BLE precisa permitir
-             * escrita e notificações.
-             */
-            midiGattCharacteristic =
+            bleMidiCharacteristic =
                 new BluetoothGattCharacteristic(
-                    MIDI_BLE_CHARACTERISTIC_UUID,
-                    BluetoothGattCharacteristic.PROPERTY_READ |
-                    BluetoothGattCharacteristic.PROPERTY_WRITE |
-                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE |
-                    BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                    BluetoothGattCharacteristic.PERMISSION_READ |
+                    BLE_MIDI_CHARACTERISTIC_UUID,
+                    BluetoothGattCharacteristic.PROPERTY_WRITE
+                        | BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE
+                        | BluetoothGattCharacteristic.PROPERTY_NOTIFY,
                     BluetoothGattCharacteristic.PERMISSION_WRITE
                 );
 
-            BluetoothGattDescriptor cccDescriptor =
+            BluetoothGattDescriptor descriptor =
                 new BluetoothGattDescriptor(
-                    CLIENT_CHARACTERISTIC_CONFIG_UUID,
-                    BluetoothGattDescriptor.PERMISSION_READ |
-                    BluetoothGattDescriptor.PERMISSION_WRITE
+                    CLIENT_CONFIGURATION_DESCRIPTOR_UUID,
+                    BluetoothGattDescriptor.PERMISSION_READ
+                        | BluetoothGattDescriptor.PERMISSION_WRITE
                 );
 
-            midiGattCharacteristic.addDescriptor(
-                cccDescriptor
+            bleMidiCharacteristic.addDescriptor(
+                descriptor
             );
 
-            midiService.addCharacteristic(
-                midiGattCharacteristic
+            bleMidiService.addCharacteristic(
+                bleMidiCharacteristic
             );
 
             boolean added =
-                bluetoothGattServer.addService(
-                    midiService
+                bleGattServer.addService(
+                    bleMidiService
                 );
 
             if (!added) {
 
-                bluetoothGattServer.close();
-
-                bluetoothGattServer = null;
-
-                notifyBlePeripheralError(
-                    "Não foi possível registrar o serviço MIDI BLE."
-                );
+                stopBleMidiServer();
 
                 return;
             }
 
             /*
-             * =================================================
-             * BLE ADVERTISING
-             * =================================================
+             * O advertising começa depois que o serviço foi
+             * efetivamente adicionado ao GATT Server.
              */
-
-            bluetoothLeAdvertiser =
-                bluetoothAdapter
-                    .getBluetoothLeAdvertiser();
-
-            if (bluetoothLeAdvertiser == null) {
-
-                bluetoothGattServer.close();
-
-                bluetoothGattServer = null;
-
-                notifyBlePeripheralError(
-                    "O Bluetooth LE Advertiser não está disponível."
-                );
-
-                return;
-            }
-
-            AdvertiseSettings advertiseSettings =
-                new AdvertiseSettings.Builder()
-                    .setAdvertiseMode(
-                        AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
-                    )
-                    .setTxPowerLevel(
-                        AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
-                    )
-                    .setConnectable(true)
-                    .build();
-
-            AdvertiseData advertiseData =
-                new AdvertiseData.Builder()
-                    .addServiceUuid(
-                        new ParcelUuid(
-                            MIDI_BLE_SERVICE_UUID
-                        )
-                    )
-                    .setIncludeDeviceName(false)
-                    .build();
-
-            /*
-             * O nome vai no scan response para não
-             * consumir o espaço principal do advertisement.
-             */
-            String deviceName =
-                "MIDI Router Hub";
-
-            try {
-
-                bluetoothAdapter.setName(
-                    deviceName
-                );
-
-            } catch (SecurityException ignored) {
-            }
-
-            AdvertiseData scanResponse =
-                new AdvertiseData.Builder()
-                    .setIncludeDeviceName(true)
-                    .build();
-
-            advertiseCallback =
-                new AdvertiseCallback() {
-
-                    @Override
-                    public void onStartSuccess(
-                        AdvertiseSettings settingsInEffect
-                    ) {
-
-                        bleMidiPeripheralRunning =
-                            true;
-
-                        JSObject event =
-                            new JSObject();
-
-                        event.put(
-                            "name",
-                            deviceName
-                        );
-
-                        event.put(
-                            "service",
-                            MIDI_BLE_SERVICE_UUID.toString()
-                        );
-
-                        notifyListeners(
-                            "bleMidiPeripheralStarted",
-                            event
-                        );
-                    }
-
-                    @Override
-                    public void onStartFailure(
-                        int errorCode
-                    ) {
-
-                        bleMidiPeripheralRunning =
-                            false;
-
-                        notifyBlePeripheralError(
-                            "Falha ao anunciar BLE MIDI. Código: " +
-                            errorCode
-                        );
-                    }
-                };
-
-            bluetoothLeAdvertiser.startAdvertising(
-                advertiseSettings,
-                advertiseData,
-                scanResponse,
-                advertiseCallback
+            mainHandler.postDelayed(
+                this::startBleMidiAdvertising,
+                300
             );
+
+            bleMidiServerRunning = true;
 
         } catch (SecurityException e) {
 
-            notifyBlePeripheralError(
-                "Permissão Bluetooth não concedida para o modo periférico."
-            );
+            stopBleMidiServer();
 
         } catch (Exception e) {
 
-            notifyBlePeripheralError(
-                "Falha ao iniciar o periférico BLE MIDI: " +
-                e.getMessage()
-            );
+            stopBleMidiServer();
         }
     }
 
     // =========================================================
-    // GATT SERVER CALLBACK
+    // CALLBACK DO GATT SERVER
     // =========================================================
 
-    private final BluetoothGattServerCallback
-        gattServerCallback =
+    private final BluetoothGattServerCallback bleGattServerCallback =
         new BluetoothGattServerCallback() {
+
+            @Override
+            public void onServiceAdded(
+                int status,
+                BluetoothGattService service
+            ) {
+
+                /*
+                 * O advertising é iniciado pelo método acima.
+                 * Este callback existe para acompanhar o estado
+                 * do serviço sem interferir no funcionamento MIDI.
+                 */
+            }
 
             @Override
             public void onConnectionStateChange(
@@ -1726,15 +1436,25 @@ public class NativeMidiPlugin extends Plugin {
                 int newState
             ) {
 
+                if (device == null) {
+                    return;
+                }
+
+                String address =
+                    safeBluetoothAddress(device);
+
                 if (newState ==
                     BluetoothProfile.STATE_CONNECTED) {
 
-                    bleMidiConnectedClients.add(
-                        device
-                    );
+                    bleClients.add(device);
 
                     JSObject event =
                         new JSObject();
+
+                    event.put(
+                        "address",
+                        address
+                    );
 
                     event.put(
                         "name",
@@ -1742,30 +1462,32 @@ public class NativeMidiPlugin extends Plugin {
                     );
 
                     event.put(
-                        "address",
-                        safeDeviceAddress(device)
+                        "connected",
+                        true
                     );
 
                     notifyListeners(
-                        "bleMidiConnected",
+                        "bleMidiConnection",
                         event
                     );
+
+                    notifyDevicesChanged();
 
                 } else if (
                     newState ==
                     BluetoothProfile.STATE_DISCONNECTED
                 ) {
 
-                    bleMidiConnectedClients.remove(
-                        device
-                    );
-
-                    bleMidiNotificationClients.remove(
-                        device
-                    );
+                    bleClients.remove(device);
+                    bleNotificationClients.remove(address);
 
                     JSObject event =
                         new JSObject();
+
+                    event.put(
+                        "address",
+                        address
+                    );
 
                     event.put(
                         "name",
@@ -1773,45 +1495,80 @@ public class NativeMidiPlugin extends Plugin {
                     );
 
                     event.put(
-                        "address",
-                        safeDeviceAddress(device)
+                        "connected",
+                        false
                     );
 
                     notifyListeners(
-                        "bleMidiDisconnected",
+                        "bleMidiConnection",
                         event
                     );
+
+                    notifyDevicesChanged();
                 }
             }
 
             @Override
-            public void onCharacteristicReadRequest(
+            public void onDescriptorWriteRequest(
                 BluetoothDevice device,
                 int requestId,
+                BluetoothGattDescriptor descriptor,
+                boolean preparedWrite,
+                boolean responseNeeded,
                 int offset,
-                BluetoothGattCharacteristic characteristic
+                byte[] value
             ) {
 
+                if (descriptor == null) {
+                    return;
+                }
+
                 if (
-                    MIDI_BLE_CHARACTERISTIC_UUID.equals(
-                        characteristic.getUuid()
+                    CLIENT_CONFIGURATION_DESCRIPTOR_UUID.equals(
+                        descriptor.getUuid()
                     )
                 ) {
 
-                    byte[] value =
-                        new byte[0];
+                    String address =
+                        safeBluetoothAddress(device);
 
                     if (
-                        bluetoothGattServer != null
+                        value != null
+                        && value.length >= 2
+                        && value[0] ==
+                            BluetoothGattDescriptor
+                                .ENABLE_NOTIFICATION_VALUE[0]
+                        && value[1] ==
+                            BluetoothGattDescriptor
+                                .ENABLE_NOTIFICATION_VALUE[1]
                     ) {
 
-                        bluetoothGattServer.sendResponse(
+                        bleNotificationClients.add(
+                            address
+                        );
+
+                    } else {
+
+                        bleNotificationClients.remove(
+                            address
+                        );
+                    }
+                }
+
+                if (responseNeeded
+                    && bleGattServer != null) {
+
+                    try {
+
+                        bleGattServer.sendResponse(
                             device,
                             requestId,
+                            BluetoothGatt.GATT_SUCCESS,
                             0,
-                            offset,
-                            value
+                            null
                         );
+
+                    } catch (Exception ignored) {
                     }
                 }
             }
@@ -1827,133 +1584,634 @@ public class NativeMidiPlugin extends Plugin {
                 byte[] value
             ) {
 
+                if (characteristic == null) {
+                    return;
+                }
+
                 if (
-                    MIDI_BLE_CHARACTERISTIC_UUID.equals(
+                    BLE_MIDI_CHARACTERISTIC_UUID.equals(
                         characteristic.getUuid()
                     )
                 ) {
 
-                    /*
-                     * O tablet enviou dados MIDI para
-                     * o celular.
-                     */
-                    if (value != null) {
+                    if (value != null
+                        && value.length > 0) {
 
-                        handleIncomingBleMidi(
+                        processIncomingBleMidi(
                             value
                         );
                     }
-
-                    if (
-                        responseNeeded &&
-                        bluetoothGattServer != null
-                    ) {
-
-                        bluetoothGattServer.sendResponse(
-                            device,
-                            requestId,
-                            0,
-                            offset,
-                            null
-                        );
-                    }
                 }
-            }
 
-            @Override
-            public void onDescriptorWriteRequest(
-                BluetoothDevice device,
-                int requestId,
-                BluetoothGattDescriptor descriptor,
-                boolean preparedWrite,
-                boolean responseNeeded,
-                int offset,
-                byte[] value
-            ) {
+                if (responseNeeded
+                    && bleGattServer != null) {
 
-                if (
-                    CLIENT_CHARACTERISTIC_CONFIG_UUID
-                        .equals(
-                            descriptor.getUuid()
-                        )
-                ) {
+                    try {
 
-                    boolean enabled =
-                        value != null &&
-                        value.length >= 2 &&
-                        (
-                            (value[0] & 0xFF) == 0x01 ||
-                            (value[0] & 0xFF) == 0x02
-                        );
-
-                    if (enabled) {
-
-                        bleMidiNotificationClients.add(
-                            device
-                        );
-
-                    } else {
-
-                        bleMidiNotificationClients.remove(
-                            device
-                        );
-                    }
-
-                    if (
-                        responseNeeded &&
-                        bluetoothGattServer != null
-                    ) {
-
-                        bluetoothGattServer.sendResponse(
+                        bleGattServer.sendResponse(
                             device,
                             requestId,
+                            BluetoothGatt.GATT_SUCCESS,
                             0,
-                            offset,
                             null
                         );
+
+                    } catch (Exception ignored) {
                     }
                 }
             }
         };
 
     // =========================================================
-    // INCOMING BLE MIDI
+    // ADVERTISING BLE MIDI
     // =========================================================
 
-    private void handleIncomingBleMidi(
-        byte[] bleData
+    private void startBleMidiAdvertising() {
+
+        if (bluetoothAdapter == null) {
+            return;
+        }
+
+        try {
+
+            if (!bluetoothAdapter.isEnabled()) {
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && !hasBluetoothAdvertisePermission()) {
+
+                return;
+            }
+
+            bluetoothLeAdvertiser =
+                bluetoothAdapter.getBluetoothLeAdvertiser();
+
+            if (bluetoothLeAdvertiser == null) {
+                return;
+            }
+
+            /*
+             * Evita múltiplos advertisers.
+             */
+            if (advertiseCallback != null) {
+
+                try {
+                    bluetoothLeAdvertiser.stopAdvertising(
+                        advertiseCallback
+                    );
+                } catch (Exception ignored) {
+                }
+            }
+
+            AdvertiseSettings settings =
+                new AdvertiseSettings.Builder()
+                    .setAdvertiseMode(
+                        AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+                    )
+                    .setTxPowerLevel(
+                        AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
+                    )
+                    .setConnectable(true)
+                    .setTimeout(0)
+                    .build();
+
+            /*
+             * O UUID do serviço BLE-MIDI é colocado no
+             * advertising para que outros aplicativos MIDI
+             * consigam identificar o telefone como MIDI BLE.
+             */
+            AdvertiseData advertiseData =
+                new AdvertiseData.Builder()
+                    .setIncludeDeviceName(false)
+                    .setIncludeTxPowerLevel(false)
+                    .addServiceUuid(
+                        new ParcelUuid(
+                            BLE_MIDI_SERVICE_UUID
+                        )
+                    )
+                    .build();
+
+            /*
+             * O nome do aplicativo fica no scan response,
+             * evitando estourar o limite do pacote principal.
+             */
+            String deviceName =
+                "MIDI Router Hub";
+
+            AdvertiseData scanResponse =
+                new AdvertiseData.Builder()
+                    .setIncludeDeviceName(false)
+                    .addServiceData(
+                        new ParcelUuid(
+                            BLE_MIDI_SERVICE_UUID
+                        ),
+                        deviceName.getBytes(
+                            StandardCharsets.UTF_8
+                        )
+                    )
+                    .build();
+
+            advertiseCallback =
+                new AdvertiseCallback() {
+
+                    @Override
+                    public void onStartSuccess(
+                        AdvertiseSettings settingsInEffect
+                    ) {
+
+                        notifyListeners(
+                            "bleMidiAdvertising",
+                            new JSObject()
+                                .put(
+                                    "active",
+                                    true
+                                )
+                        );
+                    }
+
+                    @Override
+                    public void onStartFailure(
+                        int errorCode
+                    ) {
+
+                        JSObject event =
+                            new JSObject();
+
+                        event.put(
+                            "active",
+                            false
+                        );
+
+                        event.put(
+                            "errorCode",
+                            errorCode
+                        );
+
+                        notifyListeners(
+                            "bleMidiAdvertising",
+                            event
+                        );
+                    }
+                };
+
+            bluetoothLeAdvertiser.startAdvertising(
+                settings,
+                advertiseData,
+                scanResponse,
+                advertiseCallback
+            );
+
+        } catch (SecurityException e) {
+
+            // Permissão ainda não concedida.
+
+        } catch (Exception ignored) {
+        }
+    }
+
+    // =========================================================
+    // ENVIO BLE MIDI PARA CLIENTES
+    // =========================================================
+
+    private void sendBleMidiToClients(
+        byte[] midiData
     ) {
 
-        if (
-            bleData == null ||
-            bleData.length == 0
+        if (bleGattServer == null
+            || bleMidiCharacteristic == null
+            || midiData == null
+            || midiData.length == 0) {
+
+            return;
+        }
+
+        byte[] packet =
+            encodeBleMidiPacket(
+                midiData
+            );
+
+        List<BluetoothDevice> clients =
+            new ArrayList<>(
+                bleClients
+            );
+
+        for (
+            BluetoothDevice device :
+            clients
         ) {
+
+            String address =
+                safeBluetoothAddress(device);
+
+            if (
+                !bleNotificationClients.contains(
+                    address
+                )
+            ) {
+                continue;
+            }
+
+            try {
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+
+                    bleGattServer.notifyCharacteristicChanged(
+                        device,
+                        bleMidiCharacteristic,
+                        false,
+                        packet
+                    );
+
+                } else {
+
+                    /*
+                     * API antiga.
+                     */
+                    bleMidiCharacteristic.setValue(
+                        packet
+                    );
+
+                    bleGattServer.notifyCharacteristicChanged(
+                        device,
+                        bleMidiCharacteristic,
+                        false
+                    );
+                }
+
+            } catch (SecurityException ignored) {
+
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    // =========================================================
+    // CODIFICAÇÃO BLE MIDI
+    // =========================================================
+
+    private byte[] encodeBleMidiPacket(
+        byte[] midiData
+    ) {
+
+        /*
+         * BLE-MIDI usa um timestamp de 13 bits.
+         * Para uma mensagem MIDI simples:
+         *
+         * byte 0 = timestamp high
+         * byte 1 = timestamp low
+         * bytes seguintes = MIDI.
+         */
+
+        long now =
+            System.currentTimeMillis();
+
+        int timestamp =
+            (int) (now & 0x1FFF);
+
+        byte timestampHigh =
+            (byte) (
+                0x80
+                | ((timestamp >> 7) & 0x3F)
+            );
+
+        byte timestampLow =
+            (byte) (
+                0x80
+                | (timestamp & 0x7F)
+            );
+
+        byte[] packet =
+            new byte[
+                midiData.length + 2
+            ];
+
+        packet[0] =
+            timestampHigh;
+
+        packet[1] =
+            timestampLow;
+
+        System.arraycopy(
+            midiData,
+            0,
+            packet,
+            2,
+            midiData.length
+        );
+
+        return packet;
+    }
+
+    // =========================================================
+    // DECODIFICAÇÃO BLE MIDI
+    // =========================================================
+
+    private void processIncomingBleMidi(
+        byte[] packet
+    ) {
+
+        if (packet == null
+            || packet.length < 3) {
+
             return;
         }
 
         /*
-         * Neste primeiro estágio preservamos os bytes
-         * recebidos exatamente como chegaram pelo BLE MIDI.
-         *
-         * Isso permite ao frontend monitorar o tráfego
-         * enquanto mantemos o transporte BLE intacto.
+         * Os dois primeiros bytes são o cabeçalho/timestamp
+         * do primeiro MIDI event.
          */
+        int index = 2;
+
+        int runningStatus = -1;
+
+        while (index < packet.length) {
+
+            /*
+             * Cada novo evento MIDI normalmente começa com
+             * timestamp low/high quando necessário.
+             *
+             * Bytes com bit 7 = 1 podem ser timestamp ou
+             * status. O primeiro byte depois do timestamp
+             * que for status MIDI inicia o evento.
+             */
+
+            if (
+                index < packet.length
+                && (packet[index] & 0x80) == 0x80
+            ) {
+
+                int status =
+                    packet[index] & 0xFF;
+
+                /*
+                 * System Real Time pode aparecer entre
+                 * mensagens MIDI e deve ser preservado.
+                 */
+                if (status >= 0xF8) {
+
+                    emitMidiMessage(
+                        new byte[] {
+                            (byte) status
+                        }
+                    );
+
+                    index++;
+                    continue;
+                }
+
+                /*
+                 * Status MIDI normal.
+                 */
+                if (status >= 0x80) {
+
+                    runningStatus =
+                        status;
+
+                    int length =
+                        midiMessageLength(
+                            status
+                        );
+
+                    if (length <= 0) {
+
+                        /*
+                         * SysEx e mensagens especiais:
+                         * encaminhamos o restante como fluxo
+                         * MIDI até onde for possível.
+                         */
+                        if (status == 0xF0) {
+
+                            ArrayList<Byte> sysex =
+                                new ArrayList<>();
+
+                            sysex.add(
+                                (byte) status
+                            );
+
+                            index++;
+
+                            while (
+                                index < packet.length
+                            ) {
+
+                                byte value =
+                                    packet[index++];
+
+                                sysex.add(
+                                    value
+                                );
+
+                                if (
+                                    (value & 0xFF)
+                                    == 0xF7
+                                ) {
+                                    break;
+                                }
+                            }
+
+                            byte[] message =
+                                new byte[
+                                    sysex.size()
+                                ];
+
+                            for (
+                                int i = 0;
+                                i < sysex.size();
+                                i++
+                            ) {
+
+                                message[i] =
+                                    sysex.get(i);
+                            }
+
+                            emitMidiMessage(
+                                message
+                            );
+
+                            continue;
+                        }
+
+                        /*
+                         * Outros system messages de tamanho
+                         * variável não são descartados.
+                         */
+                        emitMidiMessage(
+                            new byte[] {
+                                (byte) status
+                            }
+                        );
+
+                        index++;
+                        continue;
+                    }
+
+                    if (
+                        index + length >
+                        packet.length
+                    ) {
+                        break;
+                    }
+
+                    byte[] message =
+                        new byte[length];
+
+                    for (
+                        int i = 0;
+                        i < length;
+                        i++
+                    ) {
+
+                        message[i] =
+                            packet[index++];
+                    }
+
+                    emitMidiMessage(
+                        message
+                    );
+
+                    continue;
+                }
+            }
+
+            /*
+             * Running status:
+             * se o próximo byte for dado MIDI, utilizamos
+             * o último status recebido.
+             */
+            if (
+                runningStatus >= 0
+                && index < packet.length
+                && (packet[index] & 0x80) == 0
+            ) {
+
+                int length =
+                    midiMessageLength(
+                        runningStatus
+                    );
+
+                if (length <= 1) {
+                    index++;
+                    continue;
+                }
+
+                byte[] message =
+                    new byte[length];
+
+                message[0] =
+                    (byte) runningStatus;
+
+                int dataBytes =
+                    length - 1;
+
+                if (
+                    index + dataBytes >
+                    packet.length
+                ) {
+                    break;
+                }
+
+                for (
+                    int i = 0;
+                    i < dataBytes;
+                    i++
+                ) {
+
+                    message[i + 1] =
+                        packet[index++];
+                }
+
+                emitMidiMessage(
+                    message
+                );
+
+                continue;
+            }
+
+            /*
+             * Se encontramos um timestamp adicional entre
+             * mensagens, ignoramos o timestamp.
+             */
+            if (
+                index < packet.length
+                && (packet[index] & 0x80) != 0
+            ) {
+                index++;
+            } else {
+                index++;
+            }
+        }
+    }
+
+    private int midiMessageLength(
+        int status
+    ) {
+
+        status &= 0xFF;
+
+        if (
+            status >= 0x80
+            && status <= 0xEF
+        ) {
+
+            int high =
+                status & 0xF0;
+
+            if (
+                high == 0xC0
+                || high == 0xD0
+            ) {
+                return 2;
+            }
+
+            return 3;
+        }
+
+        switch (status) {
+
+            case 0xF1:
+            case 0xF3:
+                return 2;
+
+            case 0xF2:
+                return 3;
+
+            case 0xF6:
+            case 0xF8:
+            case 0xF9:
+            case 0xFA:
+            case 0xFB:
+            case 0xFC:
+            case 0xFD:
+            case 0xFE:
+            case 0xFF:
+                return 1;
+
+            default:
+                return 0;
+        }
+    }
+
+    private void emitMidiMessage(
+        byte[] data
+    ) {
+
+        if (data == null
+            || data.length == 0) {
+            return;
+        }
+
         JSObject event =
             new JSObject();
 
         event.put(
             "data",
-            toJSArray(bleData)
+            toJSArray(data)
         );
 
         event.put(
             "timestamp",
             System.nanoTime()
-        );
-
-        event.put(
-            "source",
-            "ble-peripheral"
         );
 
         notifyListeners(
@@ -1963,236 +2221,78 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // =========================================================
-    // SEND BLE MIDI NOTIFICATION
+    // PARAR SERVIDOR BLE MIDI
     // =========================================================
 
-    private void sendBleMidiNotification(
-        byte[] midiData
-    ) {
-
-        if (
-            bluetoothGattServer == null ||
-            midiGattCharacteristic == null ||
-            bleMidiNotificationClients.isEmpty() ||
-            midiData == null ||
-            midiData.length == 0
-        ) {
-            return;
-        }
+    private void stopBleMidiServer() {
 
         try {
 
-            /*
-             * Cria um pacote BLE MIDI simples:
-             *
-             * byte 0 = timestamp high
-             * byte 1 = timestamp low
-             * bytes seguintes = MIDI
-             */
-            byte[] packet =
-                encodeBleMidiPacket(
-                    midiData
-                );
-
-            /*
-             * BLE ATT tradicional pode trabalhar com
-             * pacotes pequenos. Para maior compatibilidade,
-             * mantemos o pacote abaixo do limite clássico.
-             */
-            int maxChunk =
-                20;
-
-            for (
-                int offset = 0;
-                offset < packet.length;
-                offset += maxChunk
+            if (
+                bluetoothLeAdvertiser != null
+                && advertiseCallback != null
             ) {
 
-                int count =
-                    Math.min(
-                        maxChunk,
-                        packet.length - offset
-                    );
-
-                byte[] chunk =
-                    new byte[count];
-
-                System.arraycopy(
-                    packet,
-                    offset,
-                    chunk,
-                    0,
-                    count
-                );
-
-                for (
-                    BluetoothDevice device :
-                    new HashSet<>(
-                        bleMidiNotificationClients
-                    )
+                if (
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                    || hasBluetoothAdvertisePermission()
                 ) {
 
-                    try {
-
-                        if (
-                            Build.VERSION.SDK_INT >=
-                            Build.VERSION_CODES.TIRAMISU
-                        ) {
-
-                            bluetoothGattServer
-                                .notifyCharacteristicChanged(
-                                    device,
-                                    midiGattCharacteristic,
-                                    false,
-                                    chunk
-                                );
-
-                        } else {
-
-                            midiGattCharacteristic
-                                .setValue(chunk);
-
-                            bluetoothGattServer
-                                .notifyCharacteristicChanged(
-                                    device,
-                                    midiGattCharacteristic,
-                                    false
-                                );
-                        }
-
-                    } catch (SecurityException ignored) {
-                    } catch (Exception ignored) {
-                    }
+                    bluetoothLeAdvertiser.stopAdvertising(
+                        advertiseCallback
+                    );
                 }
             }
 
         } catch (Exception ignored) {
         }
-    }
-
-    // =========================================================
-    // BLE MIDI ENCODER
-    // =========================================================
-
-    private byte[] encodeBleMidiPacket(
-        byte[] midiData
-    ) {
-
-        /*
-         * BLE MIDI utiliza timestamp de 13 bits.
-         *
-         * Para compatibilidade, usamos o relógio
-         * monotônico do Android e preservamos os
-         * 13 bits inferiores.
-         */
-        long now =
-            System.nanoTime() / 1_000_000L;
-
-        int timestamp =
-            (int) (now & 0x1FFF);
-
-        byte timestampHigh =
-            (byte)
-                (0x80 |
-                 ((timestamp >> 7) & 0x3F));
-
-        byte timestampLow =
-            (byte)
-                (0x80 |
-                 (timestamp & 0x7F));
-
-        byte[] result =
-            new byte[
-                midiData.length + 2
-            ];
-
-        result[0] =
-            timestampHigh;
-
-        result[1] =
-            timestampLow;
-
-        System.arraycopy(
-            midiData,
-            0,
-            result,
-            2,
-            midiData.length
-        );
-
-        return result;
-    }
-
-    // =========================================================
-    // BLE PERIPHERAL ERROR
-    // =========================================================
-
-    private void notifyBlePeripheralError(
-        String message
-    ) {
-
-        JSObject event =
-            new JSObject();
-
-        event.put(
-            "error",
-            message
-        );
-
-        notifyListeners(
-            "bleMidiPeripheralError",
-            event
-        );
-    }
-
-    // =========================================================
-    // STOP BLE MIDI PERIPHERAL
-    // =========================================================
-
-    private void stopBleMidiPeripheral() {
-
-        try {
-
-            if (
-                bluetoothLeAdvertiser != null &&
-                advertiseCallback != null
-            ) {
-
-                bluetoothLeAdvertiser.stopAdvertising(
-                    advertiseCallback
-                );
-            }
-
-        } catch (Exception ignored) {
-        }
-
-        try {
-
-            if (bluetoothGattServer != null) {
-
-                bluetoothGattServer.close();
-            }
-
-        } catch (Exception ignored) {
-        }
-
-        bleMidiConnectedClients.clear();
-
-        bleMidiNotificationClients.clear();
-
-        bluetoothGattServer = null;
-
-        bluetoothLeAdvertiser = null;
-
-        midiGattCharacteristic = null;
 
         advertiseCallback = null;
 
-        bleMidiPeripheralRunning = false;
+        try {
+
+            if (bleGattServer != null) {
+
+                bleGattServer.clearServices();
+                bleGattServer.close();
+            }
+
+        } catch (Exception ignored) {
+        }
+
+        bleGattServer = null;
+        bleMidiService = null;
+        bleMidiCharacteristic = null;
+
+        bleClients.clear();
+        bleNotificationClients.clear();
+
+        bleMidiServerRunning = false;
     }
 
     // =========================================================
-    // CLOSE NORMAL MIDI DEVICE
+    // DISPOSITIVOS MIDI
+    // =========================================================
+
+    private MidiDeviceInfo findDevice(
+        int id
+    ) {
+
+        for (
+            MidiDeviceInfo info :
+            getByteStreamDevices()
+        ) {
+
+            if (info.getId() == id) {
+                return info;
+            }
+        }
+
+        return null;
+    }
+
+    // =========================================================
+    // FECHAMENTO MIDI
     // =========================================================
 
     private void closeConnectedDevice() {
@@ -2200,8 +2300,8 @@ public class NativeMidiPlugin extends Plugin {
         try {
 
             if (
-                connectedOutputPort != null &&
-                connectedReceiver != null
+                connectedOutputPort != null
+                && connectedReceiver != null
             ) {
 
                 connectedOutputPort.disconnect(
@@ -2240,39 +2340,14 @@ public class NativeMidiPlugin extends Plugin {
         }
 
         connectedOutputPort = null;
-
         connectedInputPort = null;
-
         connectedReceiver = null;
-
         connectedDevice = null;
-
         connectedDeviceId = -1;
     }
 
     // =========================================================
-    // FIND DEVICE
-    // =========================================================
-
-    private MidiDeviceInfo findDevice(
-        int id
-    ) {
-
-        for (
-            MidiDeviceInfo info :
-            getByteStreamDevices()
-        ) {
-
-            if (info.getId() == id) {
-                return info;
-            }
-        }
-
-        return null;
-    }
-
-    // =========================================================
-    // DEVICE INFORMATION
+    // INFORMAÇÕES MIDI
     // =========================================================
 
     private String getDeviceName(
@@ -2280,13 +2355,12 @@ public class NativeMidiPlugin extends Plugin {
     ) {
 
         String name =
-            info.getProperties()
-                .getString(
-                    MidiDeviceInfo.PROPERTY_NAME
-                );
+            info.getProperties().getString(
+                MidiDeviceInfo.PROPERTY_NAME
+            );
 
-        return name == null ||
-               name.trim().isEmpty()
+        return name == null
+            || name.trim().isEmpty()
             ? "Dispositivo MIDI"
             : name.trim();
     }
@@ -2296,10 +2370,9 @@ public class NativeMidiPlugin extends Plugin {
     ) {
 
         String manufacturer =
-            info.getProperties()
-                .getString(
-                    MidiDeviceInfo.PROPERTY_MANUFACTURER
-                );
+            info.getProperties().getString(
+                MidiDeviceInfo.PROPERTY_MANUFACTURER
+            );
 
         return manufacturer == null
             ? ""
@@ -2311,22 +2384,19 @@ public class NativeMidiPlugin extends Plugin {
     ) {
 
         if (
-            type ==
-            MidiDeviceInfo.TYPE_USB
+            type == MidiDeviceInfo.TYPE_USB
         ) {
             return "usb";
         }
 
         if (
-            type ==
-            MidiDeviceInfo.TYPE_BLUETOOTH
+            type == MidiDeviceInfo.TYPE_BLUETOOTH
         ) {
             return "ble";
         }
 
         if (
-            type ==
-            MidiDeviceInfo.TYPE_VIRTUAL
+            type == MidiDeviceInfo.TYPE_VIRTUAL
         ) {
             return "virtual";
         }
@@ -2335,7 +2405,7 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // =========================================================
-    // JS ARRAY
+    // UTILITÁRIOS
     // =========================================================
 
     private JSArray toJSArray(
@@ -2358,25 +2428,17 @@ public class NativeMidiPlugin extends Plugin {
         return array;
     }
 
-    // =========================================================
-    // BLUETOOTH HELPERS
-    // =========================================================
-
     private String safeDeviceName(
         BluetoothDevice device
     ) {
-
-        if (device == null) {
-            return "Dispositivo BLE MIDI";
-        }
 
         try {
 
             String name =
                 device.getName();
 
-            return name == null ||
-                   name.trim().isEmpty()
+            return name == null
+                || name.trim().isEmpty()
                 ? "Dispositivo BLE MIDI"
                 : name.trim();
 
@@ -2386,17 +2448,18 @@ public class NativeMidiPlugin extends Plugin {
         }
     }
 
-    private String safeDeviceAddress(
+    private String safeBluetoothAddress(
         BluetoothDevice device
     ) {
 
-        if (device == null) {
-            return "";
-        }
-
         try {
 
-            return device.getAddress();
+            String address =
+                device.getAddress();
+
+            return address == null
+                ? ""
+                : address;
 
         } catch (SecurityException e) {
 
@@ -2405,14 +2468,14 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // =========================================================
-    // PERMISSIONS
+    // PERMISSÕES
     // =========================================================
 
     private boolean hasBluetoothScanPermission() {
 
         if (
-            Build.VERSION.SDK_INT <
-            Build.VERSION_CODES.S
+            Build.VERSION.SDK_INT
+            < Build.VERSION_CODES.S
         ) {
             return true;
         }
@@ -2426,8 +2489,8 @@ public class NativeMidiPlugin extends Plugin {
     private boolean hasBluetoothConnectPermission() {
 
         if (
-            Build.VERSION.SDK_INT <
-            Build.VERSION_CODES.S
+            Build.VERSION.SDK_INT
+            < Build.VERSION_CODES.S
         ) {
             return true;
         }
@@ -2441,8 +2504,8 @@ public class NativeMidiPlugin extends Plugin {
     private boolean hasBluetoothAdvertisePermission() {
 
         if (
-            Build.VERSION.SDK_INT <
-            Build.VERSION_CODES.S
+            Build.VERSION.SDK_INT
+            < Build.VERSION_CODES.S
         ) {
             return true;
         }
@@ -2456,8 +2519,8 @@ public class NativeMidiPlugin extends Plugin {
     private boolean hasLocationPermission() {
 
         if (
-            Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.S
+            Build.VERSION.SDK_INT
+            >= Build.VERSION_CODES.S
         ) {
             return true;
         }
@@ -2475,16 +2538,14 @@ public class NativeMidiPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
 
-        stopScanCompletely();
-
-        stopBleMidiPeripheral();
-
         closeConnectedDevice();
 
+        stopBleMidiServer();
+
         if (
-            midiManager != null &&
-            deviceCallbackRegistered &&
-            deviceCallback != null
+            midiManager != null
+            && deviceCallbackRegistered
+            && deviceCallback != null
         ) {
 
             try {
@@ -2498,8 +2559,8 @@ public class NativeMidiPlugin extends Plugin {
         }
 
         if (
-            deviceCallbackExecutor != null &&
-            !deviceCallbackExecutor.isShutdown()
+            deviceCallbackExecutor != null
+            && !deviceCallbackExecutor.isShutdown()
         ) {
 
             deviceCallbackExecutor.shutdownNow();
@@ -2507,15 +2568,5 @@ public class NativeMidiPlugin extends Plugin {
 
         super.handleOnDestroy();
     }
-
-    private void stopScanCompletely() {
-
-        /*
-         * Não temos o callback ativo armazenado
-         * permanentemente nesta versão.
-         *
-         * O scanner é interrompido pelo temporizador
-         * de cada busca.
-         */
-    }
 }
+```
