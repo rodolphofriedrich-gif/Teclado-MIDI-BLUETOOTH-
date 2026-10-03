@@ -23,6 +23,7 @@ export interface NativeMidiPlugin {
   connect(options: { id: string; port?: number }): Promise<{ id: string; name: string }>;
   connectBluetooth(options: { address: string; port?: number }): Promise<{ id: string; name: string }>;
   disconnect(): Promise<void>;
+  fecharApp(): Promise<void>;
   send(options: { data: number[] }): Promise<void>;
   addListener(
     eventName: 'devicesChanged' | 'midiMessage',
