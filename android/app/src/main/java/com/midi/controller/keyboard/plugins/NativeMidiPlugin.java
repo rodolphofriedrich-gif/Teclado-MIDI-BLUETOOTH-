@@ -100,10 +100,25 @@ public class NativeMidiPlugin extends Plugin {
     // =========================================================
     @PluginMethod
     public void fecharApp(PluginCall call) {
-        if (getActivity() != null) {
-            getActivity().finishAffinity();
+        Activity activity = getActivity();
+
+        if (activity == null) {
+            call.reject("Não foi possível obter a Activity principal.");
+            return;
         }
+
+        // Resolve a chamada antes de finalizar a Activity.
+        // A limpeza dos recursos MIDI continua sendo feita em handleOnDestroy().
         call.resolve();
+
+        activity.runOnUiThread(() -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                // Finaliza a Activity e remove a tarefa da lista de Recentes.
+                activity.finishAndRemoveTask();
+            } else {
+                activity.finishAffinity();
+            }
+        });
     }
     // =========================================================
 
