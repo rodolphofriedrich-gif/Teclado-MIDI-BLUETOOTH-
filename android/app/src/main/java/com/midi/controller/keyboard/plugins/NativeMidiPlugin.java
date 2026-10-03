@@ -95,6 +95,18 @@ public class NativeMidiPlugin extends Plugin {
         registerMidiDeviceCallback();
     }
 
+    // =========================================================
+    // MÉTODO ADICIONADO PARA FECHAR O APLICATIVO NATIVAMENTE
+    // =========================================================
+    @PluginMethod
+    public void fecharApp(PluginCall call) {
+        if (getActivity() != null) {
+            getActivity().finishAffinity();
+        }
+        call.resolve();
+    }
+    // =========================================================
+
     private void registerMidiDeviceCallback() {
         if (midiManager == null || deviceCallbackRegistered) return;
 
