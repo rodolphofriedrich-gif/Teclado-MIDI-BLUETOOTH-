@@ -32,6 +32,10 @@ export default function App() {
   const [selectedChannel, setSelectedChannel] = useState<number>(1);
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
   const [connectedDestination, setConnectedDestination] = useState<MidiDestination | null>(null);
+  
+  // NOVO ESTADO: Controla se ativamos o celular para ser visível
+  const [isBleServerActive, setIsBleServerActive] = useState<boolean>(false);
+  
   const [isScanningBle, setIsScanningBle] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'warn' | 'error' | 'success' } | null>(null);
   const [lastTxCommand, setLastTxCommand] = useState<MidiLogEntry | null>(null);
@@ -134,6 +138,7 @@ export default function App() {
       (disconnectedDest) => {
         if (isMounted) {
           setConnectedDestination(null);
+          setIsBleServerActive(false); // Reseta o status se houver desconexão geral
           void refreshDestinations();
           showMessage(
             `Destino "${disconnectedDest.displayName}" foi desconectado. Status: ⚪ Desconectado`,
@@ -162,6 +167,7 @@ export default function App() {
     try {
       await midiManager.connect(dest);
       setConnectedDestination(dest);
+      setIsBleServerActive(false); // Se conectou ativamente, não somos o servidor principal agora
       void refreshDestinations();
       setIsUsbOpen(false);
       setIsBleOpen(false);
@@ -172,14 +178,22 @@ export default function App() {
   };
 
   const handleDisconnect = async () => {
-    if (!connectedDestination) return;
-    const name = connectedDestination.displayName;
-    await midiManager.disconnect();
-    setConnectedDestination(null);
+    if (connectedDestination) {
+      const name = connectedDestination.displayName;
+      await midiManager.disconnect();
+      setConnectedDestination(null);
+      showMessage(`Desconectado de: ${name}. Status: ⚪ Desconectado`, 'info', 2500);
+    }
+    
+    // Se o servidor BLE estava ativo, vamos desligá-lo visualmente
+    if (isBleServerActive) {
+      setIsBleServerActive(false);
+      showMessage('Modo de visibilidade (Android) desligado.', 'info', 2500);
+    }
+
     void refreshDestinations();
     setIsUsbOpen(false);
     setIsBleOpen(false);
-    showMessage(`Desconectado de: ${name}. Status: ⚪ Desconectado`, 'info', 2500);
   };
 
   const handleScanBle = async () => {
@@ -199,20 +213,25 @@ export default function App() {
     }
   };
 
-  // NOVA FUNÇÃO: Força o Celular a emitir sinal BLE para o Tablet achar
   const handleStartBleServer = async () => {
     try {
       await (NativeMidi as any).startBleServer();
+      setIsBleServerActive(true);
       showMessage('📡 Sinal ativado! Procure por "MIDI Router Hub" no seu Tablet.', 'success', 4500);
       setIsBleOpen(false);
     } catch (err: any) {
-      showMessage(`Falha ao ativar visibilidade: ${err?.message}`, 'error', 4000);
+      // Aqui a mensagem vai aparecer se o hardware não suportar!
+      showMessage(`Erro: ${err?.message}`, 'error', 4500);
     }
   };
 
   const handleNoteOn = useCallback(async (note: number) => {
-    // Agora enviamos o comando mesmo se connectedDestination for null, 
-    // pois o Android Tablet pode estar conectado silenciosamente como cliente BLE.
+    // CORREÇÃO: A mensagem de aviso voltou!
+    if (!connectedDestination && !isBleServerActive) {
+      showMessage('Selecione um destino MIDI ou ative a visibilidade.', 'warn', 2500);
+      return;
+    }
+
     try {
       const channel = channelRef.current;
       const velocity = velocityRef.current;
@@ -230,9 +249,11 @@ export default function App() {
     } catch (err: any) {
       showMessage(`Erro ao transmitir Note On: ${err?.message}`, 'error', 2500);
     }
-  }, [showMessage]);
+  }, [connectedDestination, isBleServerActive, showMessage]);
 
   const handleNoteOff = useCallback(async (note: number) => {
+    if (!connectedDestination && !isBleServerActive) return;
+
     try {
       const channel = channelRef.current;
       const res = await midiManager.sendNoteOff(channel, note);
@@ -249,11 +270,11 @@ export default function App() {
     } catch {
       // Silencioso
     }
-  }, []);
+  }, [connectedDestination, isBleServerActive]);
 
   const handleDisabledPress = useCallback(() => {
-    // Mantemos silencioso ou mostramos aviso, mas o envio já foi liberado no handleNoteOn
-  }, []);
+    showMessage('Selecione um destino MIDI ou ative a visibilidade.', 'warn', 2500);
+  }, [showMessage]);
 
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
@@ -329,7 +350,7 @@ export default function App() {
                   <span>Dispositivos USB / Internos</span>
                   <button onClick={refreshDestinations} className="text-sky-400 hover:underline">↻</button>
                 </div>
-                {connectedDestination && isUsbConnected && (
+                {(connectedDestination && isUsbConnected) && (
                   <button
                     onClick={handleDisconnect}
                     className="w-full text-left px-3 py-1.5 text-xs text-rose-300 bg-rose-950/50 hover:bg-rose-950 border-b border-slate-800 font-semibold"
@@ -368,14 +389,14 @@ export default function App() {
                 void refreshDestinations();
               }}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                isBleConnected
+                (isBleConnected || isBleServerActive)
                   ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
                   : 'bg-sky-950/60 hover:bg-sky-900/60 border-sky-800/80 text-sky-200'
               }`}
             >
               <span>📡</span>
               <span className="truncate max-w-[100px] sm:max-w-[130px]">
-                {isBleConnected && connectedDestination ? connectedDestination.displayName : 'Bluetooth BLE'}
+                {isBleServerActive ? 'Aguardando Tablet...' : isBleConnected && connectedDestination ? connectedDestination.displayName : 'Bluetooth BLE'}
               </span>
               <span className="text-[9px]">▼</span>
             </button>
@@ -387,7 +408,7 @@ export default function App() {
                   <button onClick={refreshDestinations} className="text-sky-400 hover:underline">↻</button>
                 </div>
 
-                {connectedDestination && isBleConnected && (
+                {(connectedDestination || isBleServerActive) && (
                   <button
                     onClick={handleDisconnect}
                     className="w-full text-left px-3 py-1.5 text-xs text-rose-300 bg-rose-950/50 hover:bg-rose-950 border-b border-slate-800 font-semibold"
@@ -413,7 +434,6 @@ export default function App() {
                   ))
                 )}
 
-                {/* BOTÕES DE AÇÃO BLE */}
                 <div className="p-1.5 bg-slate-950 border-t border-slate-800 flex flex-col gap-1.5">
                   <button
                     type="button"
@@ -424,7 +444,6 @@ export default function App() {
                     {isScanningBle ? 'Buscando BLE...' : '📡 Buscar Novos BLE'}
                   </button>
                   
-                  {/* NOVO BOTÃO DE VISIBILIDADE PARA ANDROID */}
                   <button
                     type="button"
                     onClick={handleStartBleServer}
@@ -580,7 +599,7 @@ export default function App() {
                 : 'bg-slate-900/95 text-slate-200 border-slate-700'
             }`}
           >
-            <span>{statusMessage.type === 'warn' ? '⚠️' : statusMessage.type === 'error' ? '❌' : statusMessage.type === 'success' ? '✅' : 'ℹ️'}</span>
+            <span>{statusMessage.type === 'warn' ? '⚠️️' : statusMessage.type === 'error' ? '❌' : statusMessage.type === 'success' ? '✅' : 'ℹ️'}</span>
             <span className="flex-1 truncate">{statusMessage.text}</span>
           </div>
         </div>
@@ -589,7 +608,8 @@ export default function App() {
       <main className="flex-1 w-full h-[calc(100dvh-60px)] p-2 flex flex-col gap-1 overflow-hidden">
         <div className="w-full h-full flex flex-col">
           <MidiKeyboard
-            isConnected={true} 
+            /* CORREÇÃO: O teclado agora valida as duas coisas! */
+            isConnected={!!connectedDestination || isBleServerActive} 
             onNoteOn={handleNoteOn}
             onNoteOff={handleNoteOff}
             onDisabledPress={handleDisabledPress}
