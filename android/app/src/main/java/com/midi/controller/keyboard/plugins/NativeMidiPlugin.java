@@ -1,4 +1,3 @@
-```java
 package com.midi.controller.keyboard.plugins;
 
 import android.Manifest;
@@ -2697,4 +2696,3 @@ public class NativeMidiPlugin extends Plugin {
         super.handleOnDestroy();
     }
 }
-```
