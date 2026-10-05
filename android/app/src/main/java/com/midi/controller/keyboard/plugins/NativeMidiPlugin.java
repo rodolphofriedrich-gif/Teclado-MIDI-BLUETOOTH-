@@ -636,7 +636,6 @@ public class NativeMidiPlugin extends Plugin {
 
             bleMidiService = new BluetoothGattService(BLE_MIDI_SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY);
 
-            // CORREÇÃO: Adicionado permissão de READ, exigido por alguns scanners
             bleMidiCharacteristic = new BluetoothGattCharacteristic(
                 BLE_MIDI_CHARACTERISTIC_UUID,
                 BluetoothGattCharacteristic.PROPERTY_READ
@@ -667,7 +666,8 @@ public class NativeMidiPlugin extends Plugin {
             mainHandler.postDelayed(this::startBleMidiAdvertising, 300);
             bleMidiServerRunning = true;
 
-        } catch (SecurityException | Exception e) {
+        // CORREÇÃO DO ERRO DE COMPILAÇÃO: Removido 'SecurityException |'
+        } catch (Exception e) {
             stopBleMidiServer();
             if (pendingServerCall != null) {
                 pendingServerCall.reject("Erro crítico: " + e.getMessage());
@@ -695,7 +695,6 @@ public class NativeMidiPlugin extends Plugin {
             }
         }
 
-        // CORREÇÃO: Responde a pedidos de leitura do Tablet para não travar a conexão
         @Override
         public void onCharacteristicReadRequest(BluetoothDevice device, int requestId, int offset, BluetoothGattCharacteristic characteristic) {
             if (bleGattServer != null) {
@@ -752,15 +751,12 @@ public class NativeMidiPlugin extends Plugin {
                 .setTimeout(0)
                 .build();
 
-            // CORREÇÃO MAXIMA (LIMITE DE 31 BYTES)
-            // Apenas o UUID do serviço garante não estourar o limite.
             AdvertiseData advertiseData = new AdvertiseData.Builder()
                 .setIncludeDeviceName(false)
                 .setIncludeTxPowerLevel(false)
                 .addServiceUuid(new ParcelUuid(BLE_MIDI_SERVICE_UUID))
                 .build();
 
-            // O nome agora vai no pacote secundário usando o nome real do celular, garantindo visibilidade no tablet!
             AdvertiseData scanResponse = new AdvertiseData.Builder()
                 .setIncludeDeviceName(true)
                 .build();
