@@ -188,7 +188,42 @@ public class NativeMidiPlugin extends Plugin {
             }
         });
     }
+    
+    // =========================================================
+    // INICIAR SERVIDOR BLE MANUALMENTE (VISIBILIDADE ANDROID)
+    // =========================================================
+    @PluginMethod
+    public void startBleServer(PluginCall call) {
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
+            call.reject("Bluetooth não está ativado.");
+            return;
+        }
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (!hasBluetoothConnectPermission() || !hasBluetoothAdvertisePermission()) {
+                requestPermissionForAlias("bluetooth", call, "bluetoothPermissionForServer");
+                return;
+            }
+        }
+
+        // Paramos e iniciamos novamente para garantir que o cache do Android seja limpo
+        stopBleMidiServer();
+        startBleMidiServerSafely();
+        
+        call.resolve();
+    }
+
+    @PermissionCallback
+    private void bluetoothPermissionForServer(PluginCall call) {
+        if (getPermissionState("bluetooth") != PermissionState.GRANTED) {
+            call.reject("Permissão Bluetooth negada.");
+            return;
+        }
+        stopBleMidiServer();
+        startBleMidiServerSafely();
+        call.resolve();
+    }
+    
     // =========================================================
     // CALLBACK MIDI NATIVO
     // =========================================================
