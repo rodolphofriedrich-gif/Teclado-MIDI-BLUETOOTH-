@@ -188,7 +188,7 @@ public class NativeMidiPlugin extends Plugin {
             }
         });
     }
-    
+
     // =========================================================
     // INICIAR SERVIDOR BLE MANUALMENTE (VISIBILIDADE ANDROID)
     // =========================================================
@@ -199,6 +199,12 @@ public class NativeMidiPlugin extends Plugin {
             return;
         }
 
+        // NOVO: Verifica se o hardware realmente suporta ficar visível (Modo Periférico)
+        if (bluetoothAdapter.getBluetoothLeAdvertiser() == null) {
+            call.reject("O hardware deste celular não suporta o Modo Periférico BLE. Ele não consegue emitir sinal para o Tablet.");
+            return;
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (!hasBluetoothConnectPermission() || !hasBluetoothAdvertisePermission()) {
                 requestPermissionForAlias("bluetooth", call, "bluetoothPermissionForServer");
@@ -206,7 +212,7 @@ public class NativeMidiPlugin extends Plugin {
             }
         }
 
-        // Paramos e iniciamos novamente para garantir que o cache do Android seja limpo
+        // Limpa o cache e inicia a transmissão
         stopBleMidiServer();
         startBleMidiServerSafely();
         
