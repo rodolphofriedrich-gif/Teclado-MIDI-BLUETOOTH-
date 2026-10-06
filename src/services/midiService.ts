@@ -76,6 +76,8 @@ export class MidiControllerManager {
 
   private connectedDestination: MidiDestination | null = null;
 
+  private bleServerActive = false;
+
   private nativeDevices: NativeMidiDevice[] = [];
 
   /*
@@ -124,6 +126,31 @@ export class MidiControllerManager {
                * já foram assumidos pela API MIDI nativa.
                */
               this.cleanScannedBleDevices();
+
+              try {
+                this.bleServerActive =
+                  await this.isBleServerRunning();
+              } catch {
+                // Mantém o último estado conhecido.
+              }
+
+              /*
+               * Se a saída nativa atualmente conectada desapareceu
+               * do Android, a conexão deixou de existir.
+               */
+              if (this.connectedDestination?.nativeId !== undefined) {
+                const stillConnected = this.nativeDevices.some(
+                  (device) =>
+                    device.id === this.connectedDestination?.nativeId &&
+                    device.inputPortCount > 0
+                );
+
+                if (!stillConnected) {
+                  const disconnected = this.connectedDestination;
+                  this.connectedDestination = null;
+                  this.onDisconnectCallback?.(disconnected);
+                }
+              }
 
               this.onStateChangeCallback?.();
             }
@@ -463,6 +490,10 @@ export class MidiControllerManager {
       await this.disconnect();
     }
 
+    if (this.bleServerActive) {
+      await this.stopBleServer();
+    }
+
     try {
       if (Capacitor.getPlatform() === 'android') {
         if (
@@ -560,6 +591,36 @@ export class MidiControllerManager {
     }
   }
 
+  public async startBleServer(): Promise<boolean> {
+    if (Capacitor.getPlatform() !== 'android') {
+      throw new Error(
+        'O servidor BLE MIDI nativo está disponível no Android.'
+      );
+    }
+
+    const result = await NativeMidi.startBleServer();
+    this.bleServerActive = result.active;
+    return result.active;
+  }
+
+  public async stopBleServer(): Promise<void> {
+    if (Capacitor.getPlatform() !== 'android') {
+      return;
+    }
+
+    await NativeMidi.stopBleServer();
+    this.bleServerActive = false;
+  }
+
+  public async isBleServerRunning(): Promise<boolean> {
+    if (Capacitor.getPlatform() !== 'android') {
+      return false;
+    }
+
+    const result = await NativeMidi.isBleServerRunning();
+    return result.active;
+  }
+
   /**
    * Procura dispositivos BLE MIDI.
    *
@@ -588,8 +649,21 @@ export class MidiControllerManager {
      * Substituímos a lista temporária pelo resultado
      * mais recente da busca.
      */
-    this.scannedBleDevices =
-      result.devices || [];
+    const unique = new Map<string, NativeBleDevice>();
+
+    for (const device of result.devices || []) {
+      const address = String(device.address || '').trim().toLowerCase();
+      if (!address) continue;
+
+      if (!unique.has(address)) {
+        unique.set(address, {
+          address: String(device.address).trim(),
+          name: device.name || 'Dispositivo BLE MIDI',
+        });
+      }
+    }
+
+    this.scannedBleDevices = Array.from(unique.values());
 
     /*
      * Antes de apresentar os resultados, removemos
@@ -641,9 +715,9 @@ export class MidiControllerManager {
     bytes: number[];
     hex: string;
   }> {
-    if (!this.connectedDestination) {
+    if (!this.connectedDestination && !this.bleServerActive) {
       throw new Error(
-        'Nenhum destino MIDI conectado.'
+        'Nenhum destino MIDI conectado ou servidor BLE MIDI ativo.'
       );
     }
 
@@ -681,9 +755,9 @@ export class MidiControllerManager {
     bytes: number[];
     hex: string;
   }> {
-    if (!this.connectedDestination) {
+    if (!this.connectedDestination && !this.bleServerActive) {
       throw new Error(
-        'Nenhum destino MIDI conectado.'
+        'Nenhum destino MIDI conectado ou servidor BLE MIDI ativo.'
       );
     }
 
@@ -717,9 +791,9 @@ export class MidiControllerManager {
   private async transmitBytes(
     midiBytes: number[]
   ): Promise<void> {
-    if (!this.connectedDestination) {
+    if (!this.connectedDestination && !this.bleServerActive) {
       throw new Error(
-        'Nenhum destino MIDI conectado.'
+        'Nenhum destino MIDI conectado ou servidor BLE MIDI ativo.'
       );
     }
 
@@ -731,6 +805,12 @@ export class MidiControllerManager {
       });
 
       return;
+    }
+
+    if (!this.connectedDestination) {
+      throw new Error(
+        'Servidor BLE MIDI ativo, mas não há saída Web MIDI disponível.'
+      );
     }
 
     const output =

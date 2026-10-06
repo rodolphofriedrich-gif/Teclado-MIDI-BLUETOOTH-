@@ -1,282 +1,246 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { getNoteName } from '../services/midiService';
+import React, { useState, useRef, useEffect } from 'react';
 
 interface MidiKeyboardProps {
   isConnected: boolean;
+  selectedChannel: number;
+  onSelectChannel: (channel: number) => void;
   onNoteOn: (note: number) => void;
   onNoteOff: (note: number) => void;
   onDisabledPress: () => void;
-  customWhiteKeyColor?: string;
-  customBlackKeyColor?: string;
+  customWhiteKeyColor: string;
+  customBlackKeyColor: string;
 }
 
-interface KeyDef {
-  midiNote: number;
-  name: string;
-  isBlack: boolean;
-  whiteIndex: number;
-}
-
-export const MidiKeyboard: React.FC<MidiKeyboardProps> = ({
+export function MidiKeyboard({
   isConnected,
+  selectedChannel,
+  onSelectChannel,
   onNoteOn,
   onNoteOff,
   onDisabledPress,
-  customWhiteKeyColor = '#ffffff',
-  customBlackKeyColor = '#09090b',
-}) => {
-  const [baseOctave, setBaseOctave] = useState<number>(3); // Padrão: C3 (48) a C5 (72)
-  const [activeNotes, setActiveNotes] = useState<Set<number>>(new Set());
-  const activeNotesRef = useRef<Set<number>>(new Set());
+  customWhiteKeyColor,
+  customBlackKeyColor,
+}: MidiKeyboardProps) {
+  const [startOctave, setStartOctave] = useState<number>(3);
+  const [keyWidth, setKeyWidth] = useState<number>(60);
+  const [minKeyWidth, setMinKeyWidth] = useState<number>(45);
+  const [isScrollLocked, setIsScrollLocked] = useState<boolean>(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Gera 2 oitavas completas (25 notas)
-  const generateKeys = (): { whiteKeys: KeyDef[]; blackKeys: KeyDef[] } => {
-    const whiteKeys: KeyDef[] = [];
-    const blackKeys: KeyDef[] = [];
+  // Total de teclas brancas exibidas (2 oitavas = 14 teclas brancas)
+  const totalWhiteKeys = 14;
 
-    const startNote = (baseOctave + 1) * 12; // C3 = (3 + 1) * 12 = 48
-    const totalKeys = 25; // 2 oitavas (C3 até C5)
-
-    let currentWhiteIndex = 0;
-
-    for (let i = 0; i < totalKeys; i++) {
-      const midiNote = startNote + i;
-      const noteInOctave = midiNote % 12;
-      const isBlack = [1, 3, 6, 8, 10].includes(noteInOctave);
-      const name = getNoteName(midiNote);
-
-      if (isBlack) {
-        blackKeys.push({
-          midiNote,
-          name,
-          isBlack: true,
-          whiteIndex: currentWhiteIndex - 1,
-        });
-      } else {
-        whiteKeys.push({
-          midiNote,
-          name,
-          isBlack: false,
-          whiteIndex: currentWhiteIndex,
-        });
-        currentWhiteIndex++;
-      }
-    }
-
-    return { whiteKeys, blackKeys };
-  };
-
-  const { whiteKeys, blackKeys } = generateKeys();
-
-  const handleKeyDown = useCallback(
-    (note: number) => {
-      if (!isConnected) {
-        onDisabledPress();
-        return;
-      }
-      if (!activeNotesRef.current.has(note)) {
-        activeNotesRef.current.add(note);
-        setActiveNotes(new Set(activeNotesRef.current));
-        onNoteOn(note);
-      }
-    },
-    [isConnected, onDisabledPress, onNoteOn]
-  );
-
-  const handleKeyUp = useCallback(
-    (note: number) => {
-      if (activeNotesRef.current.has(note)) {
-        activeNotesRef.current.delete(note);
-        setActiveNotes(new Set(activeNotesRef.current));
-        if (isConnected) {
-          onNoteOff(note);
+  // Calcula dinamicamente a largura mínima para que as teclas ocupem sempre 100% do espaço visível
+  useEffect(() => {
+    const updateMinSize = () => {
+      if (containerRef.current) {
+        const availableWidth = containerRef.current.clientWidth - 10;
+        const calculatedMin = Math.floor(availableWidth / totalWhiteKeys);
+        setMinKeyWidth(Math.max(35, calculatedMin));
+        if (keyWidth < calculatedMin) {
+          setKeyWidth(calculatedMin);
         }
       }
-    },
-    [isConnected, onNoteOff]
-  );
-
-  const getBlackKeyStyle = (noteInOctave: number, whiteIndex: number, totalWhiteKeys: number) => {
-    const whiteWidthPercent = 100 / totalWhiteKeys;
-    let offsetPercent = 0;
-
-    switch (noteInOctave) {
-      case 1:
-        offsetPercent = 0.62;
-        break;
-      case 3:
-        offsetPercent = 0.76;
-        break;
-      case 6:
-        offsetPercent = 0.58;
-        break;
-      case 8:
-        offsetPercent = 0.68;
-        break;
-      case 10:
-        offsetPercent = 0.78;
-        break;
-      default:
-        offsetPercent = 0.7;
-    }
-
-    const left = (whiteIndex + offsetPercent) * whiteWidthPercent;
-    const width = whiteWidthPercent * 0.65;
-
-    return {
-      left: `${left}%`,
-      width: `${width}%`,
     };
+
+    updateMinSize();
+    window.addEventListener('resize', updateMinSize);
+    return () => window.removeEventListener('resize', updateMinSize);
+  }, [keyWidth]);
+
+  // Definição exata das notas por oitava
+  const octaveNotes = [
+    { semitone: 0, name: 'C', type: 'white', offsetMultiplier: 0 },
+    { semitone: 1, name: 'C#', type: 'black', offsetMultiplier: 0.7 },
+    { semitone: 2, name: 'D', type: 'white', offsetMultiplier: 1 },
+    { semitone: 3, name: 'D#', type: 'black', offsetMultiplier: 1.7 },
+    { semitone: 4, name: 'E', type: 'white', offsetMultiplier: 2 },
+    { semitone: 5, name: 'F', type: 'white', offsetMultiplier: 3 },
+    { semitone: 6, name: 'F#', type: 'black', offsetMultiplier: 3.7 },
+    { semitone: 7, name: 'G', type: 'white', offsetMultiplier: 4 },
+    { semitone: 8, name: 'G#', type: 'black', offsetMultiplier: 4.7 },
+    { semitone: 9, name: 'A', type: 'white', offsetMultiplier: 5 },
+    { semitone: 10, name: 'A#', type: 'black', offsetMultiplier: 5.7 },
+    { semitone: 11, name: 'B', type: 'white', offsetMultiplier: 6 },
+  ];
+
+  const buildKeyboardStructure = () => {
+    let items = [];
+    let whiteKeyCounter = 0;
+
+    for (let octave = startOctave; octave <= startOctave + 1; octave++) {
+      for (let noteDef of octaveNotes) {
+        const midiNote = (octave + 1) * 12 + noteDef.semitone;
+        if (midiNote > 127) continue;
+
+        const isWhite = noteDef.type === 'white';
+        let leftPosition = 0;
+
+        if (isWhite) {
+          leftPosition = whiteKeyCounter * keyWidth;
+          whiteKeyCounter++;
+        } else {
+          // Posicionamento exato das teclas pretas entre as brancas
+          const baseWhiteIndex = Math.floor(whiteKeyCounter - (octave === startOctave ? 12 : 24) + (noteDef.semitone === 1 ? 0 : noteDef.semitone === 3 ? 1 : noteDef.semitone === 6 ? 3 : noteDef.semitone === 8 ? 4 : 5));
+          // Cálculo seguro baseado no índice da tecla branca anterior
+          leftPosition = ((whiteKeyCounter - 1) - (octaveNotes.filter((n, idx) => idx < octaveNotes.indexOf(noteDef) && n.type === 'white').length === 0 ? 0 : 0)) * keyWidth;
+        }
+
+        items.push({
+          midiNote,
+          type: noteDef.type,
+          name: `${noteDef.name}${octave}`,
+          isWhite,
+          // Posição horizontal calculada de forma fiável
+          leftOffset: isWhite 
+            ? (whiteKeyCounter - 1) * keyWidth 
+            : ((whiteKeyCounter - 1) * keyWidth) - (keyWidth * 0.3),
+        });
+      }
+    }
+    return items;
+  };
+
+  // Abordagem simplificada e robusta para renderização em grelha / flex unificado
+  const renderKeys = () => {
+    let whiteIndex = 0;
+    let list = [];
+
+    for (let octave = startOctave; octave <= startOctave + 1; octave++) {
+      for (let i = 0; i < octaveNotes.length; i++) {
+        const noteDef = octaveNotes[i];
+        const midiNote = (octave + 1) * 12 + noteDef.semitone;
+        if (midiNote > 127) continue;
+
+        const isWhite = noteDef.type === 'white';
+
+        if (isWhite) {
+          const currentWIndex = whiteIndex;
+          list.push(
+            <div
+              key={midiNote}
+              onMouseDown={() => isConnected ? onNoteOn(midiNote) : onDisabledPress()}
+              onMouseUp={() => onNoteOff(midiNote)}
+              onTouchStart={(e) => { e.preventDefault(); isConnected ? onNoteOn(midiNote) : onDisabledPress(); }}
+              onTouchEnd={(e) => { e.preventDefault(); onNoteOff(midiNote); }}
+              className="h-full border border-slate-400 rounded-b-md flex flex-col justify-end pb-2 items-center cursor-pointer active:bg-sky-200 transition-colors relative shadow-inner z-10 shrink-0"
+              style={{
+                width: `${keyWidth}px`,
+                backgroundColor: customWhiteKeyColor,
+              }}
+            >
+              <span className="text-[9px] font-bold text-slate-700 select-none">{noteDef.name}{octave}</span>
+            </div>
+          );
+          whiteIndex++;
+        } else {
+          // Tecla preta sobreposta com largura proporcional (58% da branca) e posicionamento absoluto perfeito
+          const blackWidth = keyWidth * 0.58;
+          const prevWhiteLeft = (whiteIndex - 1) * keyWidth;
+          const absoluteLeft = prevWhiteLeft + (keyWidth - (blackWidth / 2));
+
+          list.push(
+            <div
+              key={midiNote}
+              onMouseDown={() => isConnected ? onNoteOn(midiNote) : onDisabledPress()}
+              onMouseUp={() => onNoteOff(midiNote)}
+              onTouchStart={(e) => { e.preventDefault(); isConnected ? onNoteOn(midiNote) : onDisabledPress(); }}
+              onTouchEnd={(e) => { e.preventDefault(); onNoteOff(midiNote); }}
+              className="absolute h-[60%] z-30 border border-slate-950 rounded-b-md flex flex-col justify-end pb-1 items-center cursor-pointer active:opacity-60 transition-opacity shadow-2xl"
+              style={{
+                width: `${blackWidth}px`,
+                left: `${absoluteLeft}px`,
+                backgroundColor: customBlackKeyColor,
+              }}
+            />
+          );
+        }
+      }
+    }
+    return list;
   };
 
   return (
-    <div className="flex-1 w-full h-full flex flex-col min-h-0 bg-slate-900 border border-slate-800 rounded-xl p-2 sm:p-2.5 shadow-md select-none relative z-10">
-      {/* Barra de Controle de Oitavas do Teclado */}
-      <div className="flex items-center justify-between pb-1.5 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold tracking-wider uppercase text-slate-400 flex items-center gap-1.5">
-            <span className="text-amber-400">🎹</span> Teclado MIDI
-          </span>
-        </div>
-
-        {/* Seletor de Oitavas (+ / -) */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-md border border-slate-800">
-          <button
-            type="button"
-            onClick={() => setBaseOctave((prev) => Math.max(1, prev - 1))}
-            disabled={baseOctave <= 1}
-            className="px-2 py-0.5 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-30 bg-slate-800 rounded active:scale-95 transition"
-            title="Oitava anterior"
-          >
-            -
-          </button>
-          <span className="text-xs font-mono font-bold px-2 text-amber-400 min-w-[70px] text-center">
-            C{baseOctave} - C{baseOctave + 2}
-          </span>
-          <button
-            type="button"
-            onClick={() => setBaseOctave((prev) => Math.min(6, prev + 1))}
-            disabled={baseOctave >= 6}
-            className="px-2 py-0.5 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-30 bg-slate-800 rounded active:scale-95 transition"
-            title="Próxima oitava"
-          >
-            +
-          </button>
-        </div>
-      </div>
-
-      {/* Área Gráfica das Teclas */}
-      <div className="relative flex-1 w-full min-h-[110px] bg-slate-950 rounded-lg overflow-hidden border border-slate-800 select-none touch-none shadow-inner">
-        {!isConnected && (
-          <div className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center text-center p-2 transition-all">
-            <div className="bg-slate-950/90 border border-amber-500/40 text-amber-400 px-3 py-1 rounded-lg text-xs font-bold shadow-2xl flex items-center gap-1.5 animate-pulse">
-              <span>⚠️</span>
-              <span>Selecione um destino MIDI</span>
+    <div className="flex-1 w-full flex flex-col bg-slate-900 rounded-xl border border-slate-800 p-2 gap-2 select-none overflow-hidden shadow-xl">
+      
+      {/* BARRA SUPERIOR DO TECLADO */}
+      <div className="flex flex-wrap items-center justify-between bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 gap-2 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase text-slate-400">Oitavas:</span>
+            <div className="flex items-center bg-slate-900 border border-slate-700 rounded-md overflow-hidden">
+              <button
+                onClick={() => setStartOctave(Math.max(1, startOctave - 1))}
+                className="px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 font-bold transition"
+              >
+                -
+              </button>
+              <span className="px-2 text-xs font-mono text-sky-400 font-bold">
+                C{startOctave} - C{startOctave + 2}
+              </span>
+              <button
+                onClick={() => setStartOctave(Math.min(6, startOctave + 1))}
+                className="px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 font-bold transition"
+              >
+                +
+              </button>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1.5 bg-slate-950/70 px-2 py-0.5 rounded">
-              Teclas inativas até que um destino seja conectado acima.
-            </p>
           </div>
-        )}
 
-        {/* Teclas Brancas */}
-        <div className={`flex w-full h-full ${!isConnected ? 'opacity-40 grayscale' : ''}`}>
-          {whiteKeys.map((key) => {
-            const isPressed = activeNotes.has(key.midiNote);
-            return (
-              <div
-                key={key.midiNote}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  handleKeyDown(key.midiNote);
-                }}
-                onPointerUp={(e) => {
-                  e.preventDefault();
-                  handleKeyUp(key.midiNote);
-                }}
-                onPointerLeave={(e) => {
-                  e.preventDefault();
-                  handleKeyUp(key.midiNote);
-                }}
-                onPointerCancel={(e) => {
-                  e.preventDefault();
-                  handleKeyUp(key.midiNote);
-                }}
-                style={{
-                  backgroundColor: isPressed ? '#fbbf24' : customWhiteKeyColor,
-                }}
-                className={`relative flex-1 h-full border-r border-slate-400/40 rounded-b-md transition-colors flex flex-col justify-end items-center pb-1.5 cursor-pointer select-none active:scale-[0.99] origin-top ${
-                  isPressed ? 'shadow-inner' : 'shadow-[inset_0_-6px_0_rgba(0,0,0,0.15)] hover:opacity-90'
-                }`}
-              >
-                <span
-                  className={`text-[9px] font-mono font-bold ${
-                    isPressed ? 'text-slate-950' : 'text-slate-600'
-                  }`}
-                >
-                  {key.name}
-                </span>
-              </div>
-            );
-          })}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-md px-2 py-0.5">
+            <span className="text-[9px] font-bold text-slate-400 uppercase">Canal:</span>
+            <select
+              value={selectedChannel}
+              onChange={(e) => onSelectChannel(Number(e.target.value))}
+              className="bg-transparent text-xs text-sky-300 font-bold outline-none cursor-pointer"
+            >
+              {Array.from({ length: 16 }, (_, i) => (
+                <option key={i + 1} value={i + 1} className="bg-slate-900 text-white">
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Teclas Pretas */}
-        <div
-          className={`absolute top-0 left-0 right-0 h-[62%] pointer-events-none ${
-            !isConnected ? 'opacity-40 grayscale' : ''
-          }`}
-        >
-          {blackKeys.map((key) => {
-            const noteInOctave = key.midiNote % 12;
-            const style = getBlackKeyStyle(noteInOctave, key.whiteIndex, whiteKeys.length);
-            const isPressed = activeNotes.has(key.midiNote);
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-400 font-medium">Zoom:</span>
+            <input
+              type="range"
+              min={minKeyWidth}
+              max="95"
+              value={keyWidth}
+              onChange={(e) => setKeyWidth(Number(e.target.value))}
+              className="w-20 accent-sky-500 h-1 bg-slate-700 rounded-lg cursor-pointer"
+            />
+          </div>
 
-            return (
-              <div
-                key={key.midiNote}
-                style={{
-                  ...style,
-                  backgroundColor: isPressed ? '#f59e0b' : customBlackKeyColor,
-                }}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyDown(key.midiNote);
-                }}
-                onPointerUp={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyUp(key.midiNote);
-                }}
-                onPointerLeave={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyUp(key.midiNote);
-                }}
-                onPointerCancel={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleKeyUp(key.midiNote);
-                }}
-                className={`absolute top-0 h-full pointer-events-auto rounded-b-md transition-colors flex flex-col justify-end items-center pb-1 cursor-pointer select-none z-10 ${
-                  isPressed
-                    ? 'ring-2 ring-amber-300'
-                    : 'border-x border-b border-slate-700 shadow-[inset_0_-3px_0_rgba(255,255,255,0.15)] hover:opacity-90'
-                }`}
-              >
-                <span
-                  className={`text-[8px] font-mono font-bold leading-none ${
-                    isPressed ? 'text-slate-950' : 'text-slate-300'
-                  }`}
-                >
-                  {key.name}
-                </span>
-              </div>
-            );
-          })}
+          <button
+            onClick={() => setIsScrollLocked(!isScrollLocked)}
+            className={`px-2.5 py-1 rounded-md text-[10px] font-bold border transition flex items-center gap-1 ${
+              isScrollLocked
+                ? 'bg-amber-950/80 border-amber-600 text-amber-200'
+                : 'bg-slate-800 border-slate-700 text-slate-300'
+            }`}
+          >
+            {isScrollLocked ? '🔒 Bloqueado' : '🔓 Rolagem Livre'}
+          </button>
         </div>
       </div>
+
+      {/* ÁREA DO TECLADO COM PREENCHIMENTO TOTAL E TECLAS PRETAS PROPORCIONAIS */}
+      <div 
+        ref={containerRef}
+        className={`flex-1 w-full bg-slate-950 rounded-lg border border-slate-800 relative flex overflow-x-auto custom-scrollbar p-1 ${
+          isScrollLocked ? 'overflow-x-hidden justify-center' : ''
+        }`}
+      >
+        <div className="relative flex h-full items-start w-full">
+          {renderKeys()}
+        </div>
+      </div>
+
     </div>
   );
-};
+}

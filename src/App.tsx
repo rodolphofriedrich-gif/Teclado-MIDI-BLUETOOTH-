@@ -1,6 +1,6 @@
 /**
- * Teclado MIDI Controller - Aplicativo Android / Web MIDI
- * Foco exclusivo: controlador e transmissor de comandos MIDI.
+ * NexusMIDI Pro - Aplicativo Android / Web MIDI Router Hub
+ * Versão Profissional limpa e otimizada (Clean Studio Layout).
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -9,15 +9,19 @@ import {
   midiManager,
   getNoteName,
 } from './services/midiService';
-import { NativeMidi } from './services/nativeMidi';
-import { ChannelDropdown } from './components/ChannelDropdown';
 import { MidiKeyboard } from './components/MidiKeyboard';
-import { PWAInstallButton } from './components/PWAInstallButton';
+import { MidiHubScreen } from './components/MidiHubScreen';
+import { NativeMidi } from './services/nativeMidi';
 
 export const KEYBOARD_PALETTES = [
   { id: 'default', name: 'Clássico / Padrão', white: '#ffffff', black: '#1e293b' },
   { id: 'custom-blue', name: 'Azul Personalizado (#D6E6F7 / #0F3D73)', white: '#D6E6F7', black: '#0F3D73' },
-  { id: 'synth-wave', name: 'Neon / Synthwave', white: '#e2e8f0', black: '#09090b' },
+  { id: 'silver-sapphire', name: 'Prata Gelo + Azul Safira', white: '#D8DDE3', black: '#0F3D73' },
+  { id: 'silver-burgundy-deep', name: 'Prata Escovado + Bordo Profundo', white: '#BFC5CA', black: '#5C0A1D' },
+  { id: 'whitegold-navy', name: 'Ouro Branco + Azul-Marinho', white: '#E5E4E2', black: '#1C2C5B' },
+  { id: 'champagne-burgundy', name: 'Champagne + Bordo Aveludado', white: '#E8D6A7', black: '#6D071A' },
+  { id: 'platinum-amethyst', name: 'Platina + Roxo Ametista', white: '#E5E1DA', black: '#6A0DAD' },
+  { id: 'ivory-emerald', name: 'Marfim Acetinado + Verde Esmeralda', white: '#F4EBD0', black: '#008C69' },
   { id: 'wood-vintage', name: 'Vintage / Creme', white: '#fef3c7', black: '#451a03' },
 ];
 
@@ -29,13 +33,12 @@ export const VELOCITY_OPTIONS = [
 ];
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<'keyboard' | 'hub'>('keyboard');
   const [selectedChannel, setSelectedChannel] = useState<number>(1);
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
   const [connectedDestination, setConnectedDestination] = useState<MidiDestination | null>(null);
   
-  // NOVO ESTADO: Controla se ativamos o celular para ser visível
   const [isBleServerActive, setIsBleServerActive] = useState<boolean>(false);
-  
   const [isScanningBle, setIsScanningBle] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'warn' | 'error' | 'success' } | null>(null);
   const [lastTxCommand, setLastTxCommand] = useState<MidiLogEntry | null>(null);
@@ -45,10 +48,6 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
 
-  const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'system'>(() => {
-    return (localStorage.getItem('midi_theme_mode') as any) || 'dark';
-  });
-
   const [selectedPaletteId, setSelectedPaletteId] = useState<string>(() => {
     return localStorage.getItem('midi_palette_id') || 'custom-blue';
   });
@@ -57,25 +56,6 @@ export default function App() {
     const saved = localStorage.getItem('midi_velocity');
     return saved ? parseInt(saved, 10) : 64;
   });
-
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
-
-  useEffect(() => {
-    localStorage.setItem('midi_theme_mode', themeMode);
-    
-    let dark = themeMode === 'dark';
-    if (themeMode === 'system') {
-      dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-    setIsDarkMode(dark);
-
-    const root = document.documentElement;
-    if (dark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-  }, [themeMode]);
 
   useEffect(() => {
     localStorage.setItem('midi_palette_id', selectedPaletteId);
@@ -138,20 +118,25 @@ export default function App() {
       (disconnectedDest) => {
         if (isMounted) {
           setConnectedDestination(null);
-          setIsBleServerActive(false); // Reseta o status se houver desconexão geral
+          setIsBleServerActive(false);
           void refreshDestinations();
-          showMessage(
-            `Destino "${disconnectedDest.displayName}" foi desconectado. Status: ⚪ Desconectado`,
-            'warn',
-            4000
-          );
+          showMessage(`Destino "${disconnectedDest.displayName}" desconectado.`, 'warn', 4000);
         }
       }
     );
 
     const init = async () => {
       await midiManager.initWebMidi();
+
+      let serverActive = false;
+      try {
+        serverActive = await midiManager.isBleServerRunning();
+      } catch {
+        serverActive = false;
+      }
+
       if (isMounted) {
+        setIsBleServerActive(serverActive);
         void refreshDestinations();
       }
     };
@@ -167,47 +152,52 @@ export default function App() {
     try {
       await midiManager.connect(dest);
       setConnectedDestination(dest);
-      setIsBleServerActive(false); // Se conectou ativamente, não somos o servidor principal agora
+      setIsBleServerActive(false);
       void refreshDestinations();
       setIsUsbOpen(false);
       setIsBleOpen(false);
-      showMessage(`Conectado com sucesso a: ${dest.displayName}`, 'success', 2500);
+      showMessage(`Conectado a: ${dest.displayName}`, 'success', 2500);
     } catch (err: any) {
-      showMessage(`Falha ao conectar: ${err?.message || 'Erro desconhecido'}`, 'error', 4000);
+      showMessage(`Erro ao conectar: ${err?.message || 'Erro desconhecido'}`, 'error', 4000);
     }
   };
 
   const handleDisconnect = async () => {
-    if (connectedDestination) {
-      const name = connectedDestination.displayName;
-      await midiManager.disconnect();
-      setConnectedDestination(null);
-      showMessage(`Desconectado de: ${name}. Status: ⚪ Desconectado`, 'info', 2500);
-    }
-    
-    // Se o servidor BLE estava ativo, vamos desligá-lo visualmente
-    if (isBleServerActive) {
-      setIsBleServerActive(false);
-      showMessage('Modo de visibilidade (Android) desligado.', 'info', 2500);
-    }
+    try {
+      if (connectedDestination) {
+        await midiManager.disconnect();
+        setConnectedDestination(null);
+      }
 
-    void refreshDestinations();
-    setIsUsbOpen(false);
-    setIsBleOpen(false);
+      if (isBleServerActive) {
+        await midiManager.stopBleServer();
+        setIsBleServerActive(false);
+      }
+
+      showMessage('Desconectado com sucesso.', 'info', 2500);
+      void refreshDestinations();
+    } catch (err: any) {
+      showMessage(`Erro ao desconectar: ${err?.message || 'Erro desconhecido'}`, 'error', 3500);
+    } finally {
+      setIsUsbOpen(false);
+      setIsBleOpen(false);
+    }
   };
 
   const handleScanBle = async () => {
     setIsScanningBle(true);
     try {
-      const newBleDest = await midiManager.scanBleDevice();
-      if (newBleDest) {
-        await refreshDestinations();
-        await handleConnect(newBleDest);
+      const found = await midiManager.scanBleDevice();
+      await refreshDestinations();
+
+      if (found.length === 0) {
+        showMessage('Nenhum dispositivo BLE MIDI encontrado.', 'info', 3000);
       } else {
-        showMessage('Nenhum dispositivo BLE encontrado na busca.', 'info', 2500);
+        setIsBleOpen(true);
+        showMessage(`${found.length} dispositivo(s) BLE MIDI encontrado(s).`, 'success', 3000);
       }
     } catch (err: any) {
-      showMessage(`Erro na busca BLE: ${err?.message || 'Bluetooth cancelado ou indisponível'}`, 'error', 3500);
+      showMessage(`Erro BLE: ${err?.message || 'Falha na busca'}`, 'error', 3500);
     } finally {
       setIsScanningBle(false);
     }
@@ -215,23 +205,23 @@ export default function App() {
 
   const handleStartBleServer = async () => {
     try {
-      await (NativeMidi as any).startBleServer();
-      setIsBleServerActive(true);
-      showMessage('📡 Sinal ativado! Procure por "MIDI Router Hub" no seu Tablet.', 'success', 4500);
-      setIsBleOpen(false);
+      const active = await midiManager.startBleServer();
+      setIsBleServerActive(active);
+
+      if (active) {
+        showMessage('📡 Modo BLE MIDI visível ativado.', 'success', 4500);
+      }
     } catch (err: any) {
-      // Aqui a mensagem vai aparecer se o hardware não suportar!
-      showMessage(`Erro: ${err?.message}`, 'error', 4500);
+      setIsBleServerActive(false);
+      showMessage(`Erro ao ativar BLE MIDI: ${err?.message || 'Falha desconhecida'}`, 'error', 4500);
     }
   };
 
   const handleNoteOn = useCallback(async (note: number) => {
-    // CORREÇÃO: A mensagem de aviso voltou!
     if (!connectedDestination && !isBleServerActive) {
       showMessage('Selecione um destino MIDI ou ative a visibilidade.', 'warn', 2500);
       return;
     }
-
     try {
       const channel = channelRef.current;
       const velocity = velocityRef.current;
@@ -247,13 +237,12 @@ export default function App() {
         bytesHex: res.hex,
       });
     } catch (err: any) {
-      showMessage(`Erro ao transmitir Note On: ${err?.message}`, 'error', 2500);
+      showMessage(`Erro Note On: ${err?.message}`, 'error', 2500);
     }
   }, [connectedDestination, isBleServerActive, showMessage]);
 
   const handleNoteOff = useCallback(async (note: number) => {
     if (!connectedDestination && !isBleServerActive) return;
-
     try {
       const channel = channelRef.current;
       const res = await midiManager.sendNoteOff(channel, note);
@@ -267,108 +256,90 @@ export default function App() {
         velocity: 0,
         bytesHex: res.hex,
       });
-    } catch {
-      // Silencioso
-    }
+    } catch {}
   }, [connectedDestination, isBleServerActive]);
 
   const handleDisabledPress = useCallback(() => {
-    showMessage('Selecione um destino MIDI ou ative a visibilidade.', 'warn', 2500);
+    showMessage('Selecione um destino MIDI primeiro.', 'warn', 2500);
   }, [showMessage]);
 
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
-    try {
-      await (NativeMidi as any).fecharApp();
-    } catch (err) {
-      try { window.close(); } catch {}
-    }
+    try { await (NativeMidi as any).fecharApp(); } catch { try { window.close(); } catch {} }
   };
 
-  const usbAndVirtualDestinations = destinations.filter(
-    (d) => d.type === 'usb' || d.type === 'virtual' || d.type === 'local'
-  );
+  const usbAndVirtualDestinations = destinations.filter((d) => d.type === 'usb' || d.type === 'virtual' || d.type === 'local');
   const bleDestinations = destinations.filter((d) => d.type === 'ble');
-
   const isUsbConnected = connectedDestination && (connectedDestination.type === 'usb' || connectedDestination.type === 'virtual' || connectedDestination.type === 'local');
   const isBleConnected = connectedDestination && connectedDestination.type === 'ble';
 
   return (
-    <div className={`h-[100dvh] w-full flex flex-col font-sans select-none overflow-hidden antialiased transition-colors ${
-      isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'
-    }`}>
-      <header className={`w-full border-b px-3 py-2 shrink-0 relative z-50 shadow-md flex items-center justify-between transition-colors ${
-        isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-      }`}>
+    <div className="h-screen w-screen overflow-hidden fixed inset-0 w-full flex flex-col font-sans select-none overflow-hidden antialiased bg-slate-950 text-slate-100">
+      
+      {/* HEADER PRINCIPAL CLEAN & PRO */}
+      <header className="w-full border-b border-slate-800 px-3 py-2 shrink-0 relative z-50 shadow-md flex items-center justify-between bg-slate-900">
         
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-sky-400 flex items-center gap-1">
-            <span>🎹</span> MIDI Controller
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-extrabold uppercase tracking-widest text-sky-400 flex items-center gap-1.5">
+            <span>🎹</span> NexusMIDI Pro
           </span>
-          <div className="flex items-center gap-2">
-            <span className={`text-[9px] uppercase font-bold tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-              Canal:
-            </span>
-            <ChannelDropdown
-              selectedChannel={selectedChannel}
-              onSelectChannel={(ch) => {
-                setSelectedChannel(ch);
-                showMessage(`Canal alterado para: Canal ${ch}`, 'info', 1800);
-              }}
-            />
+
+          {/* ABAS DE NAVEGAÇÃO */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <button
+              onClick={() => setActiveTab('keyboard')}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTab === 'keyboard' ? 'bg-sky-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <span>🎹</span> Teclado
+            </button>
+            <button
+              onClick={() => setActiveTab('hub')}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTab === 'hub' ? 'bg-fuchsia-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <span>🎛️</span> MIDI Hub
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 min-w-0">
+        {/* BOTÕES NO CANTO SUPERIOR DIREITO */}
+        <div className="flex items-center gap-1.5">
           
           {/* Botão USB */}
           <div className="relative">
             <button
-              type="button"
-              onClick={() => {
-                setIsUsbOpen(!isUsbOpen);
-                setIsBleOpen(false);
-                setIsSettingsOpen(false);
-                void refreshDestinations();
-              }}
+              onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); void refreshDestinations(); }}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                isUsbConnected
-                  ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
-                  : isDarkMode ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200' : 'bg-slate-200 hover:bg-slate-300 border-slate-300 text-slate-800'
+                isUsbConnected ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200' : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
               }`}
             >
               <span>🔌</span>
-              <span className="truncate max-w-[100px] sm:max-w-[130px]">
-                {isUsbConnected && connectedDestination ? connectedDestination.displayName : 'USB / Internos'}
+              <span className="truncate max-w-[90px] sm:max-w-[110px]">
+                {isUsbConnected && connectedDestination ? connectedDestination.displayName : 'USB'}
               </span>
               <span className="text-[9px]">▼</span>
             </button>
 
             {isUsbOpen && (
-              <div className="absolute right-0 mt-1 w-64 bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] py-1">
+              <div className="absolute right-0 mt-1 w-60 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-[100] py-1">
                 <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400 bg-slate-950 flex justify-between items-center">
-                  <span>Dispositivos USB / Internos</span>
+                  <span>Portas USB</span>
                   <button onClick={refreshDestinations} className="text-sky-400 hover:underline">↻</button>
                 </div>
-                {(connectedDestination && isUsbConnected) && (
-                  <button
-                    onClick={handleDisconnect}
-                    className="w-full text-left px-3 py-1.5 text-xs text-rose-300 bg-rose-950/50 hover:bg-rose-950 border-b border-slate-800 font-semibold"
-                  >
-                    ✕ Desconectar atual
+                {isUsbConnected && (
+                  <button onClick={handleDisconnect} className="w-full text-left px-3 py-1.5 text-xs text-rose-300 bg-rose-950/50 hover:bg-rose-950 border-b border-slate-800">
+                    ✕ Desconectar
                   </button>
                 )}
                 {usbAndVirtualDestinations.length === 0 ? (
                   <div className="px-3 py-2 text-xs text-slate-500 italic">Nenhum encontrado.</div>
                 ) : (
                   usbAndVirtualDestinations.map((dest) => (
-                    <button
-                      key={dest.id}
-                      onClick={() => handleConnect(dest)}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-800 ${
-                        connectedDestination?.id === dest.id ? 'text-emerald-400 font-bold bg-emerald-950/40' : 'text-slate-200'
-                      }`}
-                    >
+                    <button key={dest.id} onClick={() => handleConnect(dest)} className="w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-800 text-slate-200">
                       <span className="truncate">{dest.displayName}</span>
                       <span>{connectedDestination?.id === dest.id ? '🟢' : '⚪'}</span>
                     </button>
@@ -381,261 +352,215 @@ export default function App() {
           {/* Botão Bluetooth BLE */}
           <div className="relative">
             <button
-              type="button"
-              onClick={() => {
-                setIsBleOpen(!isBleOpen);
-                setIsUsbOpen(false);
-                setIsSettingsOpen(false);
-                void refreshDestinations();
-              }}
+              onClick={() => { setIsBleOpen(!isBleOpen); setIsUsbOpen(false); void refreshDestinations(); }}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
-                (isBleConnected || isBleServerActive)
-                  ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
-                  : 'bg-sky-950/60 hover:bg-sky-900/60 border-sky-800/80 text-sky-200'
+                (isBleConnected || isBleServerActive) ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200' : 'bg-sky-950/60 hover:bg-sky-900/60 border-sky-800 text-sky-200'
               }`}
             >
               <span>📡</span>
-              <span className="truncate max-w-[100px] sm:max-w-[130px]">
-                {isBleServerActive ? 'Aguardando Tablet...' : isBleConnected && connectedDestination ? connectedDestination.displayName : 'Bluetooth BLE'}
+              <span className="truncate max-w-[90px] sm:max-w-[110px]">
+                {isBleServerActive ? 'Visível...' : isBleConnected && connectedDestination ? connectedDestination.displayName : 'Bluetooth'}
               </span>
               <span className="text-[9px]">▼</span>
             </button>
 
             {isBleOpen && (
-              <div className="absolute right-0 mt-1 w-64 bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] py-1">
+              <div className="absolute right-0 mt-1 w-64 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-[100] py-1">
                 <div className="px-3 py-1 text-[10px] uppercase font-bold text-sky-400 bg-slate-950 flex justify-between items-center">
-                  <span>Conexões Bluetooth BLE</span>
+                  <span>Conexões Bluetooth</span>
                   <button onClick={refreshDestinations} className="text-sky-400 hover:underline">↻</button>
                 </div>
-
                 {(connectedDestination || isBleServerActive) && (
-                  <button
-                    onClick={handleDisconnect}
-                    className="w-full text-left px-3 py-1.5 text-xs text-rose-300 bg-rose-950/50 hover:bg-rose-950 border-b border-slate-800 font-semibold"
-                  >
-                    ✕ Desconectar atual
+                  <button onClick={handleDisconnect} className="w-full text-left px-3 py-1.5 text-xs text-rose-300 bg-rose-950/50 hover:bg-rose-950 border-b border-slate-800">
+                    ✕ Desconectar
                   </button>
                 )}
-
-                {bleDestinations.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-slate-500 italic">Nenhum pareado/encontrado.</div>
-                ) : (
-                  bleDestinations.map((dest) => (
-                    <button
-                      key={dest.id}
-                      onClick={() => handleConnect(dest)}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-800 ${
-                        connectedDestination?.id === dest.id ? 'text-emerald-400 font-bold bg-emerald-950/40' : 'text-slate-200'
-                      }`}
-                    >
-                      <span className="truncate">{dest.displayName}</span>
-                      <span>{connectedDestination?.id === dest.id ? '🟢' : '⚪'}</span>
-                    </button>
-                  ))
-                )}
-
-                <div className="p-1.5 bg-slate-950 border-t border-slate-800 flex flex-col gap-1.5">
-                  <button
-                    type="button"
-                    onClick={handleScanBle}
-                    disabled={isScanningBle}
-                    className="w-full text-center px-3 py-1.5 text-xs font-semibold text-sky-300 bg-sky-950 hover:bg-sky-900 border border-sky-800 rounded transition"
-                  >
-                    {isScanningBle ? 'Buscando BLE...' : '📡 Buscar Novos BLE'}
+                <div className="max-h-[45vh] overflow-y-auto overscroll-contain custom-scrollbar">
+                  {bleDestinations.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-slate-500 italic">
+                      Nenhum dispositivo BLE MIDI encontrado.
+                    </div>
+                  ) : (
+                    bleDestinations.map((dest) => (
+                      <button key={dest.id} onClick={() => handleConnect(dest)} className="w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-800 text-slate-200">
+                        <span className="truncate pr-2">{dest.displayName}</span>
+                        <span>{connectedDestination?.id === dest.id ? '🟢' : '⚪'}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+                <div className="p-1.5 bg-slate-950 border-t border-slate-800 flex flex-col gap-1">
+                  <button onClick={handleScanBle} disabled={isScanningBle} className="w-full text-center px-3 py-1 text-xs text-sky-300 bg-sky-950 hover:bg-sky-900 border border-sky-800 rounded">
+                    {isScanningBle ? 'Buscando...' : '📡 Buscar Novos BLE'}
                   </button>
-                  
                   <button
-                    type="button"
-                    onClick={handleStartBleServer}
-                    className="w-full text-center px-3 py-1.5 text-xs font-semibold text-fuchsia-300 bg-fuchsia-950 hover:bg-fuchsia-900 border border-fuchsia-800 rounded transition"
+                    onClick={isBleServerActive ? handleDisconnect : handleStartBleServer}
+                    className={`w-full text-center px-3 py-1 text-xs rounded border ${
+                      isBleServerActive
+                        ? 'text-rose-300 bg-rose-950 hover:bg-rose-900 border-rose-800'
+                        : 'text-fuchsia-300 bg-fuchsia-950 hover:bg-fuchsia-900 border-fuchsia-800'
+                    }`}
                   >
-                    📶 Ficar Visível (Para Android)
+                    {isBleServerActive ? '⏹ Parar BLE MIDI' : '📶 Ficar Visível (Android)'}
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSettingsOpen(!isSettingsOpen);
-                setIsUsbOpen(false);
-                setIsBleOpen(false);
-              }}
-              className={`px-2.5 py-1.5 border rounded-lg text-xs font-semibold transition ${
-                isDarkMode ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200' : 'bg-slate-200 hover:bg-slate-300 border-slate-300 text-slate-800'
-              }`}
-              title="Configurações de Tema e Cores"
-            >
-              ⚙️
-            </button>
-
-            {isSettingsOpen && (
-              <div className="absolute right-0 mt-1 w-80 max-h-[85dvh] overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] p-3 text-xs text-slate-200 space-y-3 custom-scrollbar">
-                <div className="font-bold text-slate-300 border-b border-slate-800 pb-1.5 flex justify-between items-center bg-slate-900 sticky top-0 py-1 z-20">
-                  <span>⚙️ Configurações</span>
-                  <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white px-1">✕</button>
-                </div>
-
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Tema da Aplicação</span>
-                  <div className="grid grid-cols-3 gap-1">
-                    <button
-                      onClick={() => setThemeMode('light')}
-                      className={`py-1 rounded border font-medium ${themeMode === 'light' ? 'bg-sky-600 border-sky-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}`}
-                    >
-                      ☀️ Claro
-                    </button>
-                    <button
-                      onClick={() => setThemeMode('dark')}
-                      className={`py-1 rounded border font-medium ${themeMode === 'dark' ? 'bg-sky-600 border-sky-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}`}
-                    >
-                      🌙 Escuro
-                    </button>
-                    <button
-                      onClick={() => setThemeMode('system')}
-                      className={`py-1 rounded border font-medium ${themeMode === 'system' ? 'bg-sky-600 border-sky-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}`}
-                    >
-                      💻 Sistema
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Intensidade (Velocity)</span>
-                  <div className="grid grid-cols-2 gap-1">
-                    {VELOCITY_OPTIONS.map((vel) => (
-                      <button
-                        key={vel.id}
-                        onClick={() => setSelectedVelocity(vel.id)}
-                        className={`py-1 px-2 rounded border font-medium text-center truncate ${
-                          selectedVelocity === vel.id ? 'bg-emerald-600 border-emerald-500 text-white font-bold' : 'bg-slate-800 border-slate-700 text-slate-300'
-                        }`}
-                      >
-                        {vel.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Cores do Teclado MIDI</span>
-                  <div className="space-y-1">
-                    {KEYBOARD_PALETTES.map((pal) => (
-                      <button
-                        key={pal.id}
-                        onClick={() => setSelectedPaletteId(pal.id)}
-                        className={`w-full text-left px-2.5 py-1.5 rounded border flex items-center justify-between ${
-                          selectedPaletteId === pal.id ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200 font-bold' : 'bg-slate-800 border-slate-700 text-slate-300'
-                        }`}
-                      >
-                        <span className="truncate">{pal.name}</span>
-                        <div className="flex gap-1 items-center">
-                          <span className="w-3 h-3 rounded-full border border-slate-500" style={{ backgroundColor: pal.white }}></span>
-                          <span className="w-3 h-3 rounded-full border border-slate-500" style={{ backgroundColor: pal.black }}></span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
+          {/* Botão de Opções / Configurações Pro (Canto Superior Direito) */}
           <button
-            type="button"
-            onClick={() => setShowExitConfirm(true)}
-            className="px-2.5 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/80 text-rose-200 rounded-lg text-xs font-semibold transition"
-            title="Fechar Aplicativo"
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 transition shadow"
+            title="Opções e Configurações"
           >
-            🚪 Sair
+            ⚙️
           </button>
 
-          <div className="hidden sm:flex items-center">
-            <PWAInstallButton />
-          </div>
-
+          <button
+            onClick={() => setShowExitConfirm(true)}
+            className="p-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-200 rounded-lg transition"
+            title="Sair"
+          >
+            🚪
+          </button>
         </div>
       </header>
 
-      {showExitConfirm && (
+      {/* MODAL DE CONFIGURAÇÕES PRO COM SCROLL INTERNO AJUSTADO */}
+      {isSettingsOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 max-w-sm w-full shadow-2xl text-center space-y-4">
-            <div className="text-3xl">⚠️</div>
-            <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">Deseja realmente fechar o aplicativo?</h3>
-            <p className="text-xs text-slate-400">As conexões MIDI ativas serão encerradas.</p>
-            <div className="grid grid-cols-2 gap-2 pt-2">
+          <div className="bg-slate-900 border-2 border-slate-700 rounded-2xl p-5 max-w-md w-full max-h-[85vh] flex flex-col shadow-2xl space-y-4 text-xs text-slate-200">
+            <div className="font-bold text-sm text-slate-100 border-b border-slate-800 pb-2 flex justify-between items-center shrink-0">
+              <span>⚙️ Opções e Configurações Pro</span>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white px-2 py-1 font-bold">✕</button>
+            </div>
+
+            {/* ÁREA COM SCROLL INTERNO PARA AS OPÇÕES */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+              <div>
+                <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">Intensidade (Velocity)</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {VELOCITY_OPTIONS.map((vel) => (
+                    <button
+                      key={vel.id}
+                      onClick={() => setSelectedVelocity(vel.id)}
+                      className={`py-2 px-3 rounded-lg border font-medium text-center truncate ${
+                        selectedVelocity === vel.id ? 'bg-emerald-600 border-emerald-500 text-white font-bold' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      {vel.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">Cores do Teclado MIDI</span>
+                <div className="space-y-1.5">
+                  {KEYBOARD_PALETTES.map((pal) => (
+                    <button
+                      key={pal.id}
+                      onClick={() => setSelectedPaletteId(pal.id)}
+                      className={`w-full text-left px-3 py-2 rounded-lg border flex items-center justify-between transition ${
+                        selectedPaletteId === pal.id ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200 font-bold' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      <span className="truncate">{pal.name}</span>
+                      <div className="flex gap-1.5 items-center">
+                        <span className="w-3.5 h-3.5 rounded-full border border-slate-500" style={{ backgroundColor: pal.white }}></span>
+                        <span className="w-3.5 h-3.5 rounded-full border border-slate-500" style={{ backgroundColor: pal.black }}></span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end shrink-0 border-t border-slate-800">
               <button
-                type="button"
-                onClick={() => setShowExitConfirm(false)}
-                className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-semibold text-xs border border-slate-700 transition"
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg shadow transition"
               >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmExit}
-                className="py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-semibold text-xs transition shadow-lg"
-              >
-                Sim, Sair
+                Concluído
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* MODAL DE SAÍDA */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 max-w-sm w-full text-center space-y-4 shadow-2xl">
+            <div className="text-3xl">⚠️</div>
+            <h3 className="text-sm font-bold text-slate-100 uppercase">Deseja fechar o aplicativo?</h3>
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button onClick={() => setShowExitConfirm(false)} className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold">Cancelar</button>
+              <button onClick={handleConfirmExit} className="py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold shadow">Sim, Sair</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MENSAGENS DE STATUS */}
       {statusMessage && (
-        <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
-          <div
-            className={`pointer-events-auto px-4 py-1.5 rounded-lg text-xs font-bold shadow-xl border flex items-center gap-2 max-w-sm ${
-              statusMessage.type === 'warn'
-                ? 'bg-amber-950/95 text-amber-200 border-amber-500/60'
-                : statusMessage.type === 'error'
-                ? 'bg-rose-950/95 text-rose-200 border-rose-500/60'
-                : statusMessage.type === 'success'
-                ? 'bg-emerald-950/95 text-emerald-200 border-emerald-500/60'
-                : 'bg-slate-900/95 text-slate-200 border-slate-700'
-            }`}
-          >
-            <span>{statusMessage.type === 'warn' ? '⚠️️' : statusMessage.type === 'error' ? '❌' : statusMessage.type === 'success' ? '✅' : 'ℹ️'}</span>
+        <div className="fixed bottom-6 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
+          <div className={`pointer-events-auto px-4 py-1.5 rounded-lg text-xs font-bold shadow-xl border flex items-center gap-2 max-w-sm ${
+            statusMessage.type === 'warn' ? 'bg-amber-950/95 text-amber-200 border-amber-500' :
+            statusMessage.type === 'error' ? 'bg-rose-950/95 text-rose-200 border-rose-500' :
+            statusMessage.type === 'success' ? 'bg-emerald-950/95 text-emerald-200 border-emerald-500' :
+            'bg-slate-900/95 text-slate-200 border-slate-700'
+          }`}>
+            <span>{statusMessage.type === 'warn' ? '⚠️' : statusMessage.type === 'error' ? '❌' : statusMessage.type === 'success' ? '✅' : 'ℹ️'}</span>
             <span className="flex-1 truncate">{statusMessage.text}</span>
           </div>
         </div>
       )}
 
-      <main className="flex-1 w-full h-[calc(100dvh-60px)] p-2 flex flex-col gap-1 overflow-hidden">
-        <div className="w-full h-full flex flex-col">
-          <MidiKeyboard
-            /* CORREÇÃO: O teclado agora valida as duas coisas! */
-            isConnected={!!connectedDestination || isBleServerActive} 
-            onNoteOn={handleNoteOn}
-            onNoteOff={handleNoteOff}
-            onDisabledPress={handleDisabledPress}
-            customWhiteKeyColor={activePalette.white}
-            customBlackKeyColor={activePalette.black}
+      {/* CONTEÚDO PRINCIPAL (TECLADO OU MIDI HUB) */}
+      <main className="flex-1 w-full h-[calc(100dvh-55px)] flex flex-col overflow-hidden">
+        {activeTab === 'keyboard' ? (
+          <div className="flex-1 w-full p-2 flex flex-col gap-1 overflow-hidden">
+            <div className="w-full h-full flex flex-col">
+              <MidiKeyboard
+                isConnected={!!connectedDestination || isBleServerActive}
+                selectedChannel={selectedChannel}
+                onSelectChannel={(ch) => {
+                  setSelectedChannel(ch);
+                  showMessage(`Canal alterado para: ${ch}`, 'info', 1500);
+                }}
+                onNoteOn={handleNoteOn}
+                onNoteOff={handleNoteOff}
+                onDisabledPress={handleDisabledPress}
+                customWhiteKeyColor={activePalette.white}
+                customBlackKeyColor={activePalette.black}
+              />
+            </div>
+            
+            <div className="shrink-0 flex items-center justify-between px-2 py-0.5 text-[10px] text-slate-500 font-mono">
+              <div className="flex items-center gap-1.5">
+                <span className={lastTxCommand ? 'text-emerald-400 font-bold' : 'text-slate-600'}>TX MIDI:</span>
+                {lastTxCommand ? (
+                  <span className="text-slate-300">{lastTxCommand.type} CH {lastTxCommand.channel} • {lastTxCommand.noteName} (Vel {lastTxCommand.velocity})</span>
+                ) : (
+                  <span className="italic text-slate-600">Aguardando toque</span>
+                )}
+              </div>
+              <div><span>NexusMIDI Pro • Studio Mode</span></div>
+            </div>
+          </div>
+        ) : (
+          <MidiHubScreen
+            destinations={destinations}
+            connectedDestination={connectedDestination}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
+            onRefresh={refreshDestinations}
           />
-        </div>
-
-        <div className="shrink-0 flex items-center justify-between px-2 py-0.5 text-[10px] text-slate-500 font-mono">
-          <div className="flex items-center gap-1.5">
-            <span className={lastTxCommand ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
-              TX MIDI:
-            </span>
-            {lastTxCommand ? (
-              <span className="text-slate-300">
-                {lastTxCommand.type} CH {lastTxCommand.channel} • {lastTxCommand.noteName} (Vel {lastTxCommand.velocity})
-              </span>
-            ) : (
-              <span className="italic text-slate-600">Aguardando toque</span>
-            )}
-          </div>
-          <div>
-            <span>Modo Paisagem Fixo • Tema: {themeMode}</span>
-          </div>
-        </div>
+        )}
       </main>
+
     </div>
   );
 }

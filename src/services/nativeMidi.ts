@@ -23,6 +23,9 @@ export interface NativeMidiPlugin {
   connect(options: { id: string; port?: number }): Promise<{ id: string; name: string }>;
   connectBluetooth(options: { address: string; port?: number }): Promise<{ id: string; name: string }>;
   disconnect(): Promise<void>;
+  startBleServer(): Promise<{ active: boolean; clients?: number }>;
+  stopBleServer(): Promise<void>;
+  isBleServerRunning(): Promise<{ active: boolean; clients?: number }>;
   fecharApp(): Promise<void>;
   send(options: { data: number[] }): Promise<void>;
   addListener(
