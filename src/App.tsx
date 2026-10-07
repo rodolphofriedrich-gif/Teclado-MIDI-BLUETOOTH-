@@ -10,7 +10,8 @@ import {
   getNoteName,
 } from './services/midiService';
 import { MidiKeyboard } from './components/MidiKeyboard';
-import { MidiHubScreen } from './components/MidiHubScreen';
+import { MidiRouterScreen } from './components/MidiRouterScreen';
+import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { NativeMidi } from './services/nativeMidi';
 
 export const KEYBOARD_PALETTES = [
@@ -33,7 +34,7 @@ export const VELOCITY_OPTIONS = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'keyboard' | 'hub'>('keyboard');
+  const [activeTab, setActiveTab] = useState<'keyboard' | 'router' | 'monitor'>('keyboard');
   const [selectedChannel, setSelectedChannel] = useState<number>(1);
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
   const [connectedDestination, setConnectedDestination] = useState<MidiDestination | null>(null);
@@ -225,7 +226,7 @@ export default function App() {
     try {
       const channel = channelRef.current;
       const velocity = velocityRef.current;
-      const res = await midiManager.sendNoteOnCustomVelocity(channel, note, velocity);
+      const res = await midiManager.sendKeyboardNote(channel, note, velocity, true);
       setLastTxCommand({
         id: Math.random().toString(36).substring(2, 7),
         timestamp: new Date().toLocaleTimeString(),
@@ -245,7 +246,7 @@ export default function App() {
     if (!connectedDestination && !isBleServerActive) return;
     try {
       const channel = channelRef.current;
-      const res = await midiManager.sendNoteOff(channel, note);
+      const res = await midiManager.sendKeyboardNote(channel, note, 0, false);
       setLastTxCommand({
         id: Math.random().toString(36).substring(2, 7),
         timestamp: new Date().toLocaleTimeString(),
@@ -295,15 +296,23 @@ export default function App() {
               <span>🎹</span> Teclado
             </button>
             <button
-              onClick={() => setActiveTab('hub')}
+              onClick={() => setActiveTab('router')}
               className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
-                activeTab === 'hub' ? 'bg-fuchsia-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                activeTab === 'router' ? 'bg-fuchsia-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
-              <span>🎛️</span> MIDI Hub
+              <span>🔀</span> Router
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
             </button>
           </div>
+          <button
+            onClick={() => setActiveTab('monitor')}
+            className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+              activeTab === 'monitor' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <span>📊</span> Monitor
+          </button>
         </div>
 
         {/* BOTÕES NO CANTO SUPERIOR DIREITO */}
@@ -550,14 +559,17 @@ export default function App() {
               <div><span>NexusMIDI Pro • Studio Mode</span></div>
             </div>
           </div>
-        ) : (
-          <MidiHubScreen
+        ) : activeTab === 'router' ? (
+          <MidiRouterScreen
             destinations={destinations}
             connectedDestination={connectedDestination}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
             onRefresh={refreshDestinations}
+            isBleServerActive={isBleServerActive}
           />
+        ) : (
+          <MidiMonitorScreen />
         )}
       </main>
 
