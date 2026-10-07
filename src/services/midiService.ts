@@ -7,7 +7,7 @@
  */
 
 import { Capacitor } from '@capacitor/core';
-import { MidiDestination, DestinationType } from '../types/midi';
+import { MidiDestination, DestinationType, MidiLogEntry, MidiMessageType, MidiRouteConfig } from '../types/midi';
 import { NativeMidi, NativeMidiDevice, NativeBleDevice } from './nativeMidi';
 
 export const MIDI_BLE_SERVICE_UUID = '03b80e5a-ede8-4b33-a020-514f0634123b';
@@ -73,6 +73,23 @@ export class MidiControllerManager {
 
   private onDisconnectCallback:
     ((destination: MidiDestination) => void) | null = null;
+
+  private midiMessageListeners = new Set<(entry: MidiLogEntry) => void>();
+
+  private routeConfig: MidiRouteConfig = {
+    enabled: true,
+    source: 'virtual',
+    destinationId: null,
+    inputChannel: 1,
+    outputChannel: 1,
+    transpose: 0,
+    velocityMin: 1,
+    velocityMax: 127,
+    allowNotes: true,
+    allowControlChange: true,
+    allowProgramChange: true,
+    allowPitchBend: true,
+  };
 
   private connectedDestination: MidiDestination | null = null;
 
@@ -161,9 +178,17 @@ export class MidiControllerManager {
           await NativeMidi.addListener(
             'midiMessage',
             (event) => {
-              if (event) {
-                this.onStateChangeCallback?.();
+              if (event?.data) {
+                const entry = this.createLogEntry(
+                  Array.from(event.data as number[]),
+                  'RX',
+                  this.connectedDestination?.displayName || 'MIDI'
+                );
+                if (entry) {
+                  this.midiMessageListeners.forEach((listener) => listener(entry));
+                }
               }
+              this.onStateChangeCallback?.();
             }
           )
         );
@@ -304,6 +329,146 @@ export class MidiControllerManager {
       (scanned) =>
         !this.isScannedBleDeviceAlreadyNative(scanned)
     );
+  }
+
+  public addMidiMessageListener(listener: (entry: MidiLogEntry) => void): () => void {
+    this.midiMessageListeners.add(listener);
+    return () => this.midiMessageListeners.delete(listener);
+  }
+
+  public getRouteConfig(): MidiRouteConfig {
+    return { ...this.routeConfig };
+  }
+
+  public setRouteConfig(config: Partial<MidiRouteConfig>): void {
+    this.routeConfig = { ...this.routeConfig, ...config };
+  }
+
+  public async sendBytes(data: number[], source = 'NexusMIDI'): Promise<{ bytes: number[]; hex: string }> {
+    const bytes = data.map((value) => value & 0xff);
+    await this.transmitBytes(bytes);
+    const entry = this.createLogEntry(bytes, 'TX', source);
+    if (entry) this.midiMessageListeners.forEach((listener) => listener(entry));
+    return { bytes, hex: this.bytesToHex(bytes) };
+  }
+
+  public async sendRoutedMessage(data: number[]): Promise<{ bytes: number[]; hex: string } | null> {
+    const bytes = [...data];
+    if (bytes.length === 0 || !this.routeConfig.enabled) return null;
+
+    const status = bytes[0] & 0xff;
+    const type = status & 0xf0;
+    const inputChannel = (status & 0x0f) + 1;
+
+    if (type === 0xf0) {
+      return this.sendBytes(bytes, 'Router');
+    }
+
+    if (inputChannel !== this.routeConfig.inputChannel) return null;
+
+    const allowed =
+      ((type === 0x80 || type === 0x90) && this.routeConfig.allowNotes) ||
+      (type === 0xb0 && this.routeConfig.allowControlChange) ||
+      (type === 0xc0 && this.routeConfig.allowProgramChange) ||
+      (type === 0xe0 && this.routeConfig.allowPitchBend);
+
+    if (!allowed) return null;
+
+    bytes[0] = type | ((this.routeConfig.outputChannel - 1) & 0x0f);
+
+    if ((type === 0x80 || type === 0x90) && bytes.length >= 3) {
+      const note = Math.max(0, Math.min(127, (bytes[1] & 0x7f) + this.routeConfig.transpose));
+      bytes[1] = note;
+      const velocity = bytes[2] & 0x7f;
+      if (type === 0x80 || velocity === 0) {
+        bytes[2] = 0;
+      } else {
+        const mapped = this.routeConfig.velocityMin +
+          Math.round((velocity / 127) * (this.routeConfig.velocityMax - this.routeConfig.velocityMin));
+        bytes[2] = Math.max(1, Math.min(127, mapped));
+      }
+    }
+
+    return this.sendBytes(bytes, 'Router');
+  }
+
+  public async sendKeyboardNote(channel: number, note: number, velocity: number, on: boolean): Promise<{ bytes: number[]; hex: string }> {
+    const config = this.routeConfig;
+    const inputChannel = channel;
+    const outputChannel = config.outputChannel || channel;
+    const type = on && velocity > 0 ? 0x90 : 0x80;
+    const mappedNote = Math.max(0, Math.min(127, note + (config.enabled ? config.transpose : 0)));
+    const mappedVelocity = on && velocity > 0
+      ? Math.max(1, Math.min(127, config.velocityMin + Math.round((velocity / 127) * (config.velocityMax - config.velocityMin))))
+      : 0;
+    const bytes = [
+      type | ((outputChannel - 1) & 0x0f),
+      mappedNote,
+      mappedVelocity,
+    ];
+    if (!config.enabled) {
+      bytes[0] = type | ((inputChannel - 1) & 0x0f);
+      bytes[1] = note & 0x7f;
+      bytes[2] = on ? velocity & 0x7f : 0;
+    }
+    return this.sendBytes(bytes, 'Keyboard/Router');
+  }
+
+  public async sendControlChange(channel: number, controller: number, value: number): Promise<{ bytes: number[]; hex: string }> {
+    return this.sendBytes([0xb0 | ((channel - 1) & 0x0f), controller & 0x7f, value & 0x7f]);
+  }
+
+  public async sendProgramChange(channel: number, program: number): Promise<{ bytes: number[]; hex: string }> {
+    return this.sendBytes([0xc0 | ((channel - 1) & 0x0f), program & 0x7f]);
+  }
+
+  public async sendPitchBend(channel: number, value14: number): Promise<{ bytes: number[]; hex: string }> {
+    const value = Math.max(0, Math.min(16383, value14));
+    return this.sendBytes([0xe0 | ((channel - 1) & 0x0f), value & 0x7f, (value >> 7) & 0x7f]);
+  }
+
+  public async sendPanic(channels: number[] = Array.from({ length: 16 }, (_, i) => i + 1)): Promise<void> {
+    for (const channel of channels) {
+      await this.sendControlChange(channel, 123, 0); // All Notes Off
+      await this.sendControlChange(channel, 120, 0); // All Sound Off
+      await this.sendControlChange(channel, 121, 0); // Reset All Controllers
+    }
+  }
+
+  private bytesToHex(bytes: number[]): string {
+    return bytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+  }
+
+  private createLogEntry(data: number[], direction: 'RX' | 'TX', source: string): MidiLogEntry | null {
+    if (!data.length) return null;
+    const status = data[0] & 0xff;
+    const high = status & 0xf0;
+    const channel = (status & 0x0f) + 1;
+    let type: MidiMessageType = 'Unknown';
+    let note = 0;
+    let velocity = 0;
+
+    if (high === 0x80) { type = 'Note Off'; note = data[1] ?? 0; velocity = data[2] ?? 0; }
+    else if (high === 0x90) { type = (data[2] ?? 0) === 0 ? 'Note Off' : 'Note On'; note = data[1] ?? 0; velocity = data[2] ?? 0; }
+    else if (high === 0xa0) { type = 'Poly Aftertouch'; note = data[1] ?? 0; velocity = data[2] ?? 0; }
+    else if (high === 0xb0) { type = 'Control Change'; note = data[1] ?? 0; velocity = data[2] ?? 0; }
+    else if (high === 0xc0) { type = 'Program Change'; note = data[1] ?? 0; }
+    else if (high === 0xd0) { type = 'Channel Pressure'; velocity = data[1] ?? 0; }
+    else if (high === 0xe0) { type = 'Pitch Bend'; note = ((data[2] ?? 0) << 7) | (data[1] ?? 0); }
+    else if (status >= 0xf0) { type = 'System'; }
+
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toLocaleTimeString(),
+      type,
+      channel,
+      note,
+      noteName: (high === 0x80 || high === 0x90 || high === 0xa0) ? getNoteName(note) : '—',
+      velocity,
+      bytesHex: this.bytesToHex(data),
+      direction,
+      source,
+    };
   }
 
   public async getBluetoothState(): Promise<boolean> {
@@ -731,9 +896,7 @@ export class MidiControllerManager {
       velocity & 0x7f,
     ];
 
-    await this.transmitBytes(
-      midiBytes
-    );
+    await this.sendBytes(midiBytes, 'Keyboard');
 
     return {
       bytes: midiBytes,
@@ -771,9 +934,7 @@ export class MidiControllerManager {
       0,
     ];
 
-    await this.transmitBytes(
-      midiBytes
-    );
+    await this.sendBytes(midiBytes, 'Keyboard');
 
     return {
       bytes: midiBytes,
