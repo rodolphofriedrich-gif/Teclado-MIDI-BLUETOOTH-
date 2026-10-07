@@ -788,7 +788,32 @@ export class MidiControllerManager {
     };
   }
 
-  private async transmitBytes(
+  /**
+   * Fila única de transmissão MIDI.
+   *
+   * O bridge Capacitor/Android é assíncrono. Sem serialização, um toque
+   * muito rápido pode iniciar Note On e Note Off quase simultaneamente e
+   * o Android receber as chamadas fora da ordem esperada. Isso é uma causa
+   * clássica de nota presa.
+   */
+  private transmitQueue: Promise<void> = Promise.resolve();
+
+  private transmitBytes(
+    midiBytes: number[]
+  ): Promise<void> {
+    const bytes = [...midiBytes];
+
+    const operation = this.transmitQueue.then(
+      () => this.transmitBytesNow(bytes)
+    );
+
+    // Uma falha não pode bloquear as próximas mensagens da fila.
+    this.transmitQueue = operation.catch(() => undefined);
+
+    return operation;
+  }
+
+  private async transmitBytesNow(
     midiBytes: number[]
   ): Promise<void> {
     if (!this.connectedDestination && !this.bleServerActive) {
@@ -797,13 +822,10 @@ export class MidiControllerManager {
       );
     }
 
-    if (
-      Capacitor.getPlatform() === 'android'
-    ) {
+    if (Capacitor.getPlatform() === 'android') {
       await NativeMidi.send({
         data: midiBytes,
       });
-
       return;
     }
 
@@ -813,10 +835,9 @@ export class MidiControllerManager {
       );
     }
 
-    const output =
-      this.midiAccess?.outputs.get(
-        this.connectedDestination.id
-      );
+    const output = this.midiAccess?.outputs.get(
+      this.connectedDestination.id
+    );
 
     if (!output) {
       throw new Error(
