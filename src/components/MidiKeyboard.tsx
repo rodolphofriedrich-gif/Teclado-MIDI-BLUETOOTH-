@@ -27,6 +27,12 @@ export function MidiKeyboard({
   const [isScrollLocked, setIsScrollLocked] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Mantém o controle das notas realmente pressionadas.
+  // Usamos Pointer Events para que mouse, toque e caneta
+  // sigam exatamente o mesmo caminho e para garantir que
+  // cada Note On tenha um Note Off correspondente.
+  const activeNotesRef = useRef<Set<number>>(new Set());
+
   // Total de teclas brancas exibidas (2 oitavas = 14 teclas brancas)
   const totalWhiteKeys = 14;
 
@@ -119,10 +125,9 @@ export function MidiKeyboard({
           list.push(
             <div
               key={midiNote}
-              onMouseDown={() => isConnected ? onNoteOn(midiNote) : onDisabledPress()}
-              onMouseUp={() => onNoteOff(midiNote)}
-              onTouchStart={(e) => { e.preventDefault(); isConnected ? onNoteOn(midiNote) : onDisabledPress(); }}
-              onTouchEnd={(e) => { e.preventDefault(); onNoteOff(midiNote); }}
+              onPointerDown={(e) => pressNote(midiNote, e)}
+              onPointerUp={(e) => releaseNote(midiNote, e)}
+              onPointerCancel={(e) => releaseNote(midiNote, e)}
               className="h-full border border-slate-400 rounded-b-md flex flex-col justify-end pb-2 items-center cursor-pointer active:bg-sky-200 transition-colors relative shadow-inner z-10 shrink-0"
               style={{
                 width: `${keyWidth}px`,
@@ -142,10 +147,9 @@ export function MidiKeyboard({
           list.push(
             <div
               key={midiNote}
-              onMouseDown={() => isConnected ? onNoteOn(midiNote) : onDisabledPress()}
-              onMouseUp={() => onNoteOff(midiNote)}
-              onTouchStart={(e) => { e.preventDefault(); isConnected ? onNoteOn(midiNote) : onDisabledPress(); }}
-              onTouchEnd={(e) => { e.preventDefault(); onNoteOff(midiNote); }}
+              onPointerDown={(e) => pressNote(midiNote, e)}
+              onPointerUp={(e) => releaseNote(midiNote, e)}
+              onPointerCancel={(e) => releaseNote(midiNote, e)}
               className="absolute h-[60%] z-30 border border-slate-950 rounded-b-md flex flex-col justify-end pb-1 items-center cursor-pointer active:opacity-60 transition-opacity shadow-2xl"
               style={{
                 width: `${blackWidth}px`,
@@ -159,6 +163,90 @@ export function MidiKeyboard({
     }
     return list;
   };
+
+  const pressNote = (
+    note: number,
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+
+    if (!isConnected) {
+      onDisabledPress();
+      return;
+    }
+
+    // Impede Note On duplicado para o mesmo ponteiro/nota.
+    if (activeNotesRef.current.has(note)) {
+      return;
+    }
+
+    activeNotesRef.current.add(note);
+
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Alguns WebViews podem não disponibilizar pointer capture.
+    }
+
+    // Não aguardamos aqui: a fila do midiService garante a ordem
+    // Note On -> Note Off mesmo em toques muito rápidos.
+    void onNoteOn(note);
+  };
+
+  const releaseNote = (
+    note: number,
+    event?: React.PointerEvent<HTMLDivElement>
+  ) => {
+    event?.preventDefault();
+
+    if (!activeNotesRef.current.has(note)) {
+      return;
+    }
+
+    activeNotesRef.current.delete(note);
+
+    if (event) {
+      try {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {
+        // Ignora diferenças de suporte do WebView.
+      }
+    }
+
+    void onNoteOff(note);
+  };
+
+  // Se o aplicativo perder foco, libera imediatamente todas as notas
+  // que ainda estiverem marcadas como pressionadas. Isso evita notas
+  // presas ao abrir uma notificação, trocar de aplicativo ou bloquear a tela.
+  useEffect(() => {
+    const releaseAllNotes = () => {
+      const notes = Array.from(activeNotesRef.current);
+      activeNotesRef.current.clear();
+
+      for (const note of notes) {
+        void onNoteOff(note);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        releaseAllNotes();
+      }
+    };
+
+    window.addEventListener('blur', releaseAllNotes);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('blur', releaseAllNotes);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      // Garante que nenhuma nota permaneça presa ao desmontar o teclado.
+      releaseAllNotes();
+    };
+  }, [onNoteOff]);
 
   return (
     <div className="flex-1 w-full flex flex-col bg-slate-900 rounded-xl border border-slate-800 p-2 gap-2 select-none overflow-hidden shadow-xl">
