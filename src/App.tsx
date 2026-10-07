@@ -278,15 +278,15 @@ export default function App() {
     <div className="h-screen w-screen overflow-hidden fixed inset-0 w-full flex flex-col font-sans select-none overflow-hidden antialiased bg-slate-950 text-slate-100">
       
       {/* HEADER PRINCIPAL CLEAN & PRO */}
-      <header className="w-full border-b border-slate-800 px-3 py-2 shrink-0 relative z-50 shadow-md flex items-center justify-between bg-slate-900">
+      <header className="w-full border-b border-slate-800 px-2 sm:px-3 py-2 shrink-0 relative z-50 shadow-md flex flex-wrap items-center justify-between gap-y-2 bg-slate-900">
         
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:gap-3">
           <span className="text-xs font-extrabold uppercase tracking-widest text-sky-400 flex items-center gap-1.5">
             <span>🎹</span> NexusMIDI Pro
           </span>
 
           {/* ABAS DE NAVEGAÇÃO */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <div className="flex shrink-0 items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
             <button
               onClick={() => setActiveTab('keyboard')}
               className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
@@ -316,7 +316,7 @@ export default function App() {
         </div>
 
         {/* BOTÕES NO CANTO SUPERIOR DIREITO */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
           
           {/* Botão USB */}
           <div className="relative">
@@ -528,7 +528,7 @@ export default function App() {
       )}
 
       {/* CONTEÚDO PRINCIPAL (TECLADO OU MIDI HUB) */}
-      <main className="flex-1 w-full h-[calc(100dvh-55px)] flex flex-col overflow-hidden">
+      <main className="flex-1 min-h-0 w-full flex flex-col overflow-hidden">
         {activeTab === 'keyboard' ? (
           <div className="flex-1 w-full p-2 flex flex-col gap-1 overflow-hidden">
             <div className="w-full h-full flex flex-col">
