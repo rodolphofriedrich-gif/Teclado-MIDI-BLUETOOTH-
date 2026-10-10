@@ -13,6 +13,7 @@ import { MidiKeyboard } from './components/MidiKeyboard';
 import { MidiRouterScreen } from './components/MidiRouterScreen';
 import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { NativeMidi } from './services/nativeMidi';
+import { Music2, GitBranch, Activity } from 'lucide-react';
 
 export const KEYBOARD_PALETTES = [
   { id: 'default', name: 'Clássico / Padrão', white: '#ffffff', black: '#1e293b' },
@@ -285,35 +286,46 @@ export default function App() {
             <span>🎹</span> NexusMIDI Pro
           </span>
 
-          {/* ABAS DE NAVEGAÇÃO */}
-          <div className="flex shrink-0 items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          {/* ABAS DE NAVEGAÇÃO — ícones compactos para celular */}
+          <nav aria-label="Navegação principal" className="flex shrink-0 items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
             <button
+              type="button"
               onClick={() => setActiveTab('keyboard')}
-              className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+              aria-label="Teclado MIDI"
+              aria-pressed={activeTab === 'keyboard'}
+              title="Teclado MIDI"
+              className={`h-9 w-9 sm:h-10 sm:w-10 rounded-md transition flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
                 activeTab === 'keyboard' ? 'bg-sky-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
-              <span>🎹</span> Teclado
+              <Music2 size={20} strokeWidth={2.2} aria-hidden="true" />
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('router')}
-              className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+              aria-label="MIDI Router"
+              aria-pressed={activeTab === 'router'}
+              title="MIDI Router"
+              className={`relative h-9 w-9 sm:h-10 sm:w-10 rounded-md transition flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 ${
                 activeTab === 'router' ? 'bg-fuchsia-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
-              <span>🔀</span> Router
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <GitBranch size={20} strokeWidth={2.2} aria-hidden="true" />
+              <span className="absolute right-1 top-1 w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true"></span>
             </button>
-          </div>
-          <button
-            onClick={() => setActiveTab('monitor')}
-            className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === 'monitor' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-            }`}
-          >
-            <span>📊</span> Monitor
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('monitor')}
+              aria-label="Monitor MIDI"
+              aria-pressed={activeTab === 'monitor'}
+              title="Monitor MIDI"
+              className={`h-9 w-9 sm:h-10 sm:w-10 rounded-md transition flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+                activeTab === 'monitor' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <Activity size={20} strokeWidth={2.2} aria-hidden="true" />
+            </button>
+          </nav>
 
         {/* BOTÕES NO CANTO SUPERIOR DIREITO */}
         <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
