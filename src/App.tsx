@@ -326,6 +326,7 @@ export default function App() {
               <Activity size={20} strokeWidth={2.2} aria-hidden="true" />
             </button>
           </nav>
+        </div>
 
         {/* BOTÕES NO CANTO SUPERIOR DIREITO */}
         <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
