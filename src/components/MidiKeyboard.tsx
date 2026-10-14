@@ -128,7 +128,7 @@ export function MidiKeyboard({
               onPointerDown={(e) => pressNote(midiNote, e)}
               onPointerUp={(e) => releaseNote(midiNote, e)}
               onPointerCancel={(e) => releaseNote(midiNote, e)}
-              className="h-full border border-slate-400 rounded-b-md flex flex-col justify-end pb-2 items-center cursor-pointer active:bg-sky-200 transition-colors relative shadow-inner z-10 shrink-0"
+              className="h-full border border-slate-400 rounded-b-md flex flex-col justify-end pb-2 items-center cursor-pointer transition-[transform,filter,background-color,box-shadow] duration-75 ease-out active:translate-y-[3px] active:brightness-95 active:shadow-inner relative shadow-[0_4px_0_rgba(0,0,0,0.22)] z-10 shrink-0"
               style={{
                 width: `${keyWidth}px`,
                 backgroundColor: customWhiteKeyColor,
@@ -150,7 +150,7 @@ export function MidiKeyboard({
               onPointerDown={(e) => pressNote(midiNote, e)}
               onPointerUp={(e) => releaseNote(midiNote, e)}
               onPointerCancel={(e) => releaseNote(midiNote, e)}
-              className="absolute h-[60%] z-30 border border-slate-950 rounded-b-md flex flex-col justify-end pb-1 items-center cursor-pointer active:opacity-60 transition-opacity shadow-2xl"
+              className="absolute h-[60%] z-30 border border-slate-950 rounded-b-md flex flex-col justify-end pb-1 items-center cursor-pointer transition-[transform,filter,box-shadow] duration-75 ease-out active:translate-y-[2px] active:brightness-125 active:shadow-lg shadow-2xl"
               style={{
                 width: `${blackWidth}px`,
                 left: `${absoluteLeft}px`,
