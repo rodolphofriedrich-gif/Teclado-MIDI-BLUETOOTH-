@@ -12,8 +12,9 @@ import {
 import { MidiKeyboard } from './components/MidiKeyboard';
 import { MidiRouterScreen } from './components/MidiRouterScreen';
 import { MidiMonitorScreen } from './components/MidiMonitorScreen';
+import { MidiControlsScreen } from './components/MidiControlsScreen';
 import { NativeMidi } from './services/nativeMidi';
-import { Music2, GitBranch, Activity } from 'lucide-react';
+import { Music2, GitBranch, Activity, SlidersHorizontal, Settings } from 'lucide-react';
 
 export const KEYBOARD_PALETTES = [
   { id: 'default', name: 'Clássico / Padrão', white: '#ffffff', black: '#1e293b' },
@@ -35,7 +36,7 @@ export const VELOCITY_OPTIONS = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'keyboard' | 'router' | 'monitor'>('keyboard');
+  const [activeTab, setActiveTab] = useState<'keyboard' | 'router' | 'monitor' | 'controls' | 'settings'>('keyboard');
   const [selectedChannel, setSelectedChannel] = useState<number>(1);
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
   const [connectedDestination, setConnectedDestination] = useState<MidiDestination | null>(null);
@@ -47,7 +48,6 @@ export default function App() {
 
   const [isUsbOpen, setIsUsbOpen] = useState<boolean>(false);
   const [isBleOpen, setIsBleOpen] = useState<boolean>(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
 
   const [selectedPaletteId, setSelectedPaletteId] = useState<string>(() => {
@@ -315,6 +315,18 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={() => setActiveTab('controls')}
+              aria-label="Controles MIDI"
+              aria-pressed={activeTab === 'controls'}
+              title="Controles MIDI"
+              className={`h-9 w-9 sm:h-10 sm:w-10 rounded-md transition flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${
+                activeTab === 'controls' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <SlidersHorizontal size={20} strokeWidth={2.2} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab('monitor')}
               aria-label="Monitor MIDI"
               aria-pressed={activeTab === 'monitor'}
@@ -324,6 +336,18 @@ export default function App() {
               }`}
             >
               <Activity size={20} strokeWidth={2.2} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('settings')}
+              aria-label="Configurações"
+              aria-pressed={activeTab === 'settings'}
+              title="Configurações"
+              className={`h-9 w-9 sm:h-10 sm:w-10 rounded-md transition flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                activeTab === 'settings' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <Settings size={20} strokeWidth={2.2} aria-hidden="true" />
             </button>
           </nav>
         </div>
@@ -430,15 +454,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Botão de Opções / Configurações Pro (Canto Superior Direito) */}
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 transition shadow"
-            title="Opções e Configurações"
-          >
-            ⚙️
-          </button>
-
           <button
             onClick={() => setShowExitConfirm(true)}
             className="p-2 bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-200 rounded-lg transition"
@@ -448,68 +463,6 @@ export default function App() {
           </button>
         </div>
       </header>
-
-      {/* MODAL DE CONFIGURAÇÕES PRO COM SCROLL INTERNO AJUSTADO */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-2 border-slate-700 rounded-2xl p-5 max-w-md w-full max-h-[85vh] flex flex-col shadow-2xl space-y-4 text-xs text-slate-200">
-            <div className="font-bold text-sm text-slate-100 border-b border-slate-800 pb-2 flex justify-between items-center shrink-0">
-              <span>⚙️ Opções e Configurações Pro</span>
-              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white px-2 py-1 font-bold">✕</button>
-            </div>
-
-            {/* ÁREA COM SCROLL INTERNO PARA AS OPÇÕES */}
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-              <div>
-                <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">Intensidade (Velocity)</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {VELOCITY_OPTIONS.map((vel) => (
-                    <button
-                      key={vel.id}
-                      onClick={() => setSelectedVelocity(vel.id)}
-                      className={`py-2 px-3 rounded-lg border font-medium text-center truncate ${
-                        selectedVelocity === vel.id ? 'bg-emerald-600 border-emerald-500 text-white font-bold' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-                      }`}
-                    >
-                      {vel.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">Cores do Teclado MIDI</span>
-                <div className="space-y-1.5">
-                  {KEYBOARD_PALETTES.map((pal) => (
-                    <button
-                      key={pal.id}
-                      onClick={() => setSelectedPaletteId(pal.id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg border flex items-center justify-between transition ${
-                        selectedPaletteId === pal.id ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200 font-bold' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-                      }`}
-                    >
-                      <span className="truncate">{pal.name}</span>
-                      <div className="flex gap-1.5 items-center">
-                        <span className="w-3.5 h-3.5 rounded-full border border-slate-500" style={{ backgroundColor: pal.white }}></span>
-                        <span className="w-3.5 h-3.5 rounded-full border border-slate-500" style={{ backgroundColor: pal.black }}></span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end shrink-0 border-t border-slate-800">
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg shadow transition"
-              >
-                Concluído
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* MODAL DE SAÍDA */}
       {showExitConfirm && (
@@ -581,8 +534,81 @@ export default function App() {
             onRefresh={refreshDestinations}
             isBleServerActive={isBleServerActive}
           />
-        ) : (
+        ) : activeTab === 'controls' ? (
+          <div className="flex-1 min-h-0 p-2 sm:p-3 overflow-hidden">
+            <MidiControlsScreen
+              channel={selectedChannel}
+              isConnected={!!connectedDestination || isBleServerActive}
+              onStatus={(message, type = 'info') => showMessage(message, type, 3000)}
+            />
+          </div>
+        ) : activeTab === 'monitor' ? (
           <MidiMonitorScreen />
+        ) : (
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
+            <section className="mx-auto w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl space-y-6">
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300">
+                  <Settings size={24} aria-hidden="true" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-100">Configurações</h2>
+                  <p className="text-xs sm:text-sm text-slate-400">Personalize a resposta e a aparência do teclado.</p>
+                </div>
+              </div>
+
+              <section className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-200">Intensidade das notas (Velocity)</h3>
+                  <p className="mt-1 text-xs text-slate-400">Define a força enviada ao tocar nas teclas.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {VELOCITY_OPTIONS.map((vel) => (
+                    <button
+                      key={vel.id}
+                      type="button"
+                      onClick={() => setSelectedVelocity(vel.id)}
+                      aria-pressed={selectedVelocity === vel.id}
+                      className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        selectedVelocity === vel.id ? 'bg-emerald-600 border-emerald-500 text-white shadow-md' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      {vel.name}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-200">Aparência das teclas</h3>
+                  <p className="mt-1 text-xs text-slate-400">Escolha a combinação de cores do piano virtual.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {KEYBOARD_PALETTES.map((pal) => (
+                    <button
+                      key={pal.id}
+                      type="button"
+                      onClick={() => setSelectedPaletteId(pal.id)}
+                      aria-pressed={selectedPaletteId === pal.id}
+                      className={`min-h-12 w-full rounded-xl border px-3 py-2 text-left flex items-center gap-3 transition ${
+                        selectedPaletteId === pal.id ? 'bg-sky-950/70 border-sky-500 text-sky-100' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      <span className="flex shrink-0 items-center -space-x-1">
+                        <span className="h-6 w-5 rounded border border-slate-500 shadow-sm" style={{ backgroundColor: pal.white }} />
+                        <span className="h-5 w-4 rounded border border-slate-500 shadow-md" style={{ backgroundColor: pal.black }} />
+                      </span>
+                      <span className="min-w-0 flex-1 text-xs sm:text-sm font-medium">{pal.name}</span>
+                      {selectedPaletteId === pal.id && <span className="text-sky-300 text-xs font-bold">Selecionado</span>}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <p className="text-[11px] text-slate-500 border-t border-slate-800 pt-3">As preferências são salvas automaticamente neste dispositivo.</p>
+            </section>
+          </div>
         )}
       </main>
 
