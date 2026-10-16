@@ -215,24 +215,16 @@ public class NativeMidiPlugin extends Plugin {
     @PluginMethod
     public void connectInput(PluginCall call) {
         String id = call.getString("id");
+        int portIndex = call.getInt("port", 0);
 
-        if (id == null || id.trim().isEmpty()) {
-            call.reject("ID do dispositivo de entrada obrigatório");
+        if (id == null || id.isEmpty()) {
+            call.reject("Identificador do dispositivo não informado");
             return;
         }
-
-        int portIndex = getPortIndex(call);
 
         MidiDeviceInfo info = findDevice(id);
-
         if (info == null) {
-            call.reject("Dispositivo MIDI de entrada não encontrado");
-            return;
-        }
-
-        if (portIndex < 0 ||
-            portIndex >= info.getOutputPortCount()) {
-            call.reject("Índice da porta de entrada inválido");
+            call.reject("Dispositivo MIDI não encontrado");
             return;
         }
 
@@ -243,55 +235,51 @@ public class NativeMidiPlugin extends Plugin {
             }
 
             MidiOutputPort port = device.openOutputPort(portIndex);
-
             if (port == null) {
                 closeDevice(device);
                 call.reject("Não foi possível abrir a porta MIDI de origem");
                 return;
             }
 
-            try {
-                port.connect(new MidiReceiver() {
-                    @Override
-                    public void onSend(
-                        byte[] data,
-                        int offset,
-                        int count,
-                        long timestamp
-                    ) throws IOException {
-                        JSArray messageData = new JSArray();
+            port.connect(new MidiReceiver() {
+                @Override
+                public void onSend(
+                    byte[] data,
+                    int offset,
+                    int count,
+                    long timestamp
+                ) throws IOException {
+                    JSArray messageData = new JSArray();
 
-                        for (int i = offset; i < offset + count; i++) {
-                            messageData.put(data[i] & 0xFF);
-                        }
+                    for (int i = offset; i < offset + count; i++) {
+                        messageData.put(data[i] & 0xFF);
+                    }
 
-                        JSObject message = new JSObject();
-                        message.put("data", messageData);
-                        message.put("sourceId", id);
-                MidiOutputPort oldPort = inputPorts.put(id, port);
-                MidiDevice oldDevice = inputDevices.put(id, device);
-
-                if (oldPort != null) {
-                    closePort(oldPort);
+                    JSObject message = new JSObject();
+                    message.put("data", messageData);
+                    message.put("sourceId", id);
+                    notifyListeners("midiMessage", message);
                 }
+            });
 
-                if (oldDevice != null && oldDevice != device) {
-                    closeDevice(oldDevice);
-                }
+            MidiOutputPort oldPort = inputPorts.put(id, port);
+            MidiDevice oldDevice = inputDevices.put(id, device);
 
-                JSObject result = new JSObject();
-                result.put("id", id);
-                result.put("name", getDeviceName(info));
-                result.put("port", portIndex);
-                call.resolve(result);
+            if (oldPort != null) {
+                closePort(oldPort);
+            }
 
-        if (id != null) {
-            closeOutputConnection(id);
-        } else {
-            closeAllOutputConnections();
-        }
+            if (oldDevice != null && oldDevice != device) {
+                closeDevice(oldDevice);
+            }
 
-        call.resolve();
+            JSObject result = new JSObject();
+            result.put("id", id);
+            result.put("name", getDeviceName(info));
+            result.put("port", portIndex);
+            call.resolve(result);
+
+        }, mainHandler);
     }
 
     @PluginMethod
