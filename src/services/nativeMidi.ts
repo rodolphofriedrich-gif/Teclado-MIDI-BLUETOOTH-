@@ -14,5 +14,5 @@ export interface NativeMidiPluginInterface {
   disconnectBleDevice(options: { address: string }): Promise<void>;
 }
 
-const NativeMidi = registerPlugin<NativeMidiPluginInterface>('NativeMidi');
-export default NativeMidi;
+// Exportando como named export para o App.tsx conseguir importar
+export const NativeMidi = registerPlugin<NativeMidiPluginInterface>('NativeMidi');
