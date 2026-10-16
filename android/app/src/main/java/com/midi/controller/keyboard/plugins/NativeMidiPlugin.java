@@ -1,7 +1,7 @@
-
 package com.midi.controller.keyboard.plugins;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
 import android.media.midi.MidiDevice;
 import android.media.midi.MidiDeviceInfo;
@@ -9,6 +9,7 @@ import android.media.midi.MidiInputPort;
 import android.media.midi.MidiManager;
 import android.media.midi.MidiOutputPort;
 import android.media.midi.MidiReceiver;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -42,56 +43,76 @@ public class NativeMidiPlugin extends Plugin {
 
     private MidiManager midiManager;
 
-    private final Map<String, MidiDevice> openedDevices = new HashMap<>();
-    private final Map<String, MidiInputPort> activeInputPorts = new HashMap<>();
-    private final Map<String, MidiOutputPort> activeOutputPorts = new HashMap<>();
+    // Dispositivos abertos para enviar MIDI ao equipamento.
+    private final Map<String, MidiDevice> outputDevices = new HashMap<>();
+    private final Map<String, MidiInputPort> outputPorts = new HashMap<>();
+
+    // Dispositivos abertos para receber MIDI do equipamento.
+    private final Map<String, MidiDevice> inputDevices = new HashMap<>();
+    private final Map<String, MidiOutputPort> inputPorts = new HashMap<>();
+
+    private final Handler mainHandler =
+        new Handler(Looper.getMainLooper());
 
     @Override
     public void load() {
         super.load();
+
         midiManager = (MidiManager)
             getContext().getSystemService(Context.MIDI_SERVICE);
+    }
+
+    @PluginMethod
+    public void initialize(PluginCall call) {
+        if (midiManager == null) {
+            call.reject("MidiManager indisponível neste dispositivo");
+            return;
+        }
+
+        call.resolve();
     }
 
     @PluginMethod
     public void getDevices(PluginCall call) {
         JSArray devicesArray = new JSArray();
 
-        if (midiManager == null) {
-            JSObject result = new JSObject();
-            result.put("devices", devicesArray);
-            call.resolve(result);
-            return;
-        }
+        if (midiManager != null) {
+            for (MidiDeviceInfo info : midiManager.getDevices()) {
+                JSObject item = new JSObject();
+                Bundle properties = info.getProperties();
 
-        for (MidiDeviceInfo info : midiManager.getDevices()) {
-            JSObject deviceObject = new JSObject();
-            String id = String.valueOf(info.getId());
+                String name = null;
+                String manufacturer = null;
 
-            Bundle properties = info.getProperties();
+                if (properties != null) {
+                    name = properties.getString(
+                        MidiDeviceInfo.PROPERTY_PRODUCT_NAME
+                    );
 
-            String name = properties != null
-                ? properties.getString(MidiDeviceInfo.PROPERTY_PRODUCT_NAME)
-                : null;
+                    manufacturer = properties.getString(
+                        MidiDeviceInfo.PROPERTY_MANUFACTURER_NAME
+                    );
+                }
 
-            if (name == null && properties != null) {
-                name = properties.getString(
-                    MidiDeviceInfo.PROPERTY_MANUFACTURER_NAME
-                );
+                if (name == null || name.trim().isEmpty()) {
+                    name = manufacturer != null
+                        ? manufacturer
+                        : "Dispositivo MIDI";
+                }
+
+                item.put("id", String.valueOf(info.getId()));
+                item.put("name", name);
+                item.put("displayName", name);
+                item.put("type", getDeviceType(info));
+                item.put("inputPortCount", info.getInputPortCount());
+                item.put("outputPortCount", info.getOutputPortCount());
+
+                if (manufacturer != null) {
+                    item.put("manufacturer", manufacturer);
+                }
+
+                devicesArray.put(item);
             }
-
-            if (name == null) {
-                name = "Dispositivo MIDI";
-            }
-
-            deviceObject.put("id", id);
-            deviceObject.put("name", name);
-            deviceObject.put("displayName", name);
-            deviceObject.put("type", "usb");
-            deviceObject.put("inputPortCount", info.getInputPortCount());
-            deviceObject.put("outputPortCount", info.getOutputPortCount());
-
-            devicesArray.put(deviceObject);
         }
 
         JSObject result = new JSObject();
@@ -99,197 +120,138 @@ public class NativeMidiPlugin extends Plugin {
         call.resolve(result);
     }
 
-    @PluginMethod
-    public void connect(PluginCall call) {
-        String id = call.getString("id");
-        Integer portIndex = call.getInt("portIndex", 0);
+    private String getDeviceType(MidiDeviceInfo info) {
+        switch (info.getType()) {
+            case MidiDeviceInfo.TYPE_USB:
+                return "usb";
 
-        if (id == null) {
-            call.reject("ID de dispositivo obrigatório");
-            return;
+            case MidiDeviceInfo.TYPE_BLUETOOTH:
+                return "ble";
+
+            case MidiDeviceInfo.TYPE_VIRTUAL:
+                return "virtual";
+
+            default:
+                return "unknown";
+        }
+    }
+
+    private int getPortIndex(PluginCall call) {
+        Integer index = call.getInt("portIndex");
+
+        if (index == null) {
+            index = call.getInt("port");
         }
 
-        openOutputPortForDevice(
-            id,
-            portIndex != null ? portIndex : 0,
-            call
-        );
+        return index != null ? index : 0;
     }
 
     @PluginMethod
-    public void disconnect(PluginCall call) {
+    public void connect(PluginCall call) {
+        connectOutputInternal(call);
+    }
+
+    @PluginMethod
+    public void connectOutput(PluginCall call) {
+        connectOutputInternal(call);
+    }
+
+    private void connectOutputInternal(PluginCall call) {
         String id = call.getString("id");
 
-        if (id != null) {
-            closeOutputPort(id);
+        if (id == null || id.trim().isEmpty()) {
+            call.reject("ID do dispositivo de saída obrigatório");
+            return;
         }
 
-        call.resolve();
+        int portIndex = getPortIndex(call);
+
+        MidiDeviceInfo info = findDevice(id);
+
+        if (info == null) {
+            call.reject("Dispositivo MIDI de saída não encontrado");
+            return;
+        }
+
+        if (portIndex < 0 ||
+            portIndex >= info.getInputPortCount()) {
+            call.reject("Índice da porta de saída inválido");
+            return;
+        }
+
+        midiManager.openDevice(info, device -> {
+            if (device == null) {
+                call.reject("Não foi possível abrir o dispositivo de saída");
+                return;
+            }
+
+            MidiInputPort port = device.openInputPort(portIndex);
+
+            if (port == null) {
+                closeDevice(device);
+                call.reject("Não foi possível abrir a porta MIDI de destino");
+                return;
+            }
+
+            MidiInputPort oldPort = outputPorts.put(id, port);
+            MidiDevice oldDevice = outputDevices.put(id, device);
+
+            if (oldPort != null) {
+                closePort(oldPort);
+            }
+
+            if (oldDevice != null && oldDevice != device) {
+                closeDevice(oldDevice);
+            }
+
+            JSObject result = new JSObject();
+            result.put("id", id);
+            result.put("name", getDeviceName(info));
+            call.resolve(result);
+
+        }, mainHandler);
     }
 
     @PluginMethod
     public void connectInput(PluginCall call) {
         String id = call.getString("id");
-        Integer portIndex = call.getInt("portIndex", 0);
 
-        if (id == null) {
-            call.reject("ID de entrada obrigatório");
+        if (id == null || id.trim().isEmpty()) {
+            call.reject("ID do dispositivo de entrada obrigatório");
             return;
         }
 
-        openInputPortForDevice(
-            id,
-            portIndex != null ? portIndex : 0,
-            call
-        );
-    }
+        int portIndex = getPortIndex(call);
 
-    @PluginMethod
-    public void disconnectInput(PluginCall call) {
-        String id = call.getString("id");
+        MidiDeviceInfo info = findDevice(id);
 
-        if (id != null) {
-            closeInputPort(id);
-        }
-
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void send(PluginCall call) {
-        JSArray dataArray = call.getArray("data");
-        String outputId = call.getString("outputId");
-
-        if (dataArray == null || dataArray.length() == 0) {
-            call.reject("Dados MIDI não informados");
-            return;
-        }
-
-        if (outputId == null) {
-            call.reject("ID da saída MIDI não informado");
-            return;
-        }
-
-        MidiInputPort inputPort = activeInputPorts.get(outputId);
-
-        if (inputPort == null) {
-            call.reject("Porta MIDI de saída não está conectada");
-            return;
-        }
-
-        try {
-            byte[] bytes = new byte[dataArray.length()];
-
-            for (int i = 0; i < dataArray.length(); i++) {
-                int value = dataArray.getInt(i);
-
-                if (value < 0 || value > 255) {
-                    call.reject("Valor MIDI inválido: " + value);
-                    return;
-                }
-
-                bytes[i] = (byte) value;
-            }
-
-            inputPort.send(bytes, 0, bytes.length, 0);
-            call.resolve();
-
-        } catch (Exception e) {
-            call.reject("Erro ao enviar MIDI: " + e.getMessage());
-        }
-    }
-
-    private void openOutputPortForDevice(
-        String id,
-        int portIndex,
-        PluginCall call
-    ) {
-        if (midiManager == null) {
-            call.reject("MidiManager indisponível");
-            return;
-        }
-
-        MidiDeviceInfo targetInfo = findDevice(id);
-
-        if (targetInfo == null) {
-            call.reject("Dispositivo MIDI não encontrado");
-            return;
-        }
-
-        if (portIndex < 0 ||
-            portIndex >= targetInfo.getInputPortCount()) {
-            call.reject("Índice da porta MIDI de destino inválido");
-            return;
-        }
-
-        midiManager.openDevice(targetInfo, device -> {
-            if (device == null) {
-                call.reject("Falha ao abrir dispositivo MIDI");
-                return;
-            }
-
-            MidiInputPort inputPort = device.openInputPort(portIndex);
-
-            if (inputPort == null) {
-                closeDevice(device);
-                call.reject("Falha ao abrir porta de entrada do destino MIDI");
-                return;
-            }
-
-            MidiInputPort oldPort = activeInputPorts.put(id, inputPort);
-            if (oldPort != null) {
-                closePort(oldPort);
-            }
-
-            MidiDevice oldDevice = openedDevices.put(id, device);
-            if (oldDevice != null && oldDevice != device) {
-                closeDevice(oldDevice);
-            }
-
-            call.resolve();
-
-        }, new Handler(Looper.getMainLooper()));
-    }
-
-    private void openInputPortForDevice(
-        String id,
-        int portIndex,
-        PluginCall call
-    ) {
-        if (midiManager == null) {
-            call.reject("MidiManager indisponível");
-            return;
-        }
-
-        MidiDeviceInfo targetInfo = findDevice(id);
-
-        if (targetInfo == null) {
+        if (info == null) {
             call.reject("Dispositivo MIDI de entrada não encontrado");
             return;
         }
 
         if (portIndex < 0 ||
-            portIndex >= targetInfo.getOutputPortCount()) {
-            call.reject("Índice da porta MIDI de entrada inválido");
+            portIndex >= info.getOutputPortCount()) {
+            call.reject("Índice da porta de entrada inválido");
             return;
         }
 
-        midiManager.openDevice(targetInfo, device -> {
+        midiManager.openDevice(info, device -> {
             if (device == null) {
-                call.reject("Falha ao abrir dispositivo MIDI de entrada");
+                call.reject("Não foi possível abrir o dispositivo de entrada");
                 return;
             }
 
-            MidiOutputPort outputPort = device.openOutputPort(portIndex);
+            MidiOutputPort port = device.openOutputPort(portIndex);
 
-            if (outputPort == null) {
+            if (port == null) {
                 closeDevice(device);
-                call.reject("Falha ao abrir porta de saída do controlador");
+                call.reject("Não foi possível abrir a porta MIDI de origem");
                 return;
             }
 
             try {
-                outputPort.connect(new MidiReceiver() {
+                port.connect(new MidiReceiver() {
                     @Override
                     public void onSend(
                         byte[] data,
@@ -297,48 +259,147 @@ public class NativeMidiPlugin extends Plugin {
                         int count,
                         long timestamp
                     ) throws IOException {
-
-                        JSObject midiMessage = new JSObject();
                         JSArray messageData = new JSArray();
 
                         for (int i = offset; i < offset + count; i++) {
                             messageData.put(data[i] & 0xFF);
                         }
 
-                        midiMessage.put("data", messageData);
-                        midiMessage.put("sourceId", id);
+                        JSObject message = new JSObject();
+                        message.put("data", messageData);
+                        message.put("sourceId", id);
 
-                        notifyListeners("midiMessage", midiMessage);
+                        notifyListeners("midiMessage", message);
                     }
                 });
 
-                MidiOutputPort oldPort =
-                    activeOutputPorts.put(id, outputPort);
+                MidiOutputPort oldPort = inputPorts.put(id, port);
+                MidiDevice oldDevice = inputDevices.put(id, device);
 
                 if (oldPort != null) {
                     closePort(oldPort);
                 }
 
-                MidiDevice oldDevice = openedDevices.put(id, device);
-
                 if (oldDevice != null && oldDevice != device) {
                     closeDevice(oldDevice);
                 }
 
-                call.resolve();
+                JSObject result = new JSObject();
+                result.put("id", id);
+                result.put("name", getDeviceName(info));
+                result.put("port", portIndex);
+                call.resolve(result);
 
             } catch (IOException e) {
-                closePort(outputPort);
+                closePort(port);
                 closeDevice(device);
-                call.reject(
-                    "Erro ao conectar receptor MIDI: " + e.getMessage()
-                );
+                call.reject("Erro ao receber MIDI: " + e.getMessage());
             }
 
-        }, new Handler(Looper.getMainLooper()));
+        }, mainHandler);
+    }
+
+    @PluginMethod
+    public void disconnect(PluginCall call) {
+        String id = call.getString("id");
+
+        if (id != null) {
+            closeOutputConnection(id);
+        } else {
+            closeAllOutputConnections();
+        }
+
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void disconnectOutput(PluginCall call) {
+        String id = call.getString("id");
+
+        if (id != null) {
+            closeOutputConnection(id);
+        } else {
+            closeAllOutputConnections();
+        }
+
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void disconnectInput(PluginCall call) {
+        String id = call.getString("id");
+
+        if (id != null) {
+            closeInputConnection(id);
+        } else {
+            closeAllInputConnections();
+        }
+
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void send(PluginCall call) {
+        sendToDevice(call);
+    }
+
+    @PluginMethod
+    public void sendTo(PluginCall call) {
+        sendToDevice(call);
+    }
+
+    private void sendToDevice(PluginCall call) {
+        String id = call.getString("id");
+        if (id == null) {
+            id = call.getString("outputId");
+        }
+
+        JSArray data = call.getArray("data");
+
+        if (id == null || id.trim().isEmpty()) {
+            call.reject("ID da saída MIDI não informado");
+            return;
+        }
+
+        if (data == null || data.length() == 0) {
+            call.reject("Dados MIDI não informados");
+            return;
+        }
+
+        MidiInputPort port = outputPorts.get(id);
+
+        if (port == null) {
+            call.reject("Saída MIDI não está conectada");
+            return;
+        }
+
+        try {
+            byte[] bytes = new byte[data.length()];
+
+            for (int i = 0; i < data.length(); i++) {
+                int value = data.getInt(i);
+
+                if (value < 0 || value > 255) {
+                    call.reject("Byte MIDI inválido: " + value);
+                    return;
+                }
+
+                bytes[i] = (byte) value;
+            }
+
+            port.send(bytes, 0, bytes.length, 0);
+            call.resolve();
+
+        } catch (Exception e) {
+            call.reject("Falha no envio MIDI: " + e.getMessage());
+        }
     }
 
     private MidiDeviceInfo findDevice(String id) {
+        if (midiManager == null) {
+            return null;
+        }
+
         for (MidiDeviceInfo info : midiManager.getDevices()) {
             if (String.valueOf(info.getId()).equals(id)) {
                 return info;
@@ -348,31 +409,55 @@ public class NativeMidiPlugin extends Plugin {
         return null;
     }
 
-    private void closeOutputPort(String id) {
-        MidiInputPort port = activeInputPorts.remove(id);
+    private String getDeviceName(MidiDeviceInfo info) {
+        Bundle properties = info.getProperties();
 
+        if (properties != null) {
+            String name = properties.getString(
+                MidiDeviceInfo.PROPERTY_PRODUCT_NAME
+            );
+
+            if (name != null && !name.trim().isEmpty()) {
+                return name;
+            }
+        }
+
+        return "Dispositivo MIDI";
+    }
+
+    private void closeOutputConnection(String id) {
+        MidiInputPort port = outputPorts.remove(id);
         if (port != null) {
             closePort(port);
         }
 
-        MidiDevice device = openedDevices.remove(id);
-
+        MidiDevice device = outputDevices.remove(id);
         if (device != null) {
             closeDevice(device);
         }
     }
 
-    private void closeInputPort(String id) {
-        MidiOutputPort port = activeOutputPorts.remove(id);
-
+    private void closeInputConnection(String id) {
+        MidiOutputPort port = inputPorts.remove(id);
         if (port != null) {
             closePort(port);
         }
 
-        MidiDevice device = openedDevices.remove(id);
-
+        MidiDevice device = inputDevices.remove(id);
         if (device != null) {
             closeDevice(device);
+        }
+    }
+
+    private void closeAllOutputConnections() {
+        for (String id : outputPorts.keySet().toArray(new String[0])) {
+            closeOutputConnection(id);
+        }
+    }
+
+    private void closeAllInputConnections() {
+        for (String id : inputPorts.keySet().toArray(new String[0])) {
+            closeInputConnection(id);
         }
     }
 
@@ -399,28 +484,63 @@ public class NativeMidiPlugin extends Plugin {
 
     @PluginMethod
     public void startBleServer(PluginCall call) {
-        call.resolve();
+        // Ainda não existe servidor BLE MIDI implementado neste plugin.
+        JSObject result = new JSObject();
+        result.put("active", false);
+        result.put("clients", 0);
+        call.resolve(result);
     }
 
     @PluginMethod
     public void stopBleServer(PluginCall call) {
-        call.resolve();
+        JSObject result = new JSObject();
+        result.put("active", false);
+        result.put("clients", 0);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void isBleServerRunning(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("active", false);
+        result.put("clients", 0);
+        call.resolve(result);
     }
 
     @PluginMethod
     public void scanBleDevices(PluginCall call) {
+        // A busca BLE MIDI ainda precisa de implementação real.
         JSObject result = new JSObject();
         result.put("devices", new JSArray());
         call.resolve(result);
     }
 
     @PluginMethod
-    public void connectBleDevice(PluginCall call) {
-        call.resolve();
+    public void scanBluetoothMidi(PluginCall call) {
+        scanBleDevices(call);
     }
 
     @PluginMethod
-    public void disconnectBleDevice(PluginCall call) {
+    public void fecharApp(PluginCall call) {
+        Activity activity = getActivity();
+
+        if (activity != null) {
+            activity.runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    activity.finishAndRemoveTask();
+                } else {
+                    activity.finish();
+                }
+            });
+        }
+
         call.resolve();
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        closeAllInputConnections();
+        closeAllOutputConnections();
+        super.handleOnDestroy();
     }
 }
