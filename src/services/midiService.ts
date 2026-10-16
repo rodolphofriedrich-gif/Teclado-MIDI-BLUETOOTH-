@@ -1,51 +1,110 @@
-import { MidiDestination, MidiRouteConfig, MidiMessage } from '../types/midi';
+import {
+  MidiDestination,
+  MidiRouteConfig,
+} from '../types/midi';
+
 import { NativeMidi } from './nativeMidi';
 
-// Restaurando a função exportada que o App.tsx utiliza
+export interface MidiMessage {
+  status: number;
+  data1: number;
+  data2: number;
+  timestamp: number;
+  sourceId?: string;
+}
+
 export const getNoteName = (note: number): string => {
-  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const noteNames = [
+    'C', 'C#', 'D', 'D#', 'E', 'F',
+    'F#', 'G', 'G#', 'A', 'A#', 'B',
+  ];
+
+  if (!Number.isInteger(note) || note < 0 || note > 127) {
+    return '--';
+  }
+
   const octave = Math.floor(note / 12) - 1;
-  const name = noteNames[note % 12];
-  return `${name}${octave}`;
+  return `${noteNames[note % 12]}${octave}`;
+};
+
+const DEFAULT_ROUTE_CONFIG: MidiRouteConfig = {
+  enabled: true,
+  source: 'virtual',
+  sourceId: 'virtual-main',
+  destinationId: null,
+  inputChannel: 0,
+  outputChannel: 0,
+  transpose: 0,
+  velocityMin: 1,
+  velocityMax: 127,
+  allowNotes: true,
+  allowControlChange: true,
+  allowProgramChange: true,
+  allowPitchBend: true,
 };
 
 class MidiService {
   private destinations: MidiDestination[] = [];
+
   private connectedOutput: MidiDestination | null = null;
-  private connectedInputs: Map<string, boolean> = new Map();
-  private messageListeners: ((msg: MidiMessage) => void)[] = [];
-  private onRefreshCallback?: () => void;
-  private onDisconnectCallback?: (dest: MidiDestination) => void;
+
+  private connectedInputs = new Map<string, boolean>();
+
+  private messageListeners: Array<
+    (message: MidiMessage) => void
+  > = [];
+
+  private onRefreshCallback?: (
+    destinations?: MidiDestination[]
+  ) => void;
+
+  private onDisconnectCallback?: (
+    destination: MidiDestination
+  ) => void;
 
   private routeConfig: MidiRouteConfig = {
-    inputId: 'virtual-main',
-    outputId: null,
-    channelFilter: 0,
-    outputChannel: 0,
-    transpose: 0,
-    velocityScale: 1.0,
-    fixedVelocity: 0,
-    filterCC: false,
-    filterProgramChange: false,
-    filterPitchBend: false,
+    ...DEFAULT_ROUTE_CONFIG,
   };
 
+  private listenerReady: Promise<void>;
+
   constructor() {
-    NativeMidi.addListener('midiMessage', (data: any) => {
-      if (data && data.data) {
-        this.handleIncomingBytes(data.data, data.sourceId);
-      }
-    });
+    this.listenerReady = this.installNativeListener();
   }
 
-  // Retrocompatibilidade com App.tsx
-  public setCallbacks(onRefresh: () => void, onDisconnect: (dest: MidiDestination) => void) {
+  private async installNativeListener(): Promise<void> {
+    try {
+      await NativeMidi.addListener('midiMessage', (data: any) => {
+        if (!data || !Array.isArray(data.data)) {
+          return;
+        }
+
+        this.handleIncomingBytes(
+          data.data,
+          data.sourceId != null
+            ? String(data.sourceId)
+            : undefined,
+        );
+      });
+    } catch (error) {
+      console.error(
+        'Não foi possível registrar o listener MIDI:',
+        error,
+      );
+    }
+  }
+
+  public setCallbacks(
+    onRefresh: (destinations?: MidiDestination[]) => void,
+    onDisconnect: (destination: MidiDestination) => void,
+  ): void {
     this.onRefreshCallback = onRefresh;
     this.onDisconnectCallback = onDisconnect;
   }
 
   public async initWebMidi(): Promise<void> {
-    // Inicialização da API Nativa
+    await this.listenerReady;
+    await NativeMidi.initialize();
   }
 
   public async getAvailableDestinations(): Promise<MidiDestination[]> {
@@ -55,191 +114,516 @@ class MidiService {
   public async refreshDevices(): Promise<MidiDestination[]> {
     try {
       const result = await NativeMidi.getDevices();
-      const usbDevices: MidiDestination[] = (result.devices || []).map((d: any) => ({
-        id: d.id,
-        name: d.name,
-        displayName: d.displayName || d.name,
-        type: 'usb',
-        inputPortCount: d.inputPortCount,
-        outputPortCount: d.outputPortCount,
-      }));
+
+      const nativeDevices: MidiDestination[] = (
+        result.devices || []
+      ).map((device) => {
+        const type = device.type;
+
+        return {
+          id: String(device.id),
+          name: device.name,
+          displayName: device.displayName || device.name,
+          type:
+            type === 'usb' ||
+            type === 'ble' ||
+            type === 'virtual' ||
+            type === 'local'
+              ? type
+              : 'usb',
+          manufacturer: device.manufacturer,
+          inputPortCount: device.inputPortCount,
+          outputPortCount: device.outputPortCount,
+        };
+      });
+
+      const virtualKeyboard: MidiDestination = {
+        id: 'virtual-main',
+        name: 'Teclado Virtual',
+        displayName: 'Teclado Virtual (NexusMIDI Pro)',
+        type: 'virtual',
+        inputPortCount: 0,
+        outputPortCount: 0,
+      };
 
       this.destinations = [
-        { id: 'virtual-main', name: 'Teclado Virtual', displayName: 'Teclado Virtual (NexusMIDI Pro)', type: 'virtual' },
-        ...usbDevices
+        virtualKeyboard,
+        ...nativeDevices.filter(
+          (device) => device.id !== virtualKeyboard.id,
+        ),
       ];
+
+      this.onRefreshCallback?.(this.destinations);
+
       return this.destinations;
-    } catch (e) {
-      console.error('Erro ao buscar dispositivos MIDI:', e);
+    } catch (error) {
+      console.error(
+        'Erro ao atualizar dispositivos MIDI:',
+        error,
+      );
+
       return this.destinations;
     }
   }
 
   public getDestinations(): MidiDestination[] {
-    return this.destinations;
+    return [...this.destinations];
   }
 
-  public setRouteConfig(config: MidiRouteConfig) {
-    this.routeConfig = config;
+  public setRouteConfig(config: MidiRouteConfig): void {
+    this.routeConfig = {
+      ...config,
+    };
   }
 
   public getRouteConfig(): MidiRouteConfig {
-    return this.routeConfig;
+    return {
+      ...this.routeConfig,
+    };
   }
 
-  // Retrocompatibilidade para conexão
-  public async connect(destination: MidiDestination): Promise<void> {
-    return this.connectOutput(destination);
+  // Mantém compatibilidade com as telas que usam connect().
+  public async connect(
+    destination: MidiDestination,
+  ): Promise<void> {
+    await this.connectOutput(destination);
   }
 
-  public async connectOutput(destination: MidiDestination): Promise<void> {
-    if (this.connectedOutput && this.connectedOutput.id !== destination.id) {
+  public async connectOutput(
+    destination: MidiDestination,
+  ): Promise<void> {
+    if (
+      this.connectedOutput &&
+      this.connectedOutput.id !== destination.id
+    ) {
       await this.disconnectOutput();
     }
-    if (destination.type === 'usb') {
-      await NativeMidi.connect({ id: destination.id });
+
+    if (destination.id !== 'virtual-main') {
+      await NativeMidi.connectOutput({
+        id: String(destination.id),
+        portIndex: 0,
+      });
     }
+
     this.connectedOutput = destination;
   }
 
   public async disconnect(): Promise<void> {
-    if (this.connectedOutput && this.onDisconnectCallback) {
-      this.onDisconnectCallback(this.connectedOutput);
+    const previousDestination = this.connectedOutput;
+
+    await this.disconnectOutput();
+
+    if (previousDestination) {
+      this.onDisconnectCallback?.(previousDestination);
     }
-    return this.disconnectOutput();
   }
 
   public async disconnectOutput(): Promise<void> {
     this.allNotesOff();
-    if (this.connectedOutput && this.connectedOutput.type === 'usb') {
-      await NativeMidi.disconnect({ id: this.connectedOutput.id });
+
+    const destination = this.connectedOutput;
+
+    if (destination && destination.id !== 'virtual-main') {
+      await NativeMidi.disconnectOutput({
+        id: String(destination.id),
+      });
     }
+
     this.connectedOutput = null;
   }
 
   public async connectInput(inputId: string): Promise<void> {
-    if (inputId === 'virtual-main') return;
-    if (!this.connectedInputs.has(inputId)) {
-      await NativeMidi.connectInput({ id: inputId });
-      this.connectedInputs.set(inputId, true);
+    if (inputId === 'virtual-main') {
+      return;
     }
+
+    if (this.connectedInputs.has(inputId)) {
+      return;
+    }
+
+    await NativeMidi.connectInput({
+      id: String(inputId),
+      portIndex: 0,
+    });
+
+    this.connectedInputs.set(inputId, true);
   }
 
   public async disconnectInput(inputId: string): Promise<void> {
-    if (inputId === 'virtual-main') return;
-    if (this.connectedInputs.has(inputId)) {
-      await NativeMidi.disconnectInput({ id: inputId });
-      this.connectedInputs.delete(inputId);
+    if (inputId === 'virtual-main') {
+      return;
+    }
+
+    if (!this.connectedInputs.has(inputId)) {
+      return;
+    }
+
+    await NativeMidi.disconnectInput({
+      id: String(inputId),
+    });
+
+    this.connectedInputs.delete(inputId);
+  }
+
+  public async isBleServerRunning(): Promise<boolean> {
+    try {
+      const result = await NativeMidi.isBleServerRunning();
+      return result.active === true;
+    } catch (error) {
+      console.error('Erro ao consultar o servidor BLE:', error);
+      return false;
     }
   }
 
-  // Retrocompatibilidade BLE
-  public async isBleServerRunning(): Promise<boolean> { return false; }
-  public async startBleServer(): Promise<boolean> { await NativeMidi.startBleServer(); return true; }
-  public async stopBleServer(): Promise<void> { await NativeMidi.stopBleServer(); }
-  public async scanBleDevice(): Promise<any[]> { 
-    const res = await NativeMidi.scanBleDevices(); 
-    return res.devices || []; 
+  public async startBleServer(): Promise<boolean> {
+    try {
+      const result = await NativeMidi.startBleServer();
+      return result.active === true;
+    } catch (error) {
+      console.error('Erro ao iniciar o servidor BLE:', error);
+      return false;
+    }
   }
 
-  // Retrocompatibilidade Teclado Virtual e Controles
-  public async sendKeyboardNote(channel: number, note: number, velocity: number, isNoteOn: boolean) {
-    const status = isNoteOn ? (0x90 + channel - 1) : (0x80 + channel - 1);
-    this.sendRoutedMessage(status, note, velocity);
-    return { hex: `${status.toString(16).padStart(2, '0')} ${note.toString(16).padStart(2, '0')} ${velocity.toString(16).padStart(2, '0')}` };
+  public async stopBleServer(): Promise<void> {
+    await NativeMidi.stopBleServer();
   }
 
-  public async sendControlChange(channel: number, controller: number, value: number) {
-    const status = 0xB0 + channel - 1;
-    this.transmitBytesNow([status, controller, value]);
-    return { hex: `${status.toString(16).padStart(2, '0')} ${controller.toString(16).padStart(2, '0')} ${value.toString(16).padStart(2, '0')}` };
+  public async scanBleDevice(): Promise<any[]> {
+    try {
+      const result = await NativeMidi.scanBleDevices({
+        durationMs: 15000,
+      });
+
+      return result.devices || [];
+    } catch (error) {
+      console.error('Erro ao procurar dispositivos BLE:', error);
+      return [];
+    }
   }
 
-  public async sendProgramChange(channel: number, program: number) {
-    const status = 0xC0 + channel - 1;
-    this.transmitBytesNow([status, program]);
-    return { hex: `${status.toString(16).padStart(2, '0')} ${program.toString(16).padStart(2, '0')}` };
+  public async sendKeyboardNote(
+    channel: number,
+    note: number,
+    velocity: number,
+    isNoteOn: boolean,
+  ): Promise<{ hex: string }> {
+    const safeChannel = this.clamp(Math.trunc(channel), 1, 16);
+    const safeNote = this.clamp(Math.trunc(note), 0, 127);
+    const safeVelocity = this.clamp(
+      Math.trunc(velocity),
+      0,
+      127,
+    );
+
+    const status = isNoteOn && safeVelocity > 0
+      ? 0x90 + safeChannel - 1
+      : 0x80 + safeChannel - 1;
+
+    this.sendRoutedMessage(status, safeNote, safeVelocity);
+
+    return {
+      hex: [
+        status,
+        safeNote,
+        safeVelocity,
+      ]
+        .map((value) => value.toString(16).padStart(2, '0'))
+        .join(' '),
+    };
   }
 
-  public async sendPitchBend(channel: number, value: number) {
-    const status = 0xE0 + channel - 1;
-    const lsb = value & 0x7F;
-    const msb = (value >> 7) & 0x7F;
-    this.transmitBytesNow([status, lsb, msb]);
-    return { hex: `${status.toString(16).padStart(2, '0')} ${lsb.toString(16).padStart(2, '0')} ${msb.toString(16).padStart(2, '0')}` };
+  public async sendControlChange(
+    channel: number,
+    controller: number,
+    value: number,
+  ): Promise<{ hex: string }> {
+    const status =
+      0xB0 + this.clamp(Math.trunc(channel), 1, 16) - 1;
+
+    const cc = this.clamp(Math.trunc(controller), 0, 127);
+    const safeValue = this.clamp(Math.trunc(value), 0, 127);
+
+    this.sendRoutedMessage(status, cc, safeValue);
+
+    return {
+      hex: this.toHex([status, cc, safeValue]),
+    };
   }
 
-  public sendRoutedMessage(status: number, data1: number, data2: number) {
-    const command = status & 0xf0;
-    const channel = (status & 0x0f) + 1;
+  public async sendProgramChange(
+    channel: number,
+    program: number,
+  ): Promise<{ hex: string }> {
+    const status =
+      0xC0 + this.clamp(Math.trunc(channel), 1, 16) - 1;
 
-    if (this.routeConfig.channelFilter > 0 && channel !== this.routeConfig.channelFilter) return;
-    if (this.routeConfig.filterCC && command === 0xB0) return;
-    if (this.routeConfig.filterProgramChange && command === 0xC0) return;
-    if (this.routeConfig.filterPitchBend && command === 0xE0) return;
+    const safeProgram = this.clamp(Math.trunc(program), 0, 127);
 
-    let finalNote = data1;
-    let finalVelocity = data2;
+    if (this.routeConfig.enabled &&
+        this.routeConfig.allowProgramChange) {
+      const finalChannel = this.getOutputChannel(
+        (status & 0x0F) + 1,
+      );
+
+      await this.transmitBytesNow([
+        0xC0 + finalChannel - 1,
+        safeProgram,
+      ]);
+    }
+
+    return {
+      hex: this.toHex([status, safeProgram]),
+    };
+  }
+
+  public async sendPitchBend(
+    channel: number,
+    value: number,
+  ): Promise<{ hex: string }> {
+    const safeChannel = this.clamp(Math.trunc(channel), 1, 16);
+    const safeValue = this.clamp(Math.trunc(value), 0, 16383);
+
+    const status = 0xE0 + safeChannel - 1;
+    const lsb = safeValue & 0x7F;
+    const msb = (safeValue >> 7) & 0x7F;
+
+    if (this.routeConfig.enabled &&
+        this.routeConfig.allowPitchBend) {
+      const finalChannel = this.getOutputChannel(safeChannel);
+
+      await this.transmitBytesNow([
+        0xE0 + finalChannel - 1,
+        lsb,
+        msb,
+      ]);
+    }
+
+    return {
+      hex: this.toHex([status, lsb, msb]),
+    };
+  }
+
+  public sendRoutedMessage(
+    status: number,
+    data1: number,
+    data2: number,
+  ): void {
+    if (!this.routeConfig.enabled) {
+      return;
+    }
+
+    const command = status & 0xF0;
+    const inputChannel = (status & 0x0F) + 1;
+
+    if (
+      this.routeConfig.inputChannel > 0 &&
+      inputChannel !== this.routeConfig.inputChannel
+    ) {
+      return;
+    }
 
     if (command === 0x90 || command === 0x80) {
-      finalNote = Math.max(0, Math.min(127, data1 + this.routeConfig.transpose));
-      if (command === 0x90 && data2 > 0) {
-        if (this.routeConfig.fixedVelocity > 0) {
-          finalVelocity = this.routeConfig.fixedVelocity;
-        } else {
-          finalVelocity = Math.max(1, Math.min(127, Math.round(data2 * this.routeConfig.velocityScale)));
-        }
+      if (!this.routeConfig.allowNotes) {
+        return;
+      }
+    } else if (
+      command === 0xB0 &&
+      !this.routeConfig.allowControlChange
+    ) {
+      return;
+    } else if (
+      command === 0xC0 &&
+      !this.routeConfig.allowProgramChange
+    ) {
+      return;
+    } else if (
+      command === 0xE0 &&
+      !this.routeConfig.allowPitchBend
+    ) {
+      return;
+    }
+
+    const outputChannel = this.getOutputChannel(inputChannel);
+
+    if (command === 0xC0) {
+      void this.transmitBytesNow([
+        0xC0 + outputChannel - 1,
+        this.clamp(data1, 0, 127),
+      ]);
+      return;
+    }
+
+    if (command === 0xD0) {
+      void this.transmitBytesNow([
+        0xD0 + outputChannel - 1,
+        this.clamp(data1, 0, 127),
+      ]);
+      return;
+    }
+
+    let finalData1 = this.clamp(data1, 0, 127);
+    let finalData2 = this.clamp(data2, 0, 127);
+
+    if (command === 0x90 || command === 0x80) {
+      finalData1 = this.clamp(
+        finalData1 + this.routeConfig.transpose,
+        0,
+        127,
+      );
+
+      // A nota desligada deve preservar a semântica de Note Off.
+      if (command === 0x90 && finalData2 > 0) {
+        finalData2 = this.clamp(
+          finalData2,
+          this.routeConfig.velocityMin,
+          this.routeConfig.velocityMax,
+        );
       }
     }
 
-    let finalChannel = channel;
-    if (this.routeConfig.outputChannel > 0) {
-      finalChannel = this.routeConfig.outputChannel;
+    void this.transmitBytesNow([
+      command + outputChannel - 1,
+      finalData1,
+      finalData2,
+    ]);
+  }
+
+  private getOutputChannel(inputChannel: number): number {
+    return this.routeConfig.outputChannel > 0
+      ? this.clamp(this.routeConfig.outputChannel, 1, 16)
+      : inputChannel;
+  }
+
+  private async transmitBytesNow(bytes: number[]): Promise<void> {
+    const destination = this.connectedOutput;
+
+    if (!destination || destination.id === 'virtual-main') {
+      return;
     }
 
-    const finalStatus = command + (finalChannel - 1);
-    this.transmitBytesNow([finalStatus, finalNote, finalVelocity]);
-  }
-
-  private transmitBytesNow(bytes: number[]) {
-    NativeMidi.send({ data: bytes, outputId: this.connectedOutput?.id });
-  }
-
-  public allNotesOff() {
-    for (let ch = 1; ch <= 16; ch++) {
-      this.transmitBytesNow([0xB0 + (ch - 1), 123, 0]);
-    }
-  }
-
-  public handleIncomingBytes(bytes: number[], sourceId?: string) {
-    if (bytes.length >= 3) {
-      const [status, data1, data2] = bytes;
-      this.sendRoutedMessage(status, data1, data2);
-      
-      const msg: MidiMessage = {
-        status,
-        data1,
-        data2,
-        timestamp: Date.now(),
-        sourceId
-      };
-      this.messageListeners.forEach(listener => listener(msg));
+    try {
+      await NativeMidi.sendTo({
+        id: String(destination.id),
+        data: bytes,
+      });
+    } catch (error) {
+      console.error('Erro ao transmitir mensagem MIDI:', error);
     }
   }
 
-  public addMessageListener(listener: (msg: MidiMessage) => void) {
-    this.messageListeners.push(listener);
+  public allNotesOff(): void {
+    if (!this.connectedOutput ||
+        this.connectedOutput.id === 'virtual-main') {
+      return;
+    }
+
+    for (let channel = 1; channel <= 16; channel++) {
+      const status = 0xB0 + channel - 1;
+
+      void this.transmitBytesNow([status, 123, 0]);
+    }
   }
 
-  public removeMessageListener(listener: (msg: MidiMessage) => void) {
-    this.messageListeners = this.messageListeners.filter(l => l !== listener);
+  public handleIncomingBytes(
+    bytes: number[],
+    sourceId?: string,
+  ): void {
+    if (!Array.isArray(bytes) || bytes.length < 2) {
+      return;
+    }
+
+    const status = bytes[0] & 0xFF;
+
+    if (status < 0x80 || status >= 0xF0) {
+      return;
+    }
+
+    const command = status & 0xF0;
+    const requiredLength =
+      command === 0xC0 || command === 0xD0 ? 2 : 3;
+
+    if (bytes.length < requiredLength) {
+      return;
+    }
+
+    const data1 = this.clamp(bytes[1], 0, 127);
+    const data2 = requiredLength === 3
+      ? this.clamp(bytes[2], 0, 127)
+      : 0;
+
+    const message: MidiMessage = {
+      status,
+      data1,
+      data2,
+      timestamp: Date.now(),
+      sourceId,
+    };
+
+    // A mensagem continua disponível para o monitor mesmo quando
+    // não corresponde à origem selecionada para o roteamento.
+    this.messageListeners.forEach((listener) => {
+      try {
+        listener(message);
+      } catch (error) {
+        console.error('Erro em listener MIDI:', error);
+      }
+    });
+
+    if (this.routeConfig.source === 'device') {
+      if (
+        this.routeConfig.sourceId &&
+        sourceId !== this.routeConfig.sourceId
+      ) {
+        return;
+      }
+    } else if (
+      sourceId &&
+      sourceId !== 'virtual-main'
+    ) {
+      return;
+    }
+
+    this.sendRoutedMessage(status, data1, data2);
   }
 
-  public getConnectedDestination() {
+  public addMessageListener(
+    listener: (message: MidiMessage) => void,
+  ): void {
+    if (!this.messageListeners.includes(listener)) {
+      this.messageListeners.push(listener);
+    }
+  }
+
+  public removeMessageListener(
+    listener: (message: MidiMessage) => void,
+  ): void {
+    this.messageListeners = this.messageListeners.filter(
+      (item) => item !== listener,
+    );
+  }
+
+  public getConnectedDestination(): MidiDestination | null {
     return this.connectedOutput;
+  }
+
+  private clamp(
+    value: number,
+    minimum: number,
+    maximum: number,
+  ): number {
+    return Math.max(minimum, Math.min(maximum, value));
+  }
+
+  private toHex(bytes: number[]): string {
+    return bytes
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join(' ');
   }
 }
 
 export const midiService = new MidiService();
-// Exportando com o nome antigo para evitar quebrar o App.tsx e outras telas
+
+// Mantém o nome utilizado pelo App.tsx.
 export const midiManager = midiService;
