@@ -1,11 +1,18 @@
-
 import { registerPlugin } from '@capacitor/core';
 
+export type NativeMidiDeviceType =
+  | 'local'
+  | 'usb'
+  | 'ble'
+  | 'virtual'
+  | 'unknown';
+
 export interface NativeMidiDevice {
-  id: number;
+  id: string;
   name: string;
+  displayName?: string;
   manufacturer?: string;
-  type: 'local' | 'usb' | 'ble' | 'virtual' | 'unknown';
+  type: NativeMidiDeviceType;
   inputPortCount: number;
   outputPortCount: number;
 }
@@ -21,64 +28,86 @@ export interface NativeMidiConnection {
   port?: number;
 }
 
+export interface NativeBleServerStatus {
+  active: boolean;
+  clients?: number;
+}
+
 export interface NativeMidiPlugin {
   initialize(): Promise<void>;
 
-  isBluetoothEnabled(): Promise<{ enabled: boolean }>;
-  requestEnableBluetooth(): Promise<{ enabled: boolean }>;
+  getDevices(): Promise<{
+    devices: NativeMidiDevice[];
+  }>;
 
-  getDevices(): Promise<{ devices: NativeMidiDevice[] }>;
+  connect(options: {
+    id: string;
+    port?: number;
+    portIndex?: number;
+  }): Promise<NativeMidiConnection>;
 
-  scanBluetoothMidi(
-    options?: { durationMs?: number }
-  ): Promise<{ devices: NativeBleDevice[] }>;
+  connectOutput(options: {
+    id: string;
+    port?: number;
+    portIndex?: number;
+  }): Promise<NativeMidiConnection>;
 
-  /** Métodos atuais, mantidos por compatibilidade. */
-  connect(
-    options: { id: string; port?: number }
-  ): Promise<{ id: string; name: string }>;
+  connectInput(options: {
+    id: string;
+    port?: number;
+    portIndex?: number;
+    address?: string;
+  }): Promise<NativeMidiConnection>;
 
-  connectBluetooth(
-    options: { address: string; port?: number }
-  ): Promise<{ id: string; name: string }>;
+  disconnect(options?: {
+    id?: string;
+  }): Promise<void>;
 
-  disconnect(): Promise<void>;
+  disconnectOutput(options?: {
+    id?: string;
+  }): Promise<void>;
 
-  /** Novos métodos para separar entrada e saída MIDI. */
-  connectInput(
-    options: { id: string; port?: number; address?: string }
-  ): Promise<NativeMidiConnection>;
+  disconnectInput(options?: {
+    id?: string;
+  }): Promise<void>;
 
-  connectOutput(
-    options: { id: string; port?: number; address?: string }
-  ): Promise<NativeMidiConnection>;
+  send(options: {
+    data: number[];
+    outputId?: string;
+    id?: string;
+  }): Promise<void>;
 
-  disconnectInput(
-    options?: { id?: string }
-  ): Promise<void>;
+  sendTo(options: {
+    id: string;
+    data: number[];
+  }): Promise<void>;
 
-  disconnectOutput(
-    options?: { id?: string }
-  ): Promise<void>;
+  scanBleDevices(options?: {
+    durationMs?: number;
+  }): Promise<{
+    devices: NativeBleDevice[];
+  }>;
 
-  sendTo(
-    options: { id: string; data: number[] }
-  ): Promise<void>;
+  scanBluetoothMidi(options?: {
+    durationMs?: number;
+  }): Promise<{
+    devices: NativeBleDevice[];
+  }>;
 
-  /** Servidor BLE MIDI do aplicativo. */
-  startBleServer(): Promise<{ active: boolean; clients?: number }>;
-  stopBleServer(): Promise<void>;
-  isBleServerRunning(): Promise<{ active: boolean; clients?: number }>;
+  startBleServer(): Promise<NativeBleServerStatus>;
+
+  stopBleServer(): Promise<NativeBleServerStatus | void>;
+
+  isBleServerRunning(): Promise<NativeBleServerStatus>;
 
   fecharApp(): Promise<void>;
-
-  /** Envio MIDI atual, mantido por compatibilidade. */
-  send(options: { data: number[] }): Promise<void>;
 
   addListener(
     eventName: 'devicesChanged' | 'midiMessage',
     listenerFunc: (data: any) => void,
-  ): Promise<{ remove: () => Promise<void> }>;
+  ): Promise<{
+    remove: () => Promise<void>;
+  }>;
 }
 
 export const NativeMidi =
