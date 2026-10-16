@@ -414,7 +414,7 @@ public class NativeMidiPlugin extends Plugin {
 
         if (properties != null) {
             String name = properties.getString(
-                MidiDeviceInfo.PROPERTY_PRODUCT_NAME
+                "name"
             );
 
             if (name != null && !name.trim().isEmpty()) {
