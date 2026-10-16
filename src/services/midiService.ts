@@ -1,1016 +1,177 @@
-/**
- * Camada MIDI do aplicativo.
- *
- * Android: usa a API nativa android.media.midi através do plugin Capacitor NativeMidi.
- * Web/PWA: mantém Web MIDI quando o navegador oferecer a API.
- * Não gera áudio.
- */
+import { MidiDestination, MidiRouteConfig, MidiMessage } from '../types/midi';
+import NativeMidi from './nativeMidi';
 
-import { Capacitor } from '@capacitor/core';
-import { MidiDestination, DestinationType, MidiLogEntry, MidiMessageType, MidiRouteConfig } from '../types/midi';
-import { NativeMidi, NativeMidiDevice, NativeBleDevice } from './nativeMidi';
-
-export const MIDI_BLE_SERVICE_UUID = '03b80e5a-ede8-4b33-a020-514f0634123b';
-export const MIDI_BLE_CHAR_UUID = '7772e5db-3868-4112-a1a9-f2669d106bf3';
-
-export const NOTE_NAMES = [
-  'C',
-  'C#',
-  'D',
-  'D#',
-  'E',
-  'F',
-  'F#',
-  'G',
-  'G#',
-  'A',
-  'A#',
-  'B',
-];
-
-export function getNoteName(noteNumber: number): string {
-  const octave = Math.floor(noteNumber / 12) - 1;
-  const noteIndex = noteNumber % 12;
-
-  return `${NOTE_NAMES[noteIndex]}${octave}`;
-}
-
-function nativeTypeToDestinationType(
-  type: NativeMidiDevice['type']
-): DestinationType {
-  if (type === 'usb') return 'usb';
-  if (type === 'ble') return 'ble';
-  if (type === 'virtual') return 'virtual';
-
-  return 'local';
-}
-
-function nativeDeviceToDestination(
-  device: NativeMidiDevice
-): MidiDestination {
-  const type = nativeTypeToDestinationType(device.type);
-
-  return {
-    id: `native:${device.id}`,
-    name: device.name || 'Dispositivo MIDI',
-    displayName: device.name || 'Dispositivo MIDI',
-    type,
-    manufacturer: device.manufacturer,
-    nativeId: device.id,
-    inputPortCount: device.inputPortCount,
-    outputPortCount: device.outputPortCount,
-    portCount: Math.max(
-      device.inputPortCount,
-      device.outputPortCount
-    ),
-  };
-}
-
-export class MidiControllerManager {
-  private midiAccess: MIDIAccess | null = null;
-
-  private onStateChangeCallback: (() => void) | null = null;
-
-  private onDisconnectCallback:
-    ((destination: MidiDestination) => void) | null = null;
-
-  private midiMessageListeners = new Set<(entry: MidiLogEntry) => void>();
-
+class MidiService {
+  private destinations: MidiDestination[] = [];
+  private connectedOutput: MidiDestination | null = null;
+  private connectedInputs: Map<string, boolean> = new Map();
+  private messageListeners: ((msg: MidiMessage) => void)[] = [];
   private routeConfig: MidiRouteConfig = {
-    enabled: true,
-    source: 'virtual',
-    destinationId: null,
-    inputChannel: 1,
-    outputChannel: 1,
+    inputId: 'virtual-main',
+    outputId: null,
+    channelFilter: 0,
+    outputChannel: 0,
     transpose: 0,
-    velocityMin: 1,
-    velocityMax: 127,
-    allowNotes: true,
-    allowControlChange: true,
-    allowProgramChange: true,
-    allowPitchBend: true,
+    velocityScale: 1.0,
+    fixedVelocity: 0,
+    filterCC: false,
+    filterProgramChange: false,
+    filterPitchBend: false,
   };
 
-  private connectedDestination: MidiDestination | null = null;
-
-  private bleServerActive = false;
-
-  private nativeDevices: NativeMidiDevice[] = [];
-
-  /*
-   * Dispositivos encontrados pelo scanner BLE.
-   *
-   * Estes dispositivos são temporários.
-   * Quando o Android passar a disponibilizar o mesmo dispositivo
-   * através da API MIDI nativa, a entrada temporária será ocultada.
-   */
-  private scannedBleDevices: NativeBleDevice[] = [];
-
-  private nativeListeners: Array<{
-    remove: () => Promise<void>;
-  }> = [];
-
-  public setCallbacks(
-    onStateChange: () => void,
-    onDisconnect: (destination: MidiDestination) => void,
-  ) {
-    this.onStateChangeCallback = onStateChange;
-    this.onDisconnectCallback = onDisconnect;
-  }
-
-  public async initWebMidi(): Promise<boolean> {
-    if (Capacitor.getPlatform() === 'android') {
-      try {
-        await NativeMidi.initialize();
-
-        await this.refreshNativeDevices();
-
-        this.nativeListeners.forEach((listener) =>
-          listener.remove().catch(() => undefined)
-        );
-
-        this.nativeListeners = [];
-
-        this.nativeListeners.push(
-          await NativeMidi.addListener(
-            'devicesChanged',
-            async () => {
-              await this.refreshNativeDevices();
-
-              /*
-               * Quando o Android atualiza a lista MIDI,
-               * verificamos novamente quais dispositivos BLE
-               * já foram assumidos pela API MIDI nativa.
-               */
-              this.cleanScannedBleDevices();
-
-              try {
-                this.bleServerActive =
-                  await this.isBleServerRunning();
-              } catch {
-                // Mantém o último estado conhecido.
-              }
-
-              /*
-               * Se a saída nativa atualmente conectada desapareceu
-               * do Android, a conexão deixou de existir.
-               */
-              if (this.connectedDestination?.nativeId !== undefined) {
-                const stillConnected = this.nativeDevices.some(
-                  (device) =>
-                    device.id === this.connectedDestination?.nativeId &&
-                    device.inputPortCount > 0
-                );
-
-                if (!stillConnected) {
-                  const disconnected = this.connectedDestination;
-                  this.connectedDestination = null;
-                  this.onDisconnectCallback?.(disconnected);
-                }
-              }
-
-              this.onStateChangeCallback?.();
-            }
-          )
-        );
-
-        this.nativeListeners.push(
-          await NativeMidi.addListener(
-            'midiMessage',
-            (event) => {
-              if (event?.data) {
-                const entry = this.createLogEntry(
-                  Array.from(event.data as number[]),
-                  'RX',
-                  this.connectedDestination?.displayName || 'MIDI'
-                );
-                if (entry) {
-                  this.midiMessageListeners.forEach((listener) => listener(entry));
-                }
-              }
-              this.onStateChangeCallback?.();
-            }
-          )
-        );
-
-        return true;
-      } catch {
-        return false;
+  constructor() {
+    // Inicialização de ouvintes nativos do plugin
+    NativeMidi.addListener('midiMessage', (data: any) => {
+      if (data && data.data) {
+        this.handleIncomingBytes(data.data, data.sourceId);
       }
-    }
-
-    if (
-      typeof navigator === 'undefined' ||
-      !navigator.requestMIDIAccess
-    ) {
-      return false;
-    }
-
-    try {
-      this.midiAccess = await navigator.requestMIDIAccess({
-        sysex: false,
-        software: true,
-      });
-
-      this.midiAccess.onstatechange = () =>
-        this.onStateChangeCallback?.();
-
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private async refreshNativeDevices(): Promise<void> {
-    const result = await NativeMidi.getDevices();
-
-    this.nativeDevices = result.devices || [];
-
-    this.cleanScannedBleDevices();
-  }
-
-  /**
-   * Normaliza um nome para permitir comparação entre:
-   *
-   * "Meu Teclado"
-   * "Meu Teclado (BLE)"
-   *
-   * e pequenas diferenças de capitalização/espaçamento.
-   */
-  private normalizeDeviceName(
-    name: string | undefined | null
-  ): string {
-    return (name || '')
-      .replace(/\s*\(BLE\)/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
-  }
-
-  /**
-   * Verifica se um dispositivo encontrado pelo scanner BLE
-   * já apareceu na lista MIDI nativa do Android.
-   *
-   * O endereço BLE seria a identificação ideal, mas o objeto
-   * NativeMidiDevice disponível neste projeto não expõe o endereço.
-   *
-   * Por isso:
-   *
-   * 1. tentamos comparar identificadores quando disponíveis;
-   * 2. usamos o nome normalizado como segunda proteção.
-   */
-  private isScannedBleDeviceAlreadyNative(
-    scanned: NativeBleDevice,
-    nativeDevices: NativeMidiDevice[] = this.nativeDevices
-  ): boolean {
-    const scannedAddress = String(
-      scanned.address || ''
-    ).trim().toLowerCase();
-
-    const scannedName = this.normalizeDeviceName(
-      scanned.name
-    );
-
-    return nativeDevices.some((nativeDevice: any) => {
-      if (nativeDevice.type !== 'ble') {
-        return false;
-      }
-
-      const nativeAddress = String(
-        nativeDevice.address ||
-        nativeDevice.bleAddress ||
-        nativeDevice.macAddress ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
-
-      /*
-       * Se o NativeMidiDevice fornecer endereço BLE,
-       * esta é a comparação mais confiável.
-       */
-      if (
-        scannedAddress &&
-        nativeAddress &&
-        scannedAddress === nativeAddress
-      ) {
-        return true;
-      }
-
-      /*
-       * Como proteção adicional, compara pelo nome.
-       */
-      const nativeName = this.normalizeDeviceName(
-        nativeDevice.name
-      );
-
-      if (
-        scannedName &&
-        nativeName &&
-        scannedName === nativeName
-      ) {
-        return true;
-      }
-
-      return false;
     });
   }
 
-  /**
-   * Remove da lista temporária BLE os dispositivos que
-   * já passaram a existir como dispositivos MIDI nativos.
-   */
-  private cleanScannedBleDevices(): void {
-    if (this.scannedBleDevices.length === 0) {
-      return;
-    }
+  public async refreshDevices(): Promise<MidiDestination[]> {
+    try {
+      const result = await NativeMidi.getDevices();
+      const usbDevices: MidiDestination[] = (result.devices || []).map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        displayName: d.displayName || d.name,
+        type: 'usb',
+        inputPortCount: d.inputPortCount,
+        outputPortCount: d.outputPortCount,
+      }));
 
-    this.scannedBleDevices = this.scannedBleDevices.filter(
-      (scanned) =>
-        !this.isScannedBleDeviceAlreadyNative(scanned)
-    );
+      this.destinations = [
+        { id: 'virtual-main', name: 'Teclado Virtual', displayName: 'Teclado Virtual (NexusMIDI Pro)', type: 'virtual' },
+        ...usbDevices
+      ];
+      return this.destinations;
+    } catch (e) {
+      console.error('Erro ao buscar dispositivos MIDI:', e);
+      return this.destinations;
+    }
   }
 
-  public addMidiMessageListener(listener: (entry: MidiLogEntry) => void): () => void {
-    this.midiMessageListeners.add(listener);
-    return () => this.midiMessageListeners.delete(listener);
+  public getDestinations(): MidiDestination[] {
+    return this.destinations;
+  }
+
+  public setRouteConfig(config: MidiRouteConfig) {
+    this.routeConfig = config;
   }
 
   public getRouteConfig(): MidiRouteConfig {
-    return { ...this.routeConfig };
+    return this.routeConfig;
   }
 
-  public setRouteConfig(config: Partial<MidiRouteConfig>): void {
-    this.routeConfig = { ...this.routeConfig, ...config };
-  }
-
-  public async sendBytes(data: number[], source = 'NexusMIDI'): Promise<{ bytes: number[]; hex: string }> {
-    const bytes = data.map((value) => value & 0xff);
-    await this.transmitBytes(bytes);
-    const entry = this.createLogEntry(bytes, 'TX', source);
-    if (entry) this.midiMessageListeners.forEach((listener) => listener(entry));
-    return { bytes, hex: this.bytesToHex(bytes) };
-  }
-
-  public async sendRoutedMessage(data: number[]): Promise<{ bytes: number[]; hex: string } | null> {
-    const bytes = [...data];
-    if (bytes.length === 0 || !this.routeConfig.enabled) return null;
-
-    const status = bytes[0] & 0xff;
-    const type = status & 0xf0;
-    const inputChannel = (status & 0x0f) + 1;
-
-    if (type === 0xf0) {
-      return this.sendBytes(bytes, 'Router');
+  public async connectOutput(destination: MidiDestination): Promise<void> {
+    if (this.connectedOutput && this.connectedOutput.id !== destination.id) {
+      this.disconnectOutput();
     }
-
-    if (inputChannel !== this.routeConfig.inputChannel) return null;
-
-    const allowed =
-      ((type === 0x80 || type === 0x90) && this.routeConfig.allowNotes) ||
-      (type === 0xb0 && this.routeConfig.allowControlChange) ||
-      (type === 0xc0 && this.routeConfig.allowProgramChange) ||
-      (type === 0xe0 && this.routeConfig.allowPitchBend);
-
-    if (!allowed) return null;
-
-    bytes[0] = type | ((this.routeConfig.outputChannel - 1) & 0x0f);
-
-    if ((type === 0x80 || type === 0x90) && bytes.length >= 3) {
-      const note = Math.max(0, Math.min(127, (bytes[1] & 0x7f) + this.routeConfig.transpose));
-      bytes[1] = note;
-      const velocity = bytes[2] & 0x7f;
-      if (type === 0x80 || velocity === 0) {
-        bytes[2] = 0;
-      } else {
-        const mapped = this.routeConfig.velocityMin +
-          Math.round((velocity / 127) * (this.routeConfig.velocityMax - this.routeConfig.velocityMin));
-        bytes[2] = Math.max(1, Math.min(127, mapped));
-      }
+    if (destination.type === 'usb') {
+      await NativeMidi.connect({ id: destination.id });
     }
-
-    return this.sendBytes(bytes, 'Router');
+    this.connectedOutput = destination;
   }
 
-  public async sendKeyboardNote(channel: number, note: number, velocity: number, on: boolean): Promise<{ bytes: number[]; hex: string }> {
-    const config = this.routeConfig;
-    // O seletor do teclado virtual deve determinar o canal realmente enviado.
-    // O canal OUT do Router é reservado às mensagens recebidas de uma entrada externa.
-    const outputChannel = Math.max(1, Math.min(16, Math.trunc(channel)));
-    const type = on && velocity > 0 ? 0x90 : 0x80;
-    const mappedNote = Math.max(0, Math.min(127, note + (config.enabled ? config.transpose : 0)));
-    const mappedVelocity = on && velocity > 0
-      ? Math.max(1, Math.min(127, config.velocityMin + Math.round((velocity / 127) * (config.velocityMax - config.velocityMin))))
-      : 0;
-    const bytes = [
-      type | ((outputChannel - 1) & 0x0f),
-      mappedNote,
-      mappedVelocity,
-    ];
-    if (!config.enabled) {
-      // Com o Router desligado, envia também a nota e a velocidade sem transformação.
-      bytes[0] = type | ((outputChannel - 1) & 0x0f);
-      bytes[1] = note & 0x7f;
-      bytes[2] = on ? velocity & 0x7f : 0;
+  public async disconnectOutput(): Promise<void> {
+    this.allNotesOff();
+    if (this.connectedOutput && this.connectedOutput.type === 'usb') {
+      await NativeMidi.disconnect({ id: this.connectedOutput.id });
     }
-    return this.sendBytes(bytes, 'Keyboard/Router');
+    this.connectedOutput = null;
   }
 
-  public async sendControlChange(channel: number, controller: number, value: number): Promise<{ bytes: number[]; hex: string }> {
-    return this.sendBytes([0xb0 | ((channel - 1) & 0x0f), controller & 0x7f, value & 0x7f]);
-  }
-
-  public async sendProgramChange(channel: number, program: number): Promise<{ bytes: number[]; hex: string }> {
-    return this.sendBytes([0xc0 | ((channel - 1) & 0x0f), program & 0x7f]);
-  }
-
-  public async sendPitchBend(channel: number, value14: number): Promise<{ bytes: number[]; hex: string }> {
-    const value = Math.max(0, Math.min(16383, value14));
-    return this.sendBytes([0xe0 | ((channel - 1) & 0x0f), value & 0x7f, (value >> 7) & 0x7f]);
-  }
-
-  public async sendPanic(channels: number[] = Array.from({ length: 16 }, (_, i) => i + 1)): Promise<void> {
-    for (const channel of channels) {
-      await this.sendControlChange(channel, 123, 0); // All Notes Off
-      await this.sendControlChange(channel, 120, 0); // All Sound Off
-      await this.sendControlChange(channel, 121, 0); // Reset All Controllers
+  public async connectInput(inputId: string): Promise<void> {
+    if (inputId === 'virtual-main') return;
+    if (!this.connectedInputs.has(inputId)) {
+      await NativeMidi.connectInput({ id: inputId });
+      this.connectedInputs.set(inputId, true);
     }
   }
 
-  private bytesToHex(bytes: number[]): string {
-    return bytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+  public async disconnectInput(inputId: string): Promise<void> {
+    if (inputId === 'virtual-main') return;
+    if (this.connectedInputs.has(inputId)) {
+      await NativeMidi.disconnectInput({ id: inputId });
+      this.connectedInputs.delete(inputId);
+    }
   }
 
-  private createLogEntry(data: number[], direction: 'RX' | 'TX', source: string): MidiLogEntry | null {
-    if (!data.length) return null;
-    const status = data[0] & 0xff;
-    const high = status & 0xf0;
+  public sendRoutedMessage(status: number, data1: number, data2: number) {
+    const command = status & 0xf0;
     const channel = (status & 0x0f) + 1;
-    let type: MidiMessageType = 'Unknown';
-    let note = 0;
-    let velocity = 0;
 
-    if (high === 0x80) { type = 'Note Off'; note = data[1] ?? 0; velocity = data[2] ?? 0; }
-    else if (high === 0x90) { type = (data[2] ?? 0) === 0 ? 'Note Off' : 'Note On'; note = data[1] ?? 0; velocity = data[2] ?? 0; }
-    else if (high === 0xa0) { type = 'Poly Aftertouch'; note = data[1] ?? 0; velocity = data[2] ?? 0; }
-    else if (high === 0xb0) { type = 'Control Change'; note = data[1] ?? 0; velocity = data[2] ?? 0; }
-    else if (high === 0xc0) { type = 'Program Change'; note = data[1] ?? 0; }
-    else if (high === 0xd0) { type = 'Channel Pressure'; velocity = data[1] ?? 0; }
-    else if (high === 0xe0) { type = 'Pitch Bend'; note = ((data[2] ?? 0) << 7) | (data[1] ?? 0); }
-    else if (status >= 0xf0) { type = 'System'; }
-
-    return {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      timestamp: new Date().toLocaleTimeString(),
-      type,
-      channel,
-      note,
-      noteName: (high === 0x80 || high === 0x90 || high === 0xa0) ? getNoteName(note) : '—',
-      velocity,
-      bytesHex: this.bytesToHex(data),
-      direction,
-      source,
-    };
-  }
-
-  public async getBluetoothState(): Promise<boolean> {
-    if (Capacitor.getPlatform() === 'android') {
-      const result = await NativeMidi.isBluetoothEnabled();
-
-      return result.enabled;
+    // Filtro de Canal
+    if (this.routeConfig.channelFilter > 0 && channel !== this.routeConfig.channelFilter) {
+      return;
     }
 
-    const bluetooth = (navigator as any)?.bluetooth;
+    // Filtros específicos
+    if (this.routeConfig.filterCC && command === 0xB0) return;
+    if (this.routeConfig.filterProgramChange && command === 0xC0) return;
+    if (this.routeConfig.filterPitchBend && command === 0xE0) return;
 
-    if (bluetooth?.getAvailability) {
-      return bluetooth.getAvailability();
-    }
+    let finalNote = data1;
+    let finalVelocity = data2;
 
-    return false;
-  }
-
-  public async requestEnableBluetooth(): Promise<boolean> {
-    if (Capacitor.getPlatform() !== 'android') {
-      return this.getBluetoothState();
-    }
-
-    const result =
-      await NativeMidi.requestEnableBluetooth();
-
-    return result.enabled;
-  }
-
-  public async getAvailableDestinations(): Promise<MidiDestination[]> {
-    if (Capacitor.getPlatform() === 'android') {
-      await this.refreshNativeDevices();
-
-      /*
-       * Primeiro entram os dispositivos MIDI reconhecidos
-       * oficialmente pelo Android.
-       */
-      const destinations = this.nativeDevices
-        .filter(
-          (device) => device.inputPortCount > 0
-        )
-        .map(nativeDeviceToDestination);
-
-      /*
-       * Remove os dispositivos temporários que já foram
-       * incorporados à lista nativa.
-       */
-      this.cleanScannedBleDevices();
-
-      /*
-       * Depois adicionamos somente os BLE ainda temporários.
-       */
-      const scanned = this.scannedBleDevices.map(
-        (device) => ({
-          id: `ble:${device.address}`,
-          name:
-            device.name ||
-            'Dispositivo BLE MIDI',
-          displayName:
-            `${device.name || 'Dispositivo BLE MIDI'} (BLE)`,
-          type: 'ble' as const,
-          bleAddress: device.address,
-          inputPortCount: 1,
-          outputPortCount: 1,
-          portCount: 1,
-        })
-      );
-
-      /*
-       * Última proteção contra duplicação:
-       * endereço BLE é a identidade principal.
-       */
-      const result: MidiDestination[] = [];
-      const seenAddresses = new Set<string>();
-      const seenNames = new Set<string>();
-
-      destinations.forEach((item) => {
-        if (item.bleAddress) {
-          seenAddresses.add(
-            item.bleAddress.toLowerCase()
-          );
-        }
-
-        if (item.type === 'ble') {
-          seenNames.add(
-            this.normalizeDeviceName(
-              item.displayName
-            )
-          );
-        }
-
-        result.push(item);
-      });
-
-      scanned.forEach((item) => {
-        const address = (
-          item.bleAddress || ''
-        ).toLowerCase();
-
-        const name = this.normalizeDeviceName(
-          item.displayName
-        );
-
-        /*
-         * Se o endereço já existe, não adiciona.
-         */
-        if (
-          address &&
-          seenAddresses.has(address)
-        ) {
-          return;
-        }
-
-        /*
-         * Se já existe um BLE com o mesmo nome,
-         * também não adicionamos uma segunda entrada.
-         */
-        if (
-          name &&
-          seenNames.has(name)
-        ) {
-          return;
-        }
-
-        if (address) {
-          seenAddresses.add(address);
-        }
-
-        if (name) {
-          seenNames.add(name);
-        }
-
-        result.push(item);
-      });
-
-      return result;
-    }
-
-    /*
-     * Web MIDI / PWA
-     */
-    const list: MidiDestination[] = [];
-
-    if (this.midiAccess) {
-      for (
-        const output of this.midiAccess.outputs.values()
-      ) {
-        list.push({
-          id: output.id,
-          name:
-            output.name || 'Dispositivo MIDI',
-          displayName:
-            output.name || 'Dispositivo MIDI',
-          type: 'local',
-          manufacturer:
-            output.manufacturer || undefined,
-          portCount: 1,
-        });
-      }
-    }
-
-    return list;
-  }
-
-  public async getAvailableDestinationsSync(): Promise<MidiDestination[]> {
-    return this.getAvailableDestinations();
-  }
-
-  public getConnectedDestination(): MidiDestination | null {
-    return this.connectedDestination;
-  }
-
-  public async connect(
-    destination: MidiDestination
-  ): Promise<boolean> {
-    if (
-      this.connectedDestination?.id ===
-      destination.id
-    ) {
-      return true;
-    }
-
-    if (this.connectedDestination) {
-      await this.disconnect();
-    }
-
-    if (this.bleServerActive) {
-      await this.stopBleServer();
-    }
-
-    try {
-      if (Capacitor.getPlatform() === 'android') {
-        if (
-          destination.id.startsWith('ble:') &&
-          destination.bleAddress
-        ) {
-          await NativeMidi.connectBluetooth({
-            address: destination.bleAddress,
-            port: 0,
-          });
-        } else if (
-          destination.nativeId !== undefined
-        ) {
-          await NativeMidi.connect({
-            id: String(destination.nativeId),
-            port: 0,
-          });
+    // Transposição e Velocity em Note On / Note Off
+    if (command === 0x90 || command === 0x80) {
+      finalNote = Math.max(0, Math.min(127, data1 + this.routeConfig.transpose));
+      if (command === 0x90 && data2 > 0) {
+        if (this.routeConfig.fixedVelocity > 0) {
+          finalVelocity = this.routeConfig.fixedVelocity;
         } else {
-          throw new Error(
-            'Destino MIDI Android inválido. Atualize a lista de dispositivos.'
-          );
-        }
-      } else {
-        const output =
-          this.midiAccess?.outputs.get(
-            destination.id
-          );
-
-        if (!output) {
-          throw new Error(
-            'Saída MIDI não encontrada.'
-          );
-        }
-
-        await output.open();
-      }
-
-      /*
-       * A conexão foi aceita.
-       *
-       * O objeto passado para connect() pode ter vindo do
-       * scanner temporário. Por isso mantemos a conexão,
-       * mas depois atualizamos a lista real do Android.
-       */
-      this.connectedDestination = destination;
-
-      if (
-        Capacitor.getPlatform() === 'android'
-      ) {
-        /*
-         * O Android pode precisar de um pequeno intervalo
-         * para publicar o dispositivo na lista MIDI.
-         *
-         * Fazemos uma atualização imediata sem bloquear
-         * a conexão caso ela ainda não tenha aparecido.
-         */
-        try {
-          await this.refreshNativeDevices();
-          this.cleanScannedBleDevices();
-        } catch {
-          // A conexão continua válida mesmo se a atualização falhar.
+          finalVelocity = Math.max(1, Math.min(127, Math.round(data2 * this.routeConfig.velocityScale)));
         }
       }
+    }
 
-      return true;
-    } catch (error) {
-      this.connectedDestination = null;
-      throw error;
+    let finalChannel = channel;
+    if (this.routeConfig.outputChannel > 0) {
+      finalChannel = this.routeConfig.outputChannel;
+    }
+
+    const finalStatus = command + (finalChannel - 1);
+    this.transmitBytesNow([finalStatus, finalNote, finalVelocity]);
+  }
+
+  private transmitBytesNow(bytes: number[]) {
+    NativeMidi.send({ data: bytes, outputId: this.connectedOutput?.id });
+  }
+
+  public allNotesOff() {
+    for (let ch = 1; ch <= 16; ch++) {
+      this.transmitBytesNow([0xB0 + (ch - 1), 123, 0]);
     }
   }
 
-  public async disconnect(): Promise<void> {
-    const current =
-      this.connectedDestination;
-
-    if (!current) return;
-
-    this.connectedDestination = null;
-
-    try {
-      if (
-        Capacitor.getPlatform() === 'android'
-      ) {
-        await NativeMidi.disconnect();
-      } else {
-        const output =
-          this.midiAccess?.outputs.get(
-            current.id
-          );
-
-        await output?.close();
-      }
-    } finally {
-      this.onDisconnectCallback?.(current);
+  public handleIncomingBytes(bytes: number[], sourceId?: string) {
+    if (bytes.length >= 3) {
+      const [status, data1, data2] = bytes;
+      this.sendRoutedMessage(status, data1, data2);
+      
+      const msg: MidiMessage = {
+        status,
+        data1,
+        data2,
+        timestamp: Date.now(),
+        sourceId
+      };
+      this.messageListeners.forEach(listener => listener(msg));
     }
   }
 
-  public async startBleServer(): Promise<boolean> {
-    if (Capacitor.getPlatform() !== 'android') {
-      throw new Error(
-        'O servidor BLE MIDI nativo está disponível no Android.'
-      );
-    }
-
-    const result = await NativeMidi.startBleServer();
-    this.bleServerActive = result.active;
-    return result.active;
+  public addMessageListener(listener: (msg: MidiMessage) => void) {
+    this.messageListeners.push(listener);
   }
 
-  public async stopBleServer(): Promise<void> {
-    if (Capacitor.getPlatform() !== 'android') {
-      return;
-    }
-
-    await NativeMidi.stopBleServer();
-    this.bleServerActive = false;
+  public removeMessageListener(listener: (msg: MidiMessage) => void) {
+    this.messageListeners = this.messageListeners.filter(l => l !== listener);
   }
 
-  public async isBleServerRunning(): Promise<boolean> {
-    if (Capacitor.getPlatform() !== 'android') {
-      return false;
-    }
-
-    const result = await NativeMidi.isBleServerRunning();
-    return result.active;
-  }
-
-  /**
-   * Procura dispositivos BLE MIDI.
-   *
-   * IMPORTANTE:
-   * Esta função NÃO conecta automaticamente nenhum
-   * dispositivo.
-   *
-   * Ela apenas atualiza a lista temporária de dispositivos
-   * encontrados e devolve todos os dispositivos encontrados.
-   */
-  public async scanBleDevice(): Promise<MidiDestination[]> {
-    if (
-      Capacitor.getPlatform() !== 'android'
-    ) {
-      throw new Error(
-        'A busca BLE MIDI nativa está disponível no Android.'
-      );
-    }
-
-    const result =
-      await NativeMidi.scanBluetoothMidi({
-        durationMs: 15000,
-      });
-
-    /*
-     * Substituímos a lista temporária pelo resultado
-     * mais recente da busca.
-     */
-    const unique = new Map<string, NativeBleDevice>();
-
-    for (const device of result.devices || []) {
-      const address = String(device.address || '').trim().toLowerCase();
-      if (!address) continue;
-
-      if (!unique.has(address)) {
-        unique.set(address, {
-          address: String(device.address).trim(),
-          name: device.name || 'Dispositivo BLE MIDI',
-        });
-      }
-    }
-
-    this.scannedBleDevices = Array.from(unique.values());
-
-    /*
-     * Antes de apresentar os resultados, removemos
-     * aqueles que o Android já reconhece como MIDI.
-     */
-    this.cleanScannedBleDevices();
-
-    this.onStateChangeCallback?.();
-
-    /*
-     * Retorna TODOS os dispositivos encontrados.
-     */
-    return this.scannedBleDevices.map(
-      (device) => ({
-        id: `ble:${device.address}`,
-        name:
-          device.name ||
-          'Dispositivo BLE MIDI',
-        displayName:
-          `${device.name || 'Dispositivo BLE MIDI'} (BLE)`,
-        type: 'ble' as const,
-        bleAddress: device.address,
-        inputPortCount: 1,
-        outputPortCount: 1,
-        portCount: 1,
-      })
-    );
-  }
-
-  public async sendNoteOn(
-    channel: number,
-    note: number
-  ): Promise<{
-    bytes: number[];
-    hex: string;
-  }> {
-    return this.sendNoteOnCustomVelocity(
-      channel,
-      note,
-      64
-    );
-  }
-
-  public async sendNoteOnCustomVelocity(
-    channel: number,
-    note: number,
-    velocity: number
-  ): Promise<{
-    bytes: number[];
-    hex: string;
-  }> {
-    if (!this.connectedDestination && !this.bleServerActive) {
-      throw new Error(
-        'Nenhum destino MIDI conectado ou servidor BLE MIDI ativo.'
-      );
-    }
-
-    const statusByte =
-      0x90 |
-      ((channel - 1) & 0x0f);
-
-    const midiBytes = [
-      statusByte,
-      note & 0x7f,
-      velocity & 0x7f,
-    ];
-
-    await this.sendBytes(midiBytes, 'Keyboard');
-
-    return {
-      bytes: midiBytes,
-      hex: midiBytes
-        .map((b) =>
-          b
-            .toString(16)
-            .toUpperCase()
-            .padStart(2, '0')
-        )
-        .join(' '),
-    };
-  }
-
-  public async sendNoteOff(
-    channel: number,
-    note: number
-  ): Promise<{
-    bytes: number[];
-    hex: string;
-  }> {
-    if (!this.connectedDestination && !this.bleServerActive) {
-      throw new Error(
-        'Nenhum destino MIDI conectado ou servidor BLE MIDI ativo.'
-      );
-    }
-
-    const statusByte =
-      0x80 |
-      ((channel - 1) & 0x0f);
-
-    const midiBytes = [
-      statusByte,
-      note & 0x7f,
-      0,
-    ];
-
-    await this.sendBytes(midiBytes, 'Keyboard');
-
-    return {
-      bytes: midiBytes,
-      hex: midiBytes
-        .map((b) =>
-          b
-            .toString(16)
-            .toUpperCase()
-            .padStart(2, '0')
-        )
-        .join(' '),
-    };
-  }
-
-  /**
-   * Fila única de transmissão MIDI.
-   *
-   * O bridge Capacitor/Android é assíncrono. Sem serialização, um toque
-   * muito rápido pode iniciar Note On e Note Off quase simultaneamente e
-   * o Android receber as chamadas fora da ordem esperada. Isso é uma causa
-   * clássica de nota presa.
-   */
-  private transmitQueue: Promise<void> = Promise.resolve();
-
-  private transmitBytes(
-    midiBytes: number[]
-  ): Promise<void> {
-    const bytes = [...midiBytes];
-
-    const operation = this.transmitQueue.then(
-      () => this.transmitBytesNow(bytes)
-    );
-
-    // Uma falha não pode bloquear as próximas mensagens da fila.
-    this.transmitQueue = operation.catch(() => undefined);
-
-    return operation;
-  }
-
-  private async transmitBytesNow(
-    midiBytes: number[]
-  ): Promise<void> {
-    if (!this.connectedDestination && !this.bleServerActive) {
-      throw new Error(
-        'Nenhum destino MIDI conectado ou servidor BLE MIDI ativo.'
-      );
-    }
-
-    if (Capacitor.getPlatform() === 'android') {
-      await NativeMidi.send({
-        data: midiBytes,
-      });
-      return;
-    }
-
-    if (!this.connectedDestination) {
-      throw new Error(
-        'Servidor BLE MIDI ativo, mas não há saída Web MIDI disponível.'
-      );
-    }
-
-    const output = this.midiAccess?.outputs.get(
-      this.connectedDestination.id
-    );
-
-    if (!output) {
-      throw new Error(
-        'Saída MIDI não encontrada.'
-      );
-    }
-
-    output.send(midiBytes);
+  public getConnectedDestination() {
+    return this.connectedOutput;
   }
 }
 
-export const midiManager =
-  new MidiControllerManager();
+export const midiService = new MidiService();
