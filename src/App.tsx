@@ -5,10 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MidiDestination, MidiLogEntry } from './types/midi';
-import {
-  midiManager,
-  getNoteName,
-} from './services/midiService';
+import { midiManager, getNoteName,} from './services/midiService';
 import { MidiKeyboard } from './components/MidiKeyboard';
 import { MidiRouterScreen } from './components/MidiRouterScreen';
 import { MidiMonitorScreen } from './components/MidiMonitorScreen';
