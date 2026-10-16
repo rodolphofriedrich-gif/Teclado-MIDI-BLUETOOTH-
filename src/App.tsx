@@ -15,6 +15,14 @@ import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { MidiControlsScreen } from './components/MidiControlsScreen';
 import { NativeMidi } from './services/nativeMidi';
 import { Music2, GitBranch, Activity, SlidersHorizontal, Settings } from 'lucide-react';
+import { MidiRouterScreen } from './components/MidiRouterScreen';
+// ... nos componentes renderizados por aba:
+{activeTab === 'router' && (
+  <MidiRouterScreen 
+    destinations={destinations} 
+    onRefresh={handleRefreshDevices} 
+  />
+)}
 
 export const KEYBOARD_PALETTES = [
   { id: 'default', name: 'Clássico / Padrão', white: '#ffffff', black: '#1e293b' },
