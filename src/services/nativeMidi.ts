@@ -1,37 +1,18 @@
 import { registerPlugin } from '@capacitor/core';
 
-export interface NativeMidiDevice {
-  id: number;
-  name: string;
-  manufacturer?: string;
-  type: 'local' | 'usb' | 'ble' | 'virtual' | 'unknown';
-  inputPortCount: number;
-  outputPortCount: number;
-}
-
-export interface NativeBleDevice {
-  address: string;
-  name: string;
-}
-
-export interface NativeMidiPlugin {
-  initialize(): Promise<void>;
-  isBluetoothEnabled(): Promise<{ enabled: boolean }>;
-  requestEnableBluetooth(): Promise<{ enabled: boolean }>;
-  getDevices(): Promise<{ devices: NativeMidiDevice[] }>;
-  scanBluetoothMidi(options?: { durationMs?: number }): Promise<{ devices: NativeBleDevice[] }>;
-  connect(options: { id: string; port?: number }): Promise<{ id: string; name: string }>;
-  connectBluetooth(options: { address: string; port?: number }): Promise<{ id: string; name: string }>;
-  disconnect(): Promise<void>;
-  startBleServer(): Promise<{ active: boolean; clients?: number }>;
+export interface NativeMidiPluginInterface {
+  getDevices(): Promise<{ devices: any[] }>;
+  connect(options: { id: string; portIndex?: number }): Promise<void>;
+  disconnect(options: { id: string }): Promise<void>;
+  connectInput(options: { id: string; portIndex?: number }): Promise<void>;
+  disconnectInput(options: { id: string }): Promise<void>;
+  send(options: { data: number[]; outputId?: string }): Promise<void>;
+  startBleServer(): Promise<void>;
   stopBleServer(): Promise<void>;
-  isBleServerRunning(): Promise<{ active: boolean; clients?: number }>;
-  fecharApp(): Promise<void>;
-  send(options: { data: number[] }): Promise<void>;
-  addListener(
-    eventName: 'devicesChanged' | 'midiMessage',
-    listenerFunc: (data: any) => void,
-  ): Promise<{ remove: () => Promise<void> }>;
+  scanBleDevices(): Promise<{ devices: any[] }>;
+  connectBleDevice(options: { address: string }): Promise<void>;
+  disconnectBleDevice(options: { address: string }): Promise<void>;
 }
 
-export const NativeMidi = registerPlugin<NativeMidiPlugin>('NativeMidi');
+const NativeMidi = registerPlugin<NativeMidiPluginInterface>('NativeMidi');
+export default NativeMidi;
