@@ -1,55 +1,37 @@
-/** Tipos usados pelo controlador MIDI. */
-
-export type DestinationType = 'local' | 'ble' | 'usb' | 'virtual';
+export type MidiDeviceType = 'usb' | 'ble' | 'virtual' | 'local';
 
 export interface MidiDestination {
   id: string;
   name: string;
-  type: DestinationType;
   displayName: string;
+  type: MidiDeviceType;
   manufacturer?: string;
-  portCount?: number;
-  inputPortCount?: number;
-  outputPortCount?: number;
-  nativeId?: number;
-  bleAddress?: string;
-}
-
-export type MidiMessageType =
-  | 'Note On'
-  | 'Note Off'
-  | 'Control Change'
-  | 'Program Change'
-  | 'Pitch Bend'
-  | 'Channel Pressure'
-  | 'Poly Aftertouch'
-  | 'System'
-  | 'Unknown';
-
-export interface MidiLogEntry {
-  id: string;
-  timestamp: string;
-  type: MidiMessageType;
-  channel: number;
-  note: number;
-  noteName: string;
-  velocity: number;
-  bytesHex: string;
-  direction?: 'RX' | 'TX';
-  source?: string;
+  inputPortIndex?: number;
+  outputPortIndex?: number;
 }
 
 export interface MidiRouteConfig {
-  enabled: boolean;
-  source: 'virtual';
-  destinationId: string | null;
-  inputChannel: number;
-  outputChannel: number;
-  transpose: number;
-  velocityMin: number;
-  velocityMax: number;
-  allowNotes: boolean;
-  allowControlChange: boolean;
-  allowProgramChange: boolean;
-  allowPitchBend: boolean;
+  inputId: string; // Ex: 'virtual-main' ou ID de dispositivo físico/USB/BLE
+  outputId: string | null;
+  channelFilter: number; // 0 para Omni (todos), ou 1-16
+  outputChannel: number; // 0 para manter, ou 1-16 para forçar canal de saída
+  transpose: number; // -24 a +24 semitons
+  velocityScale: number; // 0.1 a 2.0 ou fator percentual
+  fixedVelocity: number; // 0 para desativar, ou 1-127
+  filterCC: boolean;
+  filterProgramChange: boolean;
+  filterPitchBend: boolean;
+}
+
+export interface MidiMessage {
+  status: number;
+  data1: number;
+  data2: number;
+  timestamp: number;
+  sourceId?: string;
+  command?: number;
+  channel?: number;
+  note?: number;
+  velocity?: number;
+  value?: number;
 }
