@@ -86,11 +86,11 @@ public class NativeMidiPlugin extends Plugin {
 
                 if (properties != null) {
                     name = properties.getString(
-                        MidiDeviceInfo.PROPERTY_PRODUCT_NAME
+                        "name"
                     );
 
                     manufacturer = properties.getString(
-                        MidiDeviceInfo.PROPERTY_MANUFACTURER_NAME
+                "name"
                     );
                 }
 
