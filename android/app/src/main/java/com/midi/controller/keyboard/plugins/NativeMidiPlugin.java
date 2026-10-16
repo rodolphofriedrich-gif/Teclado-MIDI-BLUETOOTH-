@@ -268,11 +268,6 @@ public class NativeMidiPlugin extends Plugin {
                         JSObject message = new JSObject();
                         message.put("data", messageData);
                         message.put("sourceId", id);
-
-                        notifyListeners("midiMessage", message);
-                    }
-                });
-
                 MidiOutputPort oldPort = inputPorts.put(id, port);
                 MidiDevice oldDevice = inputDevices.put(id, device);
 
@@ -289,19 +284,6 @@ public class NativeMidiPlugin extends Plugin {
                 result.put("name", getDeviceName(info));
                 result.put("port", portIndex);
                 call.resolve(result);
-
-            } catch (IOException e) {
-                closePort(port);
-                closeDevice(device);
-                call.reject("Erro ao receber MIDI: " + e.getMessage());
-            }
-
-        }, mainHandler);
-    }
-
-    @PluginMethod
-    public void disconnect(PluginCall call) {
-        String id = call.getString("id");
 
         if (id != null) {
             closeOutputConnection(id);
