@@ -5,21 +5,13 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MidiDestination, MidiLogEntry } from './types/midi';
-import { midiManager, getNoteName,} from './services/midiService';
+import { midiManager, getNoteName } from './services/midiService';
 import { MidiKeyboard } from './components/MidiKeyboard';
 import { MidiRouterScreen } from './components/MidiRouterScreen';
 import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { MidiControlsScreen } from './components/MidiControlsScreen';
 import { NativeMidi } from './services/nativeMidi';
 import { Music2, GitBranch, Activity, SlidersHorizontal, Settings } from 'lucide-react';
-import { MidiRouterScreen } from './components/MidiRouterScreen';
-// ... nos componentes renderizados por aba:
-{activeTab === 'router' && (
-  <MidiRouterScreen 
-    destinations={destinations} 
-    onRefresh={handleRefreshDevices} 
-  />
-)}
 
 export const KEYBOARD_PALETTES = [
   { id: 'default', name: 'Clássico / Padrão', white: '#ffffff', black: '#1e293b' },
@@ -533,11 +525,7 @@ export default function App() {
         ) : activeTab === 'router' ? (
           <MidiRouterScreen
             destinations={destinations}
-            connectedDestination={connectedDestination}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
             onRefresh={refreshDestinations}
-            isBleServerActive={isBleServerActive}
           />
         ) : activeTab === 'controls' ? (
           <div className="flex-1 min-h-0 p-2 sm:p-3 overflow-hidden">
