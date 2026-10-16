@@ -1,11 +1,22 @@
 import { MidiDestination, MidiRouteConfig, MidiMessage } from '../types/midi';
-import NativeMidi from './nativeMidi';
+import { NativeMidi } from './nativeMidi';
+
+// Restaurando a função exportada que o App.tsx utiliza
+export const getNoteName = (note: number): string => {
+  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const octave = Math.floor(note / 12) - 1;
+  const name = noteNames[note % 12];
+  return `${name}${octave}`;
+};
 
 class MidiService {
   private destinations: MidiDestination[] = [];
   private connectedOutput: MidiDestination | null = null;
   private connectedInputs: Map<string, boolean> = new Map();
   private messageListeners: ((msg: MidiMessage) => void)[] = [];
+  private onRefreshCallback?: () => void;
+  private onDisconnectCallback?: (dest: MidiDestination) => void;
+
   private routeConfig: MidiRouteConfig = {
     inputId: 'virtual-main',
     outputId: null,
@@ -20,12 +31,25 @@ class MidiService {
   };
 
   constructor() {
-    // Inicialização de ouvintes nativos do plugin
     NativeMidi.addListener('midiMessage', (data: any) => {
       if (data && data.data) {
         this.handleIncomingBytes(data.data, data.sourceId);
       }
     });
+  }
+
+  // Retrocompatibilidade com App.tsx
+  public setCallbacks(onRefresh: () => void, onDisconnect: (dest: MidiDestination) => void) {
+    this.onRefreshCallback = onRefresh;
+    this.onDisconnectCallback = onDisconnect;
+  }
+
+  public async initWebMidi(): Promise<void> {
+    // Inicialização da API Nativa
+  }
+
+  public async getAvailableDestinations(): Promise<MidiDestination[]> {
+    return this.refreshDevices();
   }
 
   public async refreshDevices(): Promise<MidiDestination[]> {
@@ -63,14 +87,26 @@ class MidiService {
     return this.routeConfig;
   }
 
+  // Retrocompatibilidade para conexão
+  public async connect(destination: MidiDestination): Promise<void> {
+    return this.connectOutput(destination);
+  }
+
   public async connectOutput(destination: MidiDestination): Promise<void> {
     if (this.connectedOutput && this.connectedOutput.id !== destination.id) {
-      this.disconnectOutput();
+      await this.disconnectOutput();
     }
     if (destination.type === 'usb') {
       await NativeMidi.connect({ id: destination.id });
     }
     this.connectedOutput = destination;
+  }
+
+  public async disconnect(): Promise<void> {
+    if (this.connectedOutput && this.onDisconnectCallback) {
+      this.onDisconnectCallback(this.connectedOutput);
+    }
+    return this.disconnectOutput();
   }
 
   public async disconnectOutput(): Promise<void> {
@@ -97,16 +133,47 @@ class MidiService {
     }
   }
 
+  // Retrocompatibilidade BLE
+  public async isBleServerRunning(): Promise<boolean> { return false; }
+  public async startBleServer(): Promise<boolean> { await NativeMidi.startBleServer(); return true; }
+  public async stopBleServer(): Promise<void> { await NativeMidi.stopBleServer(); }
+  public async scanBleDevice(): Promise<any[]> { 
+    const res = await NativeMidi.scanBleDevices(); 
+    return res.devices || []; 
+  }
+
+  // Retrocompatibilidade Teclado Virtual e Controles
+  public async sendKeyboardNote(channel: number, note: number, velocity: number, isNoteOn: boolean) {
+    const status = isNoteOn ? (0x90 + channel - 1) : (0x80 + channel - 1);
+    this.sendRoutedMessage(status, note, velocity);
+    return { hex: `${status.toString(16).padStart(2, '0')} ${note.toString(16).padStart(2, '0')} ${velocity.toString(16).padStart(2, '0')}` };
+  }
+
+  public async sendControlChange(channel: number, controller: number, value: number) {
+    const status = 0xB0 + channel - 1;
+    this.transmitBytesNow([status, controller, value]);
+    return { hex: `${status.toString(16).padStart(2, '0')} ${controller.toString(16).padStart(2, '0')} ${value.toString(16).padStart(2, '0')}` };
+  }
+
+  public async sendProgramChange(channel: number, program: number) {
+    const status = 0xC0 + channel - 1;
+    this.transmitBytesNow([status, program]);
+    return { hex: `${status.toString(16).padStart(2, '0')} ${program.toString(16).padStart(2, '0')}` };
+  }
+
+  public async sendPitchBend(channel: number, value: number) {
+    const status = 0xE0 + channel - 1;
+    const lsb = value & 0x7F;
+    const msb = (value >> 7) & 0x7F;
+    this.transmitBytesNow([status, lsb, msb]);
+    return { hex: `${status.toString(16).padStart(2, '0')} ${lsb.toString(16).padStart(2, '0')} ${msb.toString(16).padStart(2, '0')}` };
+  }
+
   public sendRoutedMessage(status: number, data1: number, data2: number) {
     const command = status & 0xf0;
     const channel = (status & 0x0f) + 1;
 
-    // Filtro de Canal
-    if (this.routeConfig.channelFilter > 0 && channel !== this.routeConfig.channelFilter) {
-      return;
-    }
-
-    // Filtros específicos
+    if (this.routeConfig.channelFilter > 0 && channel !== this.routeConfig.channelFilter) return;
     if (this.routeConfig.filterCC && command === 0xB0) return;
     if (this.routeConfig.filterProgramChange && command === 0xC0) return;
     if (this.routeConfig.filterPitchBend && command === 0xE0) return;
@@ -114,7 +181,6 @@ class MidiService {
     let finalNote = data1;
     let finalVelocity = data2;
 
-    // Transposição e Velocity em Note On / Note Off
     if (command === 0x90 || command === 0x80) {
       finalNote = Math.max(0, Math.min(127, data1 + this.routeConfig.transpose));
       if (command === 0x90 && data2 > 0) {
@@ -175,3 +241,5 @@ class MidiService {
 }
 
 export const midiService = new MidiService();
+// Exportando com o nome antigo para evitar quebrar o App.tsx e outras telas
+export const midiManager = midiService;
