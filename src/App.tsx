@@ -60,7 +60,6 @@ const NAV_ITEMS = [
   { id: 'settings', label: 'Ajustes', Icon: Settings },
 ] as const;
 
-// CORES EXCLUSIVAS PARA CADA ABA AO SER SELECIONADA
 const TAB_COLORS: Record<AppTab, { bg: string; border: string; shadow: string }> = {
   keyboard: {
     bg: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)',
@@ -130,16 +129,10 @@ export default function App() {
     KEYBOARD_PALETTES.find((p) => p.id === selectedPaletteId) || KEYBOARD_PALETTES[1];
 
   const channelRef = useRef<number>(selectedChannel);
-
-  useEffect(() => {
-    channelRef.current = selectedChannel;
-  }, [selectedChannel]);
+  useEffect(() => { channelRef.current = selectedChannel; }, [selectedChannel]);
 
   const velocityRef = useRef<number>(selectedVelocity);
-
-  useEffect(() => {
-    velocityRef.current = selectedVelocity;
-  }, [selectedVelocity]);
+  useEffect(() => { velocityRef.current = selectedVelocity; }, [selectedVelocity]);
 
   const showMessage = useCallback(
     (
@@ -148,11 +141,9 @@ export default function App() {
       durationMs = 3500,
     ) => {
       setStatusMessage({ text, type });
-
       const timer = setTimeout(() => {
         setStatusMessage((current) => (current?.text === text ? null : current));
       }, durationMs);
-
       return () => clearTimeout(timer);
     },
     [],
@@ -160,21 +151,17 @@ export default function App() {
 
   const refreshDestinations = useCallback(async () => {
     const list = await midiManager.getAvailableDestinations();
-
     const uniqueMap = new Map<string, MidiDestination>();
 
     list.forEach((item) => {
       const cleanName = item.displayName.replace(/\s*\(BLE\)/g, '').trim().toLowerCase();
-      const uniqueKey = item.bleAddress
-        ? `ble:${item.bleAddress}`
-        : `dev:${cleanName}`;
+      const uniqueKey = item.bleAddress ? `ble:${item.bleAddress}` : `dev:${cleanName}`;
 
       if (!uniqueMap.has(uniqueKey)) {
         uniqueMap.set(uniqueKey, item);
       } else {
         const existing = uniqueMap.get(uniqueKey);
-
-        if (!existing.bleAddress && item.bleAddress) {
+        if (!existing?.bleAddress && item.bleAddress) {
           uniqueMap.set(uniqueKey, item);
         }
       }
@@ -188,35 +175,21 @@ export default function App() {
     let isMounted = true;
 
     midiManager.setCallbacks(
-      () => {
-        if (isMounted) void refreshDestinations();
-      },
+      () => { if (isMounted) void refreshDestinations(); },
       (disconnectedDest) => {
         if (isMounted) {
           setConnectedDestination(null);
           setIsBleServerActive(false);
           void refreshDestinations();
-
-          showMessage(
-            `Destino "${disconnectedDest.displayName}" desconectado.`,
-            'warn',
-            4000,
-          );
+          showMessage(`Destino "${disconnectedDest.displayName}" desconectado.`, 'warn', 4000);
         }
       },
     );
 
     const init = async () => {
       await midiManager.initWebMidi();
-
       let serverActive = false;
-
-      try {
-        serverActive = await midiManager.isBleServerRunning();
-      } catch {
-        serverActive = false;
-      }
-
+      try { serverActive = await midiManager.isBleServerRunning(); } catch { serverActive = false; }
       if (isMounted) {
         setIsBleServerActive(serverActive);
         void refreshDestinations();
@@ -224,30 +197,20 @@ export default function App() {
     };
 
     void init();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [refreshDestinations, showMessage]);
 
   const handleConnect = async (dest: MidiDestination) => {
     try {
       await midiManager.connect(dest);
-
       setConnectedDestination(dest);
       setIsBleServerActive(false);
       void refreshDestinations();
-
       setIsUsbOpen(false);
       setIsBleOpen(false);
-
       showMessage(`Conectado a: ${dest.displayName}`, 'success', 2500);
     } catch (err: any) {
-      showMessage(
-        `Erro ao conectar: ${err?.message || 'Erro desconhecido'}`,
-        'error',
-        4000,
-      );
+      showMessage(`Erro ao conectar: ${err?.message || 'Erro desconhecido'}`, 'error', 4000);
     }
   };
 
@@ -257,20 +220,14 @@ export default function App() {
         await midiManager.disconnect();
         setConnectedDestination(null);
       }
-
       if (isBleServerActive) {
         await midiManager.stopBleServer();
         setIsBleServerActive(false);
       }
-
       showMessage('Desconectado com sucesso.', 'info', 2500);
       void refreshDestinations();
     } catch (err: any) {
-      showMessage(
-        `Erro ao desconectar: ${err?.message || 'Erro desconhecido'}`,
-        'error',
-        3500,
-      );
+      showMessage(`Erro ao desconectar: ${err?.message || 'Erro desconhecido'}`, 'error', 3500);
     } finally {
       setIsUsbOpen(false);
       setIsBleOpen(false);
@@ -279,29 +236,17 @@ export default function App() {
 
   const handleScanBle = async () => {
     setIsScanningBle(true);
-
     try {
       const found = await midiManager.scanBleDevice();
-
       await refreshDestinations();
-
       if (found.length === 0) {
         showMessage('Nenhum dispositivo BLE MIDI encontrado.', 'info', 3000);
       } else {
         setIsBleOpen(true);
-
-        showMessage(
-          `${found.length} dispositivo(s) BLE MIDI encontrado(s).`,
-          'success',
-          3000,
-        );
+        showMessage(`${found.length} dispositivo(s) BLE MIDI encontrado(s).`, 'success', 3000);
       }
     } catch (err: any) {
-      showMessage(
-        `Erro BLE: ${err?.message || 'Falha na busca'}`,
-        'error',
-        3500,
-      );
+      showMessage(`Erro BLE: ${err?.message || 'Falha na busca'}`, 'error', 3500);
     } finally {
       setIsScanningBle(false);
     }
@@ -310,20 +255,11 @@ export default function App() {
   const handleStartBleServer = async () => {
     try {
       const active = await midiManager.startBleServer();
-
       setIsBleServerActive(active);
-
-      if (active) {
-        showMessage('Modo BLE MIDI visível ativado.', 'success', 4500);
-      }
+      if (active) showMessage('Modo BLE MIDI visível ativado.', 'success', 4500);
     } catch (err: any) {
       setIsBleServerActive(false);
-
-      showMessage(
-        `Erro ao ativar BLE MIDI: ${err?.message || 'Falha desconhecida'}`,
-        'error',
-        4500,
-      );
+      showMessage(`Erro ao ativar BLE MIDI: ${err?.message || 'Falha desconhecida'}`, 'error', 4500);
     }
   };
 
@@ -333,13 +269,10 @@ export default function App() {
         showMessage('Selecione um destino MIDI ou ative a visibilidade.', 'warn', 2500);
         return;
       }
-
       try {
         const channel = channelRef.current;
         const velocity = velocityRef.current;
-
         const res = await midiManager.sendKeyboardNote(channel, note, velocity, true);
-
         setLastTxCommand({
           id: Math.random().toString(36).substring(2, 7),
           timestamp: new Date().toLocaleTimeString(),
@@ -360,11 +293,9 @@ export default function App() {
   const handleNoteOff = useCallback(
     async (note: number) => {
       if (!connectedDestination && !isBleServerActive) return;
-
       try {
         const channel = channelRef.current;
         const res = await midiManager.sendKeyboardNote(channel, note, 0, false);
-
         setLastTxCommand({
           id: Math.random().toString(36).substring(2, 7),
           timestamp: new Date().toLocaleTimeString(),
@@ -388,34 +319,21 @@ export default function App() {
 
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
-
-    try {
-      await (NativeMidi as any).fecharApp();
-    } catch {
-      try {
-        window.close();
-      } catch {
-        // O ambiente pode impedir o fechamento
-      }
+    try { await (NativeMidi as any).fecharApp(); } catch {
+      try { window.close(); } catch { /* O ambiente pode impedir o fechamento */ }
     }
   };
 
   const usbAndVirtualDestinations = destinations.filter(
     (d) => d.type === 'usb' || d.type === 'virtual' || d.type === 'local',
   );
-
   const bleDestinations = destinations.filter((d) => d.type === 'ble');
 
   const isUsbConnected = Boolean(
     connectedDestination &&
-      (connectedDestination.type === 'usb' ||
-        connectedDestination.type === 'virtual' ||
-        connectedDestination.type === 'local'),
+      (connectedDestination.type === 'usb' || connectedDestination.type === 'virtual' || connectedDestination.type === 'local'),
   );
-
-  const isBleConnected = Boolean(
-    connectedDestination && connectedDestination.type === 'ble',
-  );
+  const isBleConnected = Boolean(connectedDestination && connectedDestination.type === 'ble');
 
   const closeConnectionMenus = () => {
     setIsUsbOpen(false);
@@ -424,17 +342,12 @@ export default function App() {
 
   return (
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
-      {/* CABEÇALHO COM ALINHAMENTO PERFEITO */}
       <header className="nexus-header relative z-50 flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          {/* NOME DO APP */}
           <button
             type="button"
             className="nexus-brand flex min-w-0 items-center gap-2"
-            onClick={() => {
-              setActiveTab('keyboard');
-              closeConnectionMenus();
-            }}
+            onClick={() => { setActiveTab('keyboard'); closeConnectionMenus(); }}
             aria-label="NexusMIDI Pro — ir para o teclado"
           >
             <span className="nexus-brand-name whitespace-nowrap text-xs font-extrabold tracking-wider sm:text-sm">
@@ -442,7 +355,6 @@ export default function App() {
             </span>
           </button>
 
-          {/* NAVEGAÇÃO DE ABAS */}
           <nav aria-label="Navegação principal" className="nexus-nav flex items-center gap-1">
             {NAV_ITEMS.map(({ id, label, Icon }) => {
               const selected = activeTab === id;
@@ -452,36 +364,15 @@ export default function App() {
                 <button
                   key={id}
                   type="button"
-                  onClick={() => {
-                    setActiveTab(id);
-                    closeConnectionMenus();
-                  }}
+                  onClick={() => { setActiveTab(id); closeConnectionMenus(); }}
                   aria-label={label}
                   aria-pressed={selected}
                   title={label}
-                  className={`nexus-nav-button relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
-                    selected ? 'is-active' : ''
-                  }`}
-                  style={
-                    selected
-                      ? {
-                          background: tabColor.bg,
-                          borderColor: tabColor.border,
-                          boxShadow: tabColor.shadow,
-                          color: '#ffffff',
-                        }
-                      : undefined
-                  }
+                  className={`nexus-nav-button relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${selected ? 'is-active' : ''}`}
+                  style={selected ? { background: tabColor.bg, borderColor: tabColor.border, boxShadow: tabColor.shadow, color: '#ffffff' } : undefined}
                 >
                   <Icon size={18} strokeWidth={2.2} aria-hidden="true" />
-
-                  {id === 'router' && (
-                    <span
-                      className="nexus-nav-indicator absolute right-1.5 top-1.5"
-                      aria-hidden="true"
-                    />
-                  )}
-
+                  {id === 'router' && <span className="nexus-nav-indicator absolute right-1.5 top-1.5" aria-hidden="true" />}
                   <span className="sr-only">{label}</span>
                 </button>
               );
@@ -489,44 +380,25 @@ export default function App() {
           </nav>
         </div>
 
-        {/* CONEXÕES E SAÍDA (MANTENDO O BOTÃO DE SAÍDA INTACTO) */}
         <div className="flex items-center gap-2">
-          {/* USB */}
+          {/* USB - MELHORIA: Estrutura idêntica ao Bluetooth para consistência */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => {
-                setIsUsbOpen(!isUsbOpen);
-                setIsBleOpen(false);
-                void refreshDestinations();
-              }}
+              onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); void refreshDestinations(); }}
               aria-expanded={isUsbOpen}
-              aria-label={isUsbConnected ? 'USB conectado. Gerenciar conexão' : 'Gerenciar conexão USB'}
-              title={
-                isUsbConnected && connectedDestination
-                  ? `USB: ${connectedDestination.displayName}`
-                  : 'Conexão USB'
-              }
-              className={`nexus-connection-button h-10 ${
-                isUsbConnected ? 'is-connected' : ''
-              }`}
+              className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isUsbConnected ? 'is-connected' : ''}`}
             >
-              <span className="nexus-connection-icon">
+              <span className="nexus-connection-icon flex items-center justify-center">
                 <Usb size={18} strokeWidth={1.8} aria-hidden="true" />
               </span>
-
-              <span className="nexus-connection-copy">
-                <span className="nexus-connection-title">USB</span>
-                <span className="nexus-connection-state">
+              <span className="nexus-connection-copy flex flex-col items-start leading-none text-left">
+                <span className="nexus-connection-title text-[10px] font-bold uppercase">USB</span>
+                <span className="nexus-connection-state mt-0.5 text-xs">
                   {isUsbConnected ? 'Conectado' : 'Desconectado'}
                 </span>
               </span>
-
-              {isUsbConnected ? (
-                <span className="nexus-pulse-dot" aria-label="Conectado" />
-              ) : (
-                <ChevronDown size={14} aria-hidden="true" />
-              )}
+              {isUsbConnected ? <span className="nexus-pulse-dot ml-1" aria-label="Conectado" /> : <ChevronDown size={14} className="ml-1 opacity-50" aria-hidden="true" />}
             </button>
 
             {isUsbOpen && (
@@ -536,51 +408,25 @@ export default function App() {
                     <p className="nexus-eyebrow">CONEXÃO USB</p>
                     <p className="mt-1 text-sm font-semibold">Portas disponíveis</p>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => void refreshDestinations()}
-                    className="nexus-icon-button"
-                    aria-label="Atualizar dispositivos USB"
-                    title="Atualizar"
-                  >
+                  <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button" aria-label="Atualizar dispositivos USB">
                     <RefreshCw size={16} />
                   </button>
                 </div>
-
                 {isUsbConnected && (
-                  <button
-                    type="button"
-                    onClick={() => void handleDisconnect()}
-                    className="nexus-dropdown-action is-danger"
-                  >
-                    <X size={16} />
-                    Desconectar USB
+                  <button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger">
+                    <X size={16} /> Desconectar USB
                   </button>
                 )}
-
                 <div className="nexus-dropdown-list">
                   {usbAndVirtualDestinations.length === 0 ? (
-                    <p className="nexus-empty-state">
-                      Nenhum dispositivo USB encontrado.
-                    </p>
+                    <p className="nexus-empty-state">Nenhum dispositivo USB encontrado.</p>
                   ) : (
                     usbAndVirtualDestinations.map((dest) => {
                       const selected = connectedDestination?.id === dest.id;
-
                       return (
-                        <button
-                          key={dest.id}
-                          type="button"
-                          onClick={() => void handleConnect(dest)}
-                          className={`nexus-device-option ${selected ? 'is-selected' : ''}`}
-                        >
+                        <button key={dest.id} type="button" onClick={() => void handleConnect(dest)} className={`nexus-device-option ${selected ? 'is-selected' : ''}`}>
                           <span className="min-w-0 flex-1 truncate">{dest.displayName}</span>
-                          {selected ? (
-                            <CheckCircle2 size={17} className="nexus-success-icon" />
-                          ) : (
-                            <Circle size={15} className="nexus-muted-icon" />
-                          )}
+                          {selected ? <CheckCircle2 size={17} className="nexus-success-icon" /> : <Circle size={15} className="nexus-muted-icon" />}
                         </button>
                       );
                     })
@@ -590,52 +436,24 @@ export default function App() {
             )}
           </div>
 
-          {/* BLUETOOTH BLE */}
+          {/* BLUETOOTH - MELHORIA: Estrutura idêntica ao USB */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => {
-                setIsBleOpen(!isBleOpen);
-                setIsUsbOpen(false);
-                void refreshDestinations();
-              }}
+              onClick={() => { setIsBleOpen(!isBleOpen); setIsUsbOpen(false); void refreshDestinations(); }}
               aria-expanded={isBleOpen}
-              aria-label={
-                isBleConnected || isBleServerActive
-                  ? 'Bluetooth ativo. Gerenciar conexão'
-                  : 'Gerenciar conexão Bluetooth'
-              }
-              title={
-                isBleServerActive
-                  ? 'BLE MIDI visível para outros dispositivos'
-                  : isBleConnected && connectedDestination
-                    ? `Bluetooth: ${connectedDestination.displayName}`
-                    : 'Conexão Bluetooth BLE MIDI'
-              }
-              className={`nexus-connection-button h-10 ${
-                isBleConnected || isBleServerActive ? 'is-connected' : ''
-              }`}
+              className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isBleConnected || isBleServerActive ? 'is-connected' : ''}`}
             >
-              <span className="nexus-connection-icon">
+              <span className="nexus-connection-icon flex items-center justify-center">
                 <Bluetooth size={18} strokeWidth={1.8} aria-hidden="true" />
               </span>
-
-              <span className="nexus-connection-copy">
-                <span className="nexus-connection-title">Bluetooth</span>
-                <span className="nexus-connection-state">
-                  {isBleServerActive
-                    ? 'Visível'
-                    : isBleConnected
-                      ? 'Conectado'
-                      : 'Desconectado'}
+              <span className="nexus-connection-copy flex flex-col items-start leading-none text-left">
+                <span className="nexus-connection-title text-[10px] font-bold uppercase">Bluetooth</span>
+                <span className="nexus-connection-state mt-0.5 text-xs">
+                  {isBleServerActive ? 'Visível' : isBleConnected ? 'Conectado' : 'Desconectado'}
                 </span>
               </span>
-
-              {isBleConnected || isBleServerActive ? (
-                <span className="nexus-pulse-dot" aria-label="Bluetooth ativo" />
-              ) : (
-                <ChevronDown size={14} aria-hidden="true" />
-              )}
+              {isBleConnected || isBleServerActive ? <span className="nexus-pulse-dot ml-1" aria-label="Bluetooth ativo" /> : <ChevronDown size={14} className="ml-1 opacity-50" aria-hidden="true" />}
             </button>
 
             {isBleOpen && (
@@ -645,88 +463,45 @@ export default function App() {
                     <p className="nexus-eyebrow">CONECTIVIDADE SEM FIO</p>
                     <p className="mt-1 text-sm font-semibold">Bluetooth MIDI</p>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => void refreshDestinations()}
-                    className="nexus-icon-button"
-                    aria-label="Atualizar dispositivos Bluetooth"
-                    title="Atualizar"
-                  >
+                  <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button" aria-label="Atualizar dispositivos Bluetooth">
                     <RefreshCw size={16} />
                   </button>
                 </div>
-
                 {(connectedDestination || isBleServerActive) && (
-                  <button
-                    type="button"
-                    onClick={() => void handleDisconnect()}
-                    className="nexus-dropdown-action is-danger"
-                  >
-                    <X size={16} />
-                    Desconectar / parar serviço
+                  <button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger">
+                    <X size={16} /> Desconectar / parar serviço
                   </button>
                 )}
-
                 <div className="nexus-dropdown-list max-h-[35vh] overflow-y-auto overscroll-contain custom-scrollbar">
                   {bleDestinations.length === 0 ? (
-                    <p className="nexus-empty-state">
-                      Nenhum dispositivo BLE MIDI encontrado.
-                    </p>
+                    <p className="nexus-empty-state">Nenhum dispositivo BLE MIDI encontrado.</p>
                   ) : (
                     bleDestinations.map((dest) => {
                       const selected = connectedDestination?.id === dest.id;
-
                       return (
-                        <button
-                          key={dest.id}
-                          type="button"
-                          onClick={() => void handleConnect(dest)}
-                          className={`nexus-device-option ${selected ? 'is-selected' : ''}`}
-                        >
+                        <button key={dest.id} type="button" onClick={() => void handleConnect(dest)} className={`nexus-device-option ${selected ? 'is-selected' : ''}`}>
                           <span className="min-w-0 flex-1 truncate">{dest.displayName}</span>
-                          {selected ? (
-                            <CheckCircle2 size={17} className="nexus-success-icon" />
-                          ) : (
-                            <Circle size={15} className="nexus-muted-icon" />
-                          )}
+                          {selected ? <CheckCircle2 size={17} className="nexus-success-icon" /> : <Circle size={15} className="nexus-muted-icon" />}
                         </button>
                       );
                     })
                   )}
                 </div>
-
                 <div className="nexus-dropdown-footer flex flex-col gap-2 p-3">
-                  <button
-                    type="button"
-                    onClick={() => void handleScanBle()}
-                    disabled={isScanningBle}
-                    className="nexus-action-button nexus-action-primary w-full"
-                  >
+                  <button type="button" onClick={() => void handleScanBle()} disabled={isScanningBle} className="nexus-action-button nexus-action-primary w-full">
                     <Radio size={17} className={isScanningBle ? 'animate-pulse' : ''} />
                     {isScanningBle ? 'Buscando dispositivos...' : 'Buscar novos dispositivos BLE'}
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void (isBleServerActive ? handleDisconnect() : handleStartBleServer())
-                    }
-                    className={`nexus-action-button w-full ${
-                      isBleServerActive ? 'nexus-action-danger' : 'nexus-action-secondary'
-                    }`}
-                  >
+                  <button type="button" onClick={() => void (isBleServerActive ? handleDisconnect() : handleStartBleServer())} className={`nexus-action-button w-full ${isBleServerActive ? 'nexus-action-danger' : 'nexus-action-secondary'}`}>
                     {isBleServerActive ? <Power size={17} /> : <Bluetooth size={17} />}
-                    {isBleServerActive
-                      ? 'Parar BLE MIDI visível'
-                      : 'Ficar visível para Android'}
+                    {isBleServerActive ? 'Parar BLE MIDI visível' : 'Ficar visível para Android'}
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* SAIR - MANTIDO EXATAMENTE IGUAL AO ORIGINAL */}
+          {/* SAIR */}
           <button
             type="button"
             onClick={() => setShowExitConfirm(true)}
@@ -741,53 +516,17 @@ export default function App() {
 
       {/* CONFIRMAÇÃO DE SAÍDA */}
       {showExitConfirm && (
-        <div
-          className="nexus-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4"
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              setShowExitConfirm(false);
-            }
-          }}
-        >
-          <section
-            className="nexus-modal w-full max-w-sm rounded-2xl p-5 sm:p-6"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="exit-dialog-title"
-            aria-describedby="exit-dialog-description"
-          >
+        <div className="nexus-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) setShowExitConfirm(false); }}>
+          <section className="nexus-modal w-full max-w-sm rounded-2xl p-5 sm:p-6" role="alertdialog" aria-modal="true" aria-labelledby="exit-dialog-title" aria-describedby="exit-dialog-description">
             <div className="nexus-modal-icon mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl">
               <LogOut size={27} />
             </div>
-
-            <h2 id="exit-dialog-title" className="text-center text-lg font-bold">
-              Fechar aplicativo?
-            </h2>
-
-            <p
-              id="exit-dialog-description"
-              className="nexus-secondary-text mt-2 text-center text-sm"
-            >
-              Deseja realmente sair do NexusMIDI Pro?
-            </p>
-
+            <h2 id="exit-dialog-title" className="text-center text-lg font-bold">Fechar aplicativo?</h2>
+            <p id="exit-dialog-description" className="nexus-secondary-text mt-2 text-center text-sm">Deseja realmente sair do NexusMIDI Pro?</p>
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setShowExitConfirm(false)}
-                className="nexus-action-button nexus-action-secondary justify-center"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void handleConfirmExit()}
-                className="nexus-action-button nexus-action-danger justify-center"
-              >
-                <LogOut size={16} />
-                Sim, sair
+              <button type="button" onClick={() => setShowExitConfirm(false)} className="nexus-action-button nexus-action-secondary justify-center">Cancelar</button>
+              <button type="button" onClick={() => void handleConfirmExit()} className="nexus-action-button nexus-action-danger justify-center">
+                <LogOut size={16} /> Sim, sair
               </button>
             </div>
           </section>
@@ -797,39 +536,12 @@ export default function App() {
       {/* AVISOS DE STATUS */}
       {statusMessage && (
         <div className="nexus-toast-container fixed bottom-5 left-0 right-0 z-[150] flex justify-center px-4 pointer-events-none">
-          <div
-            role="status"
-            aria-live="polite"
-            className={`nexus-toast pointer-events-auto flex max-w-md items-center gap-3 rounded-xl px-4 py-3 ${
-              statusMessage.type === 'success'
-                ? 'is-success'
-                : statusMessage.type === 'warn'
-                  ? 'is-warning'
-                  : statusMessage.type === 'error'
-                    ? 'is-error'
-                    : 'is-info'
-            }`}
-          >
+          <div role="status" aria-live="polite" className={`nexus-toast pointer-events-auto flex max-w-md items-center gap-3 rounded-xl px-4 py-3 ${statusMessage.type === 'success' ? 'is-success' : statusMessage.type === 'warn' ? 'is-warning' : statusMessage.type === 'error' ? 'is-error' : 'is-info'}`}>
             <span className="shrink-0">
-              {statusMessage.type === 'success' ? (
-                <CheckCircle2 size={19} />
-              ) : statusMessage.type === 'warn' || statusMessage.type === 'error' ? (
-                <AlertTriangle size={19} />
-              ) : (
-                <Info size={19} />
-              )}
+              {statusMessage.type === 'success' ? <CheckCircle2 size={19} /> : statusMessage.type === 'warn' || statusMessage.type === 'error' ? <AlertTriangle size={19} /> : <Info size={19} />}
             </span>
-
-            <span className="min-w-0 flex-1 text-sm font-medium">
-              {statusMessage.text}
-            </span>
-
-            <button
-              type="button"
-              onClick={() => setStatusMessage(null)}
-              className="nexus-toast-close shrink-0"
-              aria-label="Fechar mensagem"
-            >
+            <span className="min-w-0 flex-1 text-sm font-medium">{statusMessage.text}</span>
+            <button type="button" onClick={() => setStatusMessage(null)} className="nexus-toast-close shrink-0" aria-label="Fechar mensagem">
               <X size={16} />
             </button>
           </div>
@@ -844,10 +556,7 @@ export default function App() {
               <MidiKeyboard
                 isConnected={!!connectedDestination || isBleServerActive}
                 selectedChannel={selectedChannel}
-                onSelectChannel={(ch) => {
-                  setSelectedChannel(ch);
-                  showMessage(`Canal alterado para: ${ch}`, 'info', 1500);
-                }}
+                onSelectChannel={(ch) => { setSelectedChannel(ch); showMessage(`Canal alterado para: ${ch}`, 'info', 1500); }}
                 onNoteOn={handleNoteOn}
                 onNoteOff={handleNoteOff}
                 onDisabledPress={handleDisabledPress}
@@ -856,48 +565,33 @@ export default function App() {
               />
             </div>
 
-            {/* BARRA DE ATIVIDADE MIDI */}
-            <div className="nexus-midi-status flex shrink-0 items-center justify-between gap-3 px-2 py-2">
+            {/* BARRA DE ATIVIDADE MIDI - MELHORIA: Alinhamento e Contraste */}
+            <div className="nexus-midi-status flex shrink-0 items-center justify-between gap-3 px-3 py-2 bg-black/20 rounded-lg">
               <div className="flex min-w-0 items-center gap-2">
-                <span
-                  className={`nexus-tx-indicator shrink-0 ${
-                    lastTxCommand ? 'is-active' : ''
-                  }`}
-                />
-
-                <span className="nexus-eyebrow shrink-0">MIDI TX</span>
-
+                <span className={`nexus-tx-indicator shrink-0 rounded-full h-2 w-2 ${lastTxCommand ? 'is-active bg-green-500' : 'bg-gray-600'}`} />
+                <span className="nexus-eyebrow shrink-0 text-xs font-bold text-gray-400">MIDI TX</span>
                 {lastTxCommand ? (
-                  <span className="nexus-midi-status-value min-w-0 truncate">
-                    {lastTxCommand.type} · CH {lastTxCommand.channel} ·{' '}
-                    {lastTxCommand.noteName} · Vel {lastTxCommand.velocity}
+                  <span className="nexus-midi-status-value min-w-0 truncate text-sm font-mono text-gray-200">
+                    {lastTxCommand.type} · CH {lastTxCommand.channel} · {lastTxCommand.noteName} · Vel {lastTxCommand.velocity}
                   </span>
                 ) : (
-                  <span className="nexus-midi-status-empty truncate">
+                  <span className="nexus-midi-status-empty truncate text-sm font-mono text-gray-500">
                     Aguardando toque
                   </span>
                 )}
               </div>
-
-              <span className="nexus-studio-label hidden shrink-0 sm:inline">
-                STUDIO MODE
+              <span className="nexus-studio-label hidden shrink-0 sm:inline text-[10px] font-bold tracking-widest text-gray-500 uppercase">
+                Studio Mode
               </span>
             </div>
           </div>
         ) : activeTab === 'router' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden">
-            <MidiRouterScreen
-              destinations={destinations}
-              onRefresh={refreshDestinations}
-            />
+            <MidiRouterScreen destinations={destinations} onRefresh={refreshDestinations} />
           </div>
         ) : activeTab === 'controls' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4">
-            <MidiControlsScreen
-              channel={selectedChannel}
-              isConnected={!!connectedDestination || isBleServerActive}
-              onStatus={(message, type = 'info') => showMessage(message, type, 3000)}
-            />
+            <MidiControlsScreen channel={selectedChannel} isConnected={!!connectedDestination || isBleServerActive} onStatus={(message, type = 'info') => showMessage(message, type, 3000)} />
           </div>
         ) : activeTab === 'monitor' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -911,44 +605,27 @@ export default function App() {
                 <div className="nexus-settings-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl">
                   <Settings size={24} aria-hidden="true" />
                 </div>
-
                 <div className="min-w-0">
                   <p className="nexus-eyebrow">PERSONALIZAÇÃO</p>
                   <h2 className="mt-1 text-lg font-bold sm:text-xl">Configurações</h2>
-                  <p className="nexus-secondary-text mt-1 text-sm">
-                    Ajuste a resposta e a aparência do teclado.
-                  </p>
+                  <p className="nexus-secondary-text mt-1 text-sm">Ajuste a resposta e a aparência do teclado.</p>
                 </div>
               </div>
 
-              {/* VELOCIDADE */}
               <section className="nexus-settings-section mb-7">
                 <div className="mb-3">
                   <h3 className="text-sm font-semibold">Intensidade das notas</h3>
-                  <p className="nexus-secondary-text mt-1 text-xs">
-                    Velocity — força enviada ao tocar nas teclas.
-                  </p>
+                  <p className="nexus-secondary-text mt-1 text-xs">Velocity — força enviada ao tocar nas teclas.</p>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   {VELOCITY_OPTIONS.map((vel) => {
                     const selected = selectedVelocity === vel.id;
-
                     return (
-                      <button
-                        key={vel.id}
-                        type="button"
-                        onClick={() => setSelectedVelocity(vel.id)}
-                        aria-pressed={selected}
-                        className={`nexus-setting-option ${
-                          selected ? 'is-selected' : ''
-                        }`}
-                      >
+                      <button key={vel.id} type="button" onClick={() => setSelectedVelocity(vel.id)} aria-pressed={selected} className={`nexus-setting-option ${selected ? 'is-selected' : ''}`}>
                         <span className="flex min-w-0 flex-col items-start gap-1">
                           <span className="text-sm font-semibold">{vel.name}</span>
                           <span className="nexus-option-caption">MIDI VELOCITY</span>
                         </span>
-
                         <span className="nexus-option-value">{vel.id}</span>
                       </button>
                     );
@@ -956,60 +633,28 @@ export default function App() {
                 </div>
               </section>
 
-              {/* PALETAS DO TECLADO */}
               <section className="nexus-settings-section">
                 <div className="mb-3">
                   <h3 className="text-sm font-semibold">Aparência das teclas</h3>
-                  <p className="nexus-secondary-text mt-1 text-xs">
-                    Escolha a combinação de cores do piano virtual.
-                  </p>
+                  <p className="nexus-secondary-text mt-1 text-xs">Escolha a combinação de cores do piano virtual.</p>
                 </div>
-
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {KEYBOARD_PALETTES.map((pal) => {
                     const selected = selectedPaletteId === pal.id;
-
                     return (
-                      <button
-                        key={pal.id}
-                        type="button"
-                        onClick={() => setSelectedPaletteId(pal.id)}
-                        aria-pressed={selected}
-                        className={`nexus-palette-option ${
-                          selected ? 'is-selected' : ''
-                        }`}
-                      >
+                      <button key={pal.id} type="button" onClick={() => setSelectedPaletteId(pal.id)} aria-pressed={selected} className={`nexus-palette-option ${selected ? 'is-selected' : ''}`}>
                         <span className="nexus-palette-preview flex shrink-0 items-center">
-                          <span
-                            className="nexus-palette-white-key"
-                            style={{ backgroundColor: pal.white }}
-                          />
-                          <span
-                            className="nexus-palette-black-key"
-                            style={{ backgroundColor: pal.black }}
-                          />
+                          <span className="nexus-palette-white-key" style={{ backgroundColor: pal.white }} />
+                          <span className="nexus-palette-black-key" style={{ backgroundColor: pal.black }} />
                         </span>
-
-                        <span className="min-w-0 flex-1 text-left text-xs font-medium sm:text-sm">
-                          {pal.name}
-                        </span>
-
-                        {selected && (
-                          <CheckCircle2
-                            size={18}
-                            className="nexus-success-icon shrink-0"
-                            aria-label="Selecionado"
-                          />
-                        )}
+                        <span className="min-w-0 flex-1 text-left text-xs font-medium sm:text-sm">{pal.name}</span>
+                        {selected && <CheckCircle2 size={18} className="nexus-success-icon shrink-0" aria-label="Selecionado" />}
                       </button>
                     );
                   })}
                 </div>
               </section>
-
-              <p className="nexus-settings-footnote mt-6 pt-4 text-xs">
-                Suas preferências são salvas automaticamente neste dispositivo.
-              </p>
+              <p className="nexus-settings-footnote mt-6 pt-4 text-xs">Suas preferências são salvas automaticamente neste dispositivo.</p>
             </section>
           </div>
         )}
