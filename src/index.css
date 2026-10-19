@@ -1312,8 +1312,8 @@ button svg {
   }
 
   .nexus-midi-viewport {
-    min-height: 0;
-    flex: 1 1 0%;
+    min-height: 190px;
+    flex: 1 1 auto;
     padding: 4px;
     border-radius: 10px;
   }
