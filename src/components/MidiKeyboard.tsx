@@ -52,8 +52,6 @@ export function MidiKeyboard({
   const containerRef = useRef<HTMLDivElement>(null);
   const activeNotesRef = useRef<Set<number>>(new Set());
 
-  // Mantém a versão atual dos callbacks sem reiniciar os listeners
-  // quando o componente pai renderiza novamente.
   const onNoteOffRef = useRef(onNoteOff);
   const onDisabledPressRef = useRef(onDisabledPress);
 
@@ -65,7 +63,6 @@ export function MidiKeyboard({
     onDisabledPressRef.current = onDisabledPress;
   }, [onDisabledPress]);
 
-  // Ajusta o zoom mínimo conforme a largura disponível.
   useEffect(() => {
     const updateMinSize = () => {
       const container = containerRef.current;
@@ -114,7 +111,6 @@ export function MidiKeyboard({
       return;
     }
 
-    // Evita enviar Note On duplicado para a mesma nota.
     if (activeNotesRef.current.has(note)) return;
 
     activeNotesRef.current.add(note);
@@ -128,10 +124,9 @@ export function MidiKeyboard({
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
-      // Compatibilidade com WebViews sem suporte completo.
+      // Compatibilidade WebViews
     }
 
-    // Mantém o envio imediato para preservar a resposta do teclado.
     void onNoteOn(note);
   };
 
@@ -157,15 +152,13 @@ export function MidiKeyboard({
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
       } catch {
-        // Ignora diferenças de suporte do dispositivo.
+        // Ignora
       }
     }
 
     void onNoteOffRef.current(note);
   };
 
-  // Libera todas as notas quando o aplicativo perde o foco
-  // ou quando o teclado é desmontado.
   useEffect(() => {
     const releaseAllNotes = () => {
       const notes = Array.from(activeNotesRef.current);
@@ -300,7 +293,6 @@ export function MidiKeyboard({
     return keys;
   };
 
-  // A tecla preta fica centralizada na divisão entre duas teclas brancas.
   function currentBlackLeft(
     whiteCount: number,
     width: number,
@@ -472,7 +464,7 @@ export function MidiKeyboard({
       {/* Teclado */}
       <div
         ref={containerRef}
-        className={`nexus-midi-viewport relative min-h-[190px] flex-1 rounded-xl border p-1 sm:p-2 ${
+        className={`nexus-midi-viewport relative min-h-[140px] flex-1 rounded-xl border p-1 sm:p-2 ${
           isScrollLocked
             ? 'overflow-hidden'
             : 'overflow-x-auto overflow-y-hidden'
@@ -481,7 +473,7 @@ export function MidiKeyboard({
           background:
             'radial-gradient(ellipse at 50% 0%, rgba(30,41,59,0.72), rgba(2,6,23,0.98) 78%)',
           borderColor: 'rgba(148,163,184,0.14)',
-          touchAction: 'pan-y',
+          touchAction: isScrollLocked ? 'none' : 'pan-x pan-y',
           scrollbarWidth: 'thin',
           scrollbarColor: '#334155 #0b1120',
         }}
