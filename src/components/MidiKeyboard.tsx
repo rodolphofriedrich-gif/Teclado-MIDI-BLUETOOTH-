@@ -472,7 +472,7 @@ export function MidiKeyboard({
       {/* Teclado */}
       <div
         ref={containerRef}
-        className={`nexus-midi-viewport relative min-h-0 flex-1 rounded-xl border p-1 sm:p-2 ${
+        className={`nexus-midi-viewport relative min-h-[190px] flex-1 rounded-xl border p-1 sm:p-2 ${
           isScrollLocked
             ? 'overflow-hidden'
             : 'overflow-x-auto overflow-y-hidden'
