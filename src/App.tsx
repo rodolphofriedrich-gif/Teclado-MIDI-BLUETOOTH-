@@ -1,7 +1,6 @@
 /**
  * NexusMIDI Pro - Aplicativo Android / Web MIDI Router Hub
- * Redesign visual: Midnight Studio / Blue Indigo.
- * Mantém a lógica de conexão e comunicação MIDI existente.
+ * Layout alinhado estilo Midnight Studio com abas coloridas individuais.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -60,6 +59,35 @@ const NAV_ITEMS = [
   { id: 'monitor', label: 'Monitor', Icon: Activity },
   { id: 'settings', label: 'Ajustes', Icon: Settings },
 ] as const;
+
+// CORES EXCLUSIVAS PARA CADA ABA AO SER SELECIONADA
+const TAB_COLORS: Record<AppTab, { bg: string; border: string; shadow: string }> = {
+  keyboard: {
+    bg: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)',
+    border: 'rgba(56, 189, 248, 0.5)',
+    shadow: '0 4px 14px rgba(14, 165, 233, 0.4)',
+  },
+  router: {
+    bg: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)',
+    border: 'rgba(52, 211, 153, 0.5)',
+    shadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
+  },
+  controls: {
+    bg: 'linear-gradient(135deg, #d97706 0%, #ea580c 100%)',
+    border: 'rgba(251, 191, 36, 0.5)',
+    shadow: '0 4px 14px rgba(245, 158, 11, 0.4)',
+  },
+  monitor: {
+    bg: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
+    border: 'rgba(192, 132, 252, 0.5)',
+    shadow: '0 4px 14px rgba(168, 85, 247, 0.4)',
+  },
+  settings: {
+    bg: 'linear-gradient(135deg, #e11d48 0%, #c026d3 100%)',
+    border: 'rgba(251, 113, 133, 0.5)',
+    shadow: '0 4px 14px rgba(244, 63, 94, 0.4)',
+  },
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('keyboard');
@@ -348,7 +376,7 @@ export default function App() {
           bytesHex: res.hex,
         });
       } catch {
-        // Preserva o comportamento original: Note Off não interrompe a interface.
+        // Preserva o comportamento original
       }
     },
     [connectedDestination, isBleServerActive],
@@ -367,7 +395,7 @@ export default function App() {
       try {
         window.close();
       } catch {
-        // O ambiente pode impedir o fechamento da janela.
+        // O ambiente pode impedir o fechamento
       }
     }
   };
@@ -396,9 +424,10 @@ export default function App() {
 
   return (
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
-      {/* CABEÇALHO */}
-      <header className="nexus-header relative z-50 flex w-full shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-3 sm:px-5">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+      {/* CABEÇALHO COM ALINHAMENTO PERFEITO */}
+      <header className="nexus-header relative z-50 flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          {/* NOME DO APP */}
           <button
             type="button"
             className="nexus-brand flex min-w-0 items-center gap-2"
@@ -408,15 +437,16 @@ export default function App() {
             }}
             aria-label="NexusMIDI Pro — ir para o teclado"
           >
-            <span className="nexus-brand-name whitespace-nowrap">
+            <span className="nexus-brand-name whitespace-nowrap text-xs font-extrabold tracking-wider sm:text-sm">
               NEXUSMIDI <span>Pro</span>
             </span>
           </button>
 
-          {/* NAVEGAÇÃO */}
+          {/* NAVEGAÇÃO DE ABAS */}
           <nav aria-label="Navegação principal" className="nexus-nav flex items-center gap-1">
             {NAV_ITEMS.map(({ id, label, Icon }) => {
               const selected = activeTab === id;
+              const tabColor = TAB_COLORS[id];
 
               return (
                 <button
@@ -429,11 +459,21 @@ export default function App() {
                   aria-label={label}
                   aria-pressed={selected}
                   title={label}
-                  className={`nexus-nav-button relative flex w-10 items-center justify-center rounded-xl ${
+                  className={`nexus-nav-button relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${
                     selected ? 'is-active' : ''
                   }`}
+                  style={
+                    selected
+                      ? {
+                          background: tabColor.bg,
+                          borderColor: tabColor.border,
+                          boxShadow: tabColor.shadow,
+                          color: '#ffffff',
+                        }
+                      : undefined
+                  }
                 >
-                  <Icon size={20} strokeWidth={2} aria-hidden="true" />
+                  <Icon size={18} strokeWidth={2.2} aria-hidden="true" />
 
                   {id === 'router' && (
                     <span
@@ -449,8 +489,8 @@ export default function App() {
           </nav>
         </div>
 
-        {/* CONEXÕES E SAÍDA */}
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
+        {/* CONEXÕES E SAÍDA (MANTENDO O BOTÃO DE SAÍDA INTACTO) */}
+        <div className="flex items-center gap-2">
           {/* USB */}
           <div className="relative">
             <button
@@ -467,12 +507,12 @@ export default function App() {
                   ? `USB: ${connectedDestination.displayName}`
                   : 'Conexão USB'
               }
-              className={`nexus-connection-button ${
+              className={`nexus-connection-button h-10 ${
                 isUsbConnected ? 'is-connected' : ''
               }`}
             >
               <span className="nexus-connection-icon">
-                <Usb size={20} strokeWidth={1.8} aria-hidden="true" />
+                <Usb size={18} strokeWidth={1.8} aria-hidden="true" />
               </span>
 
               <span className="nexus-connection-copy">
@@ -485,7 +525,7 @@ export default function App() {
               {isUsbConnected ? (
                 <span className="nexus-pulse-dot" aria-label="Conectado" />
               ) : (
-                <ChevronDown size={15} aria-hidden="true" />
+                <ChevronDown size={14} aria-hidden="true" />
               )}
             </button>
 
@@ -572,12 +612,12 @@ export default function App() {
                     ? `Bluetooth: ${connectedDestination.displayName}`
                     : 'Conexão Bluetooth BLE MIDI'
               }
-              className={`nexus-connection-button ${
+              className={`nexus-connection-button h-10 ${
                 isBleConnected || isBleServerActive ? 'is-connected' : ''
               }`}
             >
               <span className="nexus-connection-icon">
-                <Bluetooth size={20} strokeWidth={1.8} aria-hidden="true" />
+                <Bluetooth size={18} strokeWidth={1.8} aria-hidden="true" />
               </span>
 
               <span className="nexus-connection-copy">
@@ -594,7 +634,7 @@ export default function App() {
               {isBleConnected || isBleServerActive ? (
                 <span className="nexus-pulse-dot" aria-label="Bluetooth ativo" />
               ) : (
-                <ChevronDown size={15} aria-hidden="true" />
+                <ChevronDown size={14} aria-hidden="true" />
               )}
             </button>
 
@@ -686,7 +726,7 @@ export default function App() {
             )}
           </div>
 
-          {/* SAIR */}
+          {/* SAIR - MANTIDO EXATAMENTE IGUAL AO ORIGINAL */}
           <button
             type="button"
             onClick={() => setShowExitConfirm(true)}
