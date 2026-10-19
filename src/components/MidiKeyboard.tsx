@@ -193,7 +193,9 @@ export function MidiKeyboard({
 
         const isWhite = noteDef.type === 'white';
         const isPressed = pressedNotes.has(midiNote);
-        const noteLabel = `${noteDef.name}${octave}`;
+        
+        // ALTERADO AQUI: Unindo a letra ao número da oitava (ex: C3)
+        const noteLabel = noteDef.name === 'C' ? `C${octave}` : noteDef.name;
 
         if (isWhite) {
           const currentWhiteIndex = whiteIndex;
@@ -218,30 +220,22 @@ export function MidiKeyboard({
                 borderColor: isPressed ? '#22d3ee' : 'rgba(100,116,139,0.75)',
                 boxShadow: isPressed
                   ? 'inset 0 3px 9px rgba(15,23,42,0.22), 0 0 12px rgba(34,211,238,0.28)'
-                  : '0 4px 0 rgba(0,0,0,0.30), inset 0 0 0 1px rgba(255,255,255,0.25)',
+                  : '0 3px 0 rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.25)', // ALTERADO AQUI: Sombra da tecla branca mais sutil
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
               }}
             >
               <span
-                className="mb-2 rounded px-1 text-[10px] font-bold select-none"
+                className="mb-3 rounded px-1 text-[10px] font-bold select-none"
                 style={{
-                  color: isPressed ? '#075985' : '#475569',
+                  // ALTERADO AQUI: Cor do texto escura para contraste, e display do C3 junto
+                  color: isPressed ? '#075985' : '#1e293b',
                   background: isPressed
                     ? 'rgba(255,255,255,0.45)'
                     : 'transparent',
                 }}
               >
-                {noteDef.name}
+                {noteLabel}
               </span>
-
-              {noteDef.name === 'C' && (
-                <span
-                  className="mb-2 text-[9px] font-semibold select-none"
-                  style={{ color: '#64748b' }}
-                >
-                  {octave}
-                </span>
-              )}
             </div>
           );
         } else {
@@ -258,7 +252,7 @@ export function MidiKeyboard({
               onPointerUp={(event) => releaseNote(midiNote, event)}
               onPointerCancel={(event) => releaseNote(midiNote, event)}
               onLostPointerCapture={() => releaseNote(midiNote)}
-              className="absolute top-0 z-30 flex h-[61%] cursor-pointer flex-col items-center justify-end rounded-b-md border select-none"
+              className="absolute top-0 z-30 flex h-[62%] cursor-pointer flex-col items-center justify-end rounded-b-sm border select-none" // ALTERADO AQUI: Altura para 62% e borda rounded-b-sm
               style={{
                 width: `${blackWidth}px`,
                 left: `${left}px`,
@@ -266,14 +260,15 @@ export function MidiKeyboard({
                   ? 'linear-gradient(180deg, #38bdf8 0%, #0369a1 100%)'
                   : `linear-gradient(180deg, ${customBlackKeyColor} 0%, ${customBlackKeyColor} 72%, #020617 100%)`,
                 borderColor: isPressed ? '#67e8f9' : '#020617',
+                // ALTERADO AQUI: Redução drástica da sombra para não parecer flutuante
                 boxShadow: isPressed
                   ? '0 0 12px rgba(34,211,238,0.55), inset 0 0 5px rgba(255,255,255,0.25)'
-                  : '0 5px 7px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.07)',
+                  : '0 3px 4px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.1)',
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
               }}
             >
               <span
-                className="mb-2 text-[8px] font-bold select-none"
+                className="mb-3 text-[9px] font-bold select-none" // ALTERADO AQUI: mb-3 para subir o texto e tamanho 9 para melhor leitura
                 style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}
               >
                 {noteDef.name}
@@ -308,7 +303,7 @@ export function MidiKeyboard({
           '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035)',
       }}
     >
-      {/* 1. TECLADO (No topo, com flex-1 para crescer ao máximo) */}
+      {/* 1. TECLADO */}
       <div
         ref={containerRef}
         className={`nexus-midi-viewport relative flex-1 rounded-xl border p-1 sm:p-2 ${
@@ -338,7 +333,7 @@ export function MidiKeyboard({
         </div>
       </div>
 
-      {/* 2. PAINEL INFERIOR (Agrupado com shrink-0 para nunca ser esmagado) */}
+      {/* 2. PAINEL INFERIOR */}
       <div className="flex shrink-0 flex-col gap-2">
         
         {/* Controles */}
@@ -368,13 +363,14 @@ export function MidiKeyboard({
                   aria-label="Diminuir oitava"
                   disabled={startOctave <= 1}
                   onClick={() => setStartOctave((value) => Math.max(1, value - 1))}
-                  className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-35"
+                  className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" // ALTERADO AQUI: hover:text-white
                 >
                   −
                 </button>
 
-                <span className="min-w-[92px] text-center font-mono text-xs font-bold text-cyan-300">
-                  C{startOctave} — C{startOctave + 2}
+                {/* ALTERADO AQUI: Mostra apenas a oitava base atual, com largura ajustada */}
+                <span className="min-w-[48px] text-center font-mono text-xs font-bold text-cyan-300">
+                  C{startOctave}
                 </span>
 
                 <button
@@ -382,7 +378,7 @@ export function MidiKeyboard({
                   aria-label="Aumentar oitava"
                   disabled={startOctave >= 6}
                   onClick={() => setStartOctave((value) => Math.min(6, value + 1))}
-                  className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-35"
+                  className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" // ALTERADO AQUI: hover:text-white
                 >
                   +
                 </button>
