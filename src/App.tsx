@@ -408,10 +408,6 @@ export default function App() {
             }}
             aria-label="NexusMIDI Pro — ir para o teclado"
           >
-            <span className="nexus-brand-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
-              <Music2 size={21} strokeWidth={2.2} aria-hidden="true" />
-            </span>
-
             <span className="nexus-brand-name whitespace-nowrap">
               NEXUSMIDI <span>Pro</span>
             </span>
@@ -433,7 +429,7 @@ export default function App() {
                   aria-label={label}
                   aria-pressed={selected}
                   title={label}
-                  className={`nexus-nav-button relative flex h-10 w-10 items-center justify-center rounded-xl ${
+                  className={`nexus-nav-button relative flex w-10 items-center justify-center rounded-xl ${
                     selected ? 'is-active' : ''
                   }`}
                 >
