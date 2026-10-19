@@ -1358,3 +1358,31 @@ button svg {
     height: 100dvh;
   }
 }
+/* Alinhamento exato da barra superior */
+.nexus-header {
+  display: flex;
+  align-items: center;
+  height: 52px;
+}
+
+.nexus-nav {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 3px;
+}
+
+.nexus-nav-button {
+  height: 34px;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nexus-connection-button,
+.nexus-exit-button {
+  height: 40px;
+  display: flex;
+  align-items: center;
+}
