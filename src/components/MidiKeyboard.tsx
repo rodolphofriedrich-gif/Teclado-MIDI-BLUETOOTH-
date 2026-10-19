@@ -104,8 +104,6 @@ export function MidiKeyboard({
     note: number,
     event: React.PointerEvent<HTMLDivElement>
   ) => {
-    event.preventDefault();
-
     if (!isConnected) {
       onDisabledPressRef.current();
       return;
@@ -121,21 +119,13 @@ export function MidiKeyboard({
       return next;
     });
 
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Compatibilidade WebViews
-    }
-
     void onNoteOn(note);
   };
 
   const releaseNote = (
     note: number,
-    event?: React.PointerEvent<HTMLDivElement>
+    _event?: React.PointerEvent<HTMLDivElement>
   ) => {
-    event?.preventDefault();
-
     if (!activeNotesRef.current.has(note)) return;
 
     activeNotesRef.current.delete(note);
@@ -145,16 +135,6 @@ export function MidiKeyboard({
       next.delete(note);
       return next;
     });
-
-    if (event) {
-      try {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
-        }
-      } catch {
-        // Ignora
-      }
-    }
 
     void onNoteOffRef.current(note);
   };
@@ -224,7 +204,6 @@ export function MidiKeyboard({
                   ? 'inset 0 3px 9px rgba(15,23,42,0.22), 0 0 12px rgba(34,211,238,0.28)'
                   : '0 4px 0 rgba(0,0,0,0.30), inset 0 0 0 1px rgba(255,255,255,0.25)',
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
-                touchAction: 'none',
               }}
             >
               <span
@@ -275,7 +254,6 @@ export function MidiKeyboard({
                   ? '0 0 12px rgba(34,211,238,0.55), inset 0 0 5px rgba(255,255,255,0.25)'
                   : '0 5px 7px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.07)',
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
-                touchAction: 'none',
               }}
             >
               <span
@@ -310,7 +288,8 @@ export function MidiKeyboard({
         background:
           'linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,13,25,0.99))',
         borderColor: 'rgba(148,163,184,0.16)',
-        boxShadow: '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035)',
+        boxShadow:
+          '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035)',
       }}
     >
       {/* Cabeçalho e controles */}
@@ -473,9 +452,10 @@ export function MidiKeyboard({
           background:
             'radial-gradient(ellipse at 50% 0%, rgba(30,41,59,0.72), rgba(2,6,23,0.98) 78%)',
           borderColor: 'rgba(148,163,184,0.14)',
-          touchAction: isScrollLocked ? 'none' : 'pan-x pan-y',
+          touchAction: isScrollLocked ? 'none' : 'pan-x',
           scrollbarWidth: 'thin',
           scrollbarColor: '#334155 #0b1120',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         <div
