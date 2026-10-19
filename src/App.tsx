@@ -530,7 +530,7 @@ export default function App() {
             </button>
 
             {isUsbOpen && (
-              <div className="nexus-dropdown absolute right-0 z-[100] mt-2 w-64 overflow-hidden rounded-2xl">
+              <div className="nexus-dropdown absolute right-0 top-full z-[100] mt-2 w-[calc(100vw-32px)] max-w-[256px] overflow-hidden rounded-2xl">
                 <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3">
                   <div>
                     <p className="nexus-eyebrow">CONEXÃO USB</p>
@@ -639,7 +639,7 @@ export default function App() {
             </button>
 
             {isBleOpen && (
-              <div className="nexus-dropdown absolute right-0 z-[100] mt-2 w-[min(18rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl">
+              <div className="nexus-dropdown absolute right-0 top-full z-[100] mt-2 w-[calc(100vw-32px)] max-w-[320px] overflow-hidden rounded-2xl">
                 <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3">
                   <div>
                     <p className="nexus-eyebrow">CONECTIVIDADE SEM FIO</p>
