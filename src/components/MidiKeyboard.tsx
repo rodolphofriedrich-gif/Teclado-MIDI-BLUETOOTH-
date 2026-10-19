@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 
 interface MidiKeyboardProps {
@@ -11,6 +12,26 @@ interface MidiKeyboardProps {
   customBlackKeyColor: string;
 }
 
+const OCTAVE_NOTES = [
+  { semitone: 0, name: 'C', type: 'white' },
+  { semitone: 1, name: 'C#', type: 'black' },
+  { semitone: 2, name: 'D', type: 'white' },
+  { semitone: 3, name: 'D#', type: 'black' },
+  { semitone: 4, name: 'E', type: 'white' },
+  { semitone: 5, name: 'F', type: 'white' },
+  { semitone: 6, name: 'F#', type: 'black' },
+  { semitone: 7, name: 'G', type: 'white' },
+  { semitone: 8, name: 'G#', type: 'black' },
+  { semitone: 9, name: 'A', type: 'white' },
+  { semitone: 10, name: 'A#', type: 'black' },
+  { semitone: 11, name: 'B', type: 'white' },
+] as const;
+
+const WHITE_KEYS_PER_OCTAVE = 7;
+const TOTAL_WHITE_KEYS = 14;
+const MIN_KEY_WIDTH = 35;
+const MAX_KEY_WIDTH = 95;
+
 export function MidiKeyboard({
   isConnected,
   selectedChannel,
@@ -21,148 +42,67 @@ export function MidiKeyboard({
   customWhiteKeyColor,
   customBlackKeyColor,
 }: MidiKeyboardProps) {
-  const [startOctave, setStartOctave] = useState<number>(3);
-  const [keyWidth, setKeyWidth] = useState<number>(60);
-  const [minKeyWidth, setMinKeyWidth] = useState<number>(45);
-  const [isScrollLocked, setIsScrollLocked] = useState<boolean>(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [startOctave, setStartOctave] = useState(3);
+  const [keyWidth, setKeyWidth] = useState(60);
+  const [minKeyWidth, setMinKeyWidth] = useState(MIN_KEY_WIDTH);
+  const [isScrollLocked, setIsScrollLocked] = useState(false);
+  const [pressedNotes, setPressedNotes] = useState<Set<number>>(
+    () => new Set()
+  );
 
-  // Mantém o controle das notas realmente pressionadas.
-  // Usamos Pointer Events para que mouse, toque e caneta
-  // sigam exatamente o mesmo caminho e para garantir que
-  // cada Note On tenha um Note Off correspondente.
+  const containerRef = useRef<HTMLDivElement>(null);
   const activeNotesRef = useRef<Set<number>>(new Set());
 
-  // Total de teclas brancas exibidas (2 oitavas = 14 teclas brancas)
-  const totalWhiteKeys = 14;
+  // Mantém a versão atual dos callbacks sem reiniciar os listeners
+  // quando o componente pai renderiza novamente.
+  const onNoteOffRef = useRef(onNoteOff);
+  const onDisabledPressRef = useRef(onDisabledPress);
 
-  // Calcula dinamicamente a largura mínima para que as teclas ocupem sempre 100% do espaço visível
+  useEffect(() => {
+    onNoteOffRef.current = onNoteOff;
+  }, [onNoteOff]);
+
+  useEffect(() => {
+    onDisabledPressRef.current = onDisabledPress;
+  }, [onDisabledPress]);
+
+  // Ajusta o zoom mínimo conforme a largura disponível.
   useEffect(() => {
     const updateMinSize = () => {
-      if (containerRef.current) {
-        const availableWidth = containerRef.current.clientWidth - 10;
-        const calculatedMin = Math.floor(availableWidth / totalWhiteKeys);
-        setMinKeyWidth(Math.max(35, calculatedMin));
-        if (keyWidth < calculatedMin) {
-          setKeyWidth(calculatedMin);
-        }
-      }
+      const container = containerRef.current;
+      if (!container) return;
+
+      const availableWidth = Math.max(0, container.clientWidth - 12);
+      const calculatedMin = Math.max(
+        MIN_KEY_WIDTH,
+        Math.floor(availableWidth / TOTAL_WHITE_KEYS)
+      );
+
+      setMinKeyWidth(Math.min(MAX_KEY_WIDTH, calculatedMin));
+      setKeyWidth((current) =>
+        Math.max(
+          Math.min(MAX_KEY_WIDTH, calculatedMin),
+          Math.min(MAX_KEY_WIDTH, current)
+        )
+      );
     };
 
     updateMinSize();
+
+    let observer: ResizeObserver | undefined;
+
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updateMinSize);
+      observer.observe(containerRef.current);
+    }
+
     window.addEventListener('resize', updateMinSize);
-    return () => window.removeEventListener('resize', updateMinSize);
-  }, [keyWidth]);
 
-  // Definição exata das notas por oitava
-  const octaveNotes = [
-    { semitone: 0, name: 'C', type: 'white', offsetMultiplier: 0 },
-    { semitone: 1, name: 'C#', type: 'black', offsetMultiplier: 0.7 },
-    { semitone: 2, name: 'D', type: 'white', offsetMultiplier: 1 },
-    { semitone: 3, name: 'D#', type: 'black', offsetMultiplier: 1.7 },
-    { semitone: 4, name: 'E', type: 'white', offsetMultiplier: 2 },
-    { semitone: 5, name: 'F', type: 'white', offsetMultiplier: 3 },
-    { semitone: 6, name: 'F#', type: 'black', offsetMultiplier: 3.7 },
-    { semitone: 7, name: 'G', type: 'white', offsetMultiplier: 4 },
-    { semitone: 8, name: 'G#', type: 'black', offsetMultiplier: 4.7 },
-    { semitone: 9, name: 'A', type: 'white', offsetMultiplier: 5 },
-    { semitone: 10, name: 'A#', type: 'black', offsetMultiplier: 5.7 },
-    { semitone: 11, name: 'B', type: 'white', offsetMultiplier: 6 },
-  ];
-
-  const buildKeyboardStructure = () => {
-    let items = [];
-    let whiteKeyCounter = 0;
-
-    for (let octave = startOctave; octave <= startOctave + 1; octave++) {
-      for (let noteDef of octaveNotes) {
-        const midiNote = (octave + 1) * 12 + noteDef.semitone;
-        if (midiNote > 127) continue;
-
-        const isWhite = noteDef.type === 'white';
-        let leftPosition = 0;
-
-        if (isWhite) {
-          leftPosition = whiteKeyCounter * keyWidth;
-          whiteKeyCounter++;
-        } else {
-          // Posicionamento exato das teclas pretas entre as brancas
-          const baseWhiteIndex = Math.floor(whiteKeyCounter - (octave === startOctave ? 12 : 24) + (noteDef.semitone === 1 ? 0 : noteDef.semitone === 3 ? 1 : noteDef.semitone === 6 ? 3 : noteDef.semitone === 8 ? 4 : 5));
-          // Cálculo seguro baseado no índice da tecla branca anterior
-          leftPosition = ((whiteKeyCounter - 1) - (octaveNotes.filter((n, idx) => idx < octaveNotes.indexOf(noteDef) && n.type === 'white').length === 0 ? 0 : 0)) * keyWidth;
-        }
-
-        items.push({
-          midiNote,
-          type: noteDef.type,
-          name: `${noteDef.name}${octave}`,
-          isWhite,
-          // Posição horizontal calculada de forma fiável
-          leftOffset: isWhite 
-            ? (whiteKeyCounter - 1) * keyWidth 
-            : ((whiteKeyCounter - 1) * keyWidth) - (keyWidth * 0.3),
-        });
-      }
-    }
-    return items;
-  };
-
-  // Abordagem simplificada e robusta para renderização em grelha / flex unificado
-  const renderKeys = () => {
-    let whiteIndex = 0;
-    let list = [];
-
-    for (let octave = startOctave; octave <= startOctave + 1; octave++) {
-      for (let i = 0; i < octaveNotes.length; i++) {
-        const noteDef = octaveNotes[i];
-        const midiNote = (octave + 1) * 12 + noteDef.semitone;
-        if (midiNote > 127) continue;
-
-        const isWhite = noteDef.type === 'white';
-
-        if (isWhite) {
-          const currentWIndex = whiteIndex;
-          list.push(
-            <div
-              key={midiNote}
-              onPointerDown={(e) => pressNote(midiNote, e)}
-              onPointerUp={(e) => releaseNote(midiNote, e)}
-              onPointerCancel={(e) => releaseNote(midiNote, e)}
-              className="h-full border border-slate-400 rounded-b-md flex flex-col justify-end pb-2 items-center cursor-pointer transition-[transform,filter,background-color,box-shadow] duration-75 ease-out active:translate-y-[3px] active:brightness-95 active:shadow-inner relative shadow-[0_4px_0_rgba(0,0,0,0.22)] z-10 shrink-0"
-              style={{
-                width: `${keyWidth}px`,
-                backgroundColor: customWhiteKeyColor,
-              }}
-            >
-              <span className="text-[9px] font-bold text-slate-700 select-none">{noteDef.name}{octave}</span>
-            </div>
-          );
-          whiteIndex++;
-        } else {
-          // Tecla preta sobreposta com largura proporcional (58% da branca) e posicionamento absoluto perfeito
-          const blackWidth = keyWidth * 0.58;
-          const prevWhiteLeft = (whiteIndex - 1) * keyWidth;
-          const absoluteLeft = prevWhiteLeft + (keyWidth - (blackWidth / 2));
-
-          list.push(
-            <div
-              key={midiNote}
-              onPointerDown={(e) => pressNote(midiNote, e)}
-              onPointerUp={(e) => releaseNote(midiNote, e)}
-              onPointerCancel={(e) => releaseNote(midiNote, e)}
-              className="absolute h-[60%] z-30 border border-slate-950 rounded-b-md flex flex-col justify-end pb-1 items-center cursor-pointer transition-[transform,filter,box-shadow] duration-75 ease-out active:translate-y-[2px] active:brightness-125 active:shadow-lg shadow-2xl"
-              style={{
-                width: `${blackWidth}px`,
-                left: `${absoluteLeft}px`,
-                backgroundColor: customBlackKeyColor,
-              }}
-            />
-          );
-        }
-      }
-    }
-    return list;
-  };
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateMinSize);
+    };
+  }, []);
 
   const pressNote = (
     note: number,
@@ -171,25 +111,28 @@ export function MidiKeyboard({
     event.preventDefault();
 
     if (!isConnected) {
-      onDisabledPress();
+      onDisabledPressRef.current();
       return;
     }
 
-    // Impede Note On duplicado para o mesmo ponteiro/nota.
-    if (activeNotesRef.current.has(note)) {
-      return;
-    }
+    // Evita enviar Note On duplicado para a mesma nota.
+    if (activeNotesRef.current.has(note)) return;
 
     activeNotesRef.current.add(note);
+
+    setPressedNotes((current) => {
+      const next = new Set(current);
+      next.add(note);
+      return next;
+    });
 
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
-      // Alguns WebViews podem não disponibilizar pointer capture.
+      // Compatibilidade com WebViews sem suporte completo.
     }
 
-    // Não aguardamos aqui: a fila do midiService garante a ordem
-    // Note On -> Note Off mesmo em toques muito rápidos.
+    // Mantém o envio imediato para preservar a resposta do teclado.
     void onNoteOn(note);
   };
 
@@ -199,11 +142,15 @@ export function MidiKeyboard({
   ) => {
     event?.preventDefault();
 
-    if (!activeNotesRef.current.has(note)) {
-      return;
-    }
+    if (!activeNotesRef.current.has(note)) return;
 
     activeNotesRef.current.delete(note);
+
+    setPressedNotes((current) => {
+      const next = new Set(current);
+      next.delete(note);
+      return next;
+    });
 
     if (event) {
       try {
@@ -211,23 +158,23 @@ export function MidiKeyboard({
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
       } catch {
-        // Ignora diferenças de suporte do WebView.
+        // Ignora diferenças de suporte do dispositivo.
       }
     }
 
-    void onNoteOff(note);
+    void onNoteOffRef.current(note);
   };
 
-  // Se o aplicativo perder foco, libera imediatamente todas as notas
-  // que ainda estiverem marcadas como pressionadas. Isso evita notas
-  // presas ao abrir uma notificação, trocar de aplicativo ou bloquear a tela.
+  // Libera todas as notas quando o aplicativo perde o foco
+  // ou quando o teclado é desmontado.
   useEffect(() => {
     const releaseAllNotes = () => {
       const notes = Array.from(activeNotesRef.current);
       activeNotesRef.current.clear();
+      setPressedNotes(new Set());
 
       for (const note of notes) {
-        void onNoteOff(note);
+        void onNoteOffRef.current(note);
       }
     };
 
@@ -243,92 +190,325 @@ export function MidiKeyboard({
     return () => {
       window.removeEventListener('blur', releaseAllNotes);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      // Garante que nenhuma nota permaneça presa ao desmontar o teclado.
       releaseAllNotes();
     };
-  }, [onNoteOff]);
+  }, []);
+
+  const renderKeys = () => {
+    const keys: React.ReactNode[] = [];
+    let whiteIndex = 0;
+
+    for (let octave = startOctave; octave <= startOctave + 1; octave++) {
+      for (const noteDef of OCTAVE_NOTES) {
+        const midiNote = (octave + 1) * 12 + noteDef.semitone;
+        if (midiNote > 127) continue;
+
+        const isWhite = noteDef.type === 'white';
+        const isPressed = pressedNotes.has(midiNote);
+        const noteLabel = `${noteDef.name}${octave}`;
+
+        if (isWhite) {
+          const currentWhiteIndex = whiteIndex;
+          whiteIndex++;
+
+          keys.push(
+            <div
+              key={midiNote}
+              role="button"
+              aria-label={`Nota ${noteLabel}`}
+              aria-pressed={isPressed}
+              onPointerDown={(event) => pressNote(midiNote, event)}
+              onPointerUp={(event) => releaseNote(midiNote, event)}
+              onPointerCancel={(event) => releaseNote(midiNote, event)}
+              onLostPointerCapture={() => releaseNote(midiNote)}
+              className="relative z-10 flex h-full shrink-0 cursor-pointer flex-col items-center justify-end rounded-b-lg border transition-[filter,transform,box-shadow] duration-75 select-none"
+              style={{
+                width: `${keyWidth}px`,
+                background: isPressed
+                  ? `linear-gradient(180deg, ${customWhiteKeyColor} 0%, #bfdbfe 100%)`
+                  : `linear-gradient(180deg, ${customWhiteKeyColor} 0%, ${customWhiteKeyColor} 88%, #cbd5e1 100%)`,
+                borderColor: isPressed ? '#22d3ee' : 'rgba(100,116,139,0.75)',
+                boxShadow: isPressed
+                  ? 'inset 0 3px 9px rgba(15,23,42,0.22), 0 0 12px rgba(34,211,238,0.28)'
+                  : '0 4px 0 rgba(0,0,0,0.30), inset 0 0 0 1px rgba(255,255,255,0.25)',
+                transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
+                touchAction: 'none',
+              }}
+            >
+              <span
+                className="mb-2 rounded px-1 text-[10px] font-bold select-none"
+                style={{
+                  color: isPressed ? '#075985' : '#475569',
+                  background: isPressed
+                    ? 'rgba(255,255,255,0.45)'
+                    : 'transparent',
+                }}
+              >
+                {noteDef.name}
+              </span>
+
+              {noteDef.name === 'C' && (
+                <span
+                  className="mb-2 text-[9px] font-semibold select-none"
+                  style={{ color: '#64748b' }}
+                >
+                  {octave}
+                </span>
+              )}
+            </div>
+          );
+        } else {
+          const blackWidth = keyWidth * 0.58;
+          const left = currentBlackLeft(whiteIndex, keyWidth, blackWidth);
+
+          keys.push(
+            <div
+              key={midiNote}
+              role="button"
+              aria-label={`Nota ${noteLabel}`}
+              aria-pressed={isPressed}
+              onPointerDown={(event) => pressNote(midiNote, event)}
+              onPointerUp={(event) => releaseNote(midiNote, event)}
+              onPointerCancel={(event) => releaseNote(midiNote, event)}
+              onLostPointerCapture={() => releaseNote(midiNote)}
+              className="absolute top-0 z-30 flex h-[61%] cursor-pointer flex-col items-center justify-end rounded-b-md border select-none"
+              style={{
+                width: `${blackWidth}px`,
+                left: `${left}px`,
+                background: isPressed
+                  ? 'linear-gradient(180deg, #38bdf8 0%, #0369a1 100%)'
+                  : `linear-gradient(180deg, ${customBlackKeyColor} 0%, ${customBlackKeyColor} 72%, #020617 100%)`,
+                borderColor: isPressed ? '#67e8f9' : '#020617',
+                boxShadow: isPressed
+                  ? '0 0 12px rgba(34,211,238,0.55), inset 0 0 5px rgba(255,255,255,0.25)'
+                  : '0 5px 7px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.07)',
+                transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
+                touchAction: 'none',
+              }}
+            >
+              <span
+                className="mb-2 text-[8px] font-bold select-none"
+                style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}
+              >
+                {noteDef.name}
+              </span>
+            </div>
+          );
+        }
+      }
+    }
+
+    return keys;
+  };
+
+  // A tecla preta fica centralizada na divisão entre duas teclas brancas.
+  function currentBlackLeft(
+    whiteCount: number,
+    width: number,
+    blackWidth: number
+  ) {
+    return (whiteCount - 1) * width + width - blackWidth / 2;
+  }
+
+  const keyboardWidth = TOTAL_WHITE_KEYS * keyWidth;
 
   return (
-    <div className="flex-1 w-full flex flex-col bg-slate-900 rounded-xl border border-slate-800 p-2 gap-2 select-none overflow-hidden shadow-xl">
-      
-      {/* BARRA SUPERIOR DO TECLADO */}
-      <div className="flex flex-wrap items-center justify-between bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 gap-2 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase text-slate-400">Oitavas:</span>
-            <div className="flex items-center bg-slate-900 border border-slate-700 rounded-md overflow-hidden">
+    <section
+      className="flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden rounded-2xl border p-3 shadow-2xl"
+      style={{
+        background:
+          'linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,13,25,0.99))',
+        borderColor: 'rgba(148,163,184,0.16)',
+        boxShadow: '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035)',
+      }}
+    >
+      {/* Cabeçalho e controles */}
+      <div
+        className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-3"
+        style={{
+          background: 'rgba(5,10,22,0.76)',
+          borderColor: 'rgba(148,163,184,0.14)',
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Oitavas */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+              Oitavas
+            </span>
+
+            <div
+              className="flex items-center overflow-hidden rounded-lg border"
+              style={{
+                background: '#0f172a',
+                borderColor: 'rgba(148,163,184,0.2)',
+              }}
+            >
               <button
-                onClick={() => setStartOctave(Math.max(1, startOctave - 1))}
-                className="px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 font-bold transition"
+                type="button"
+                aria-label="Diminuir oitava"
+                disabled={startOctave <= 1}
+                onClick={() => setStartOctave((value) => Math.max(1, value - 1))}
+                className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-35"
               >
-                -
+                −
               </button>
-              <span className="px-2 text-xs font-mono text-sky-400 font-bold">
-                C{startOctave} - C{startOctave + 2}
+
+              <span className="min-w-[92px] text-center font-mono text-xs font-bold text-cyan-300">
+                C{startOctave} — C{startOctave + 2}
               </span>
+
               <button
-                onClick={() => setStartOctave(Math.min(6, startOctave + 1))}
-                className="px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 font-bold transition"
+                type="button"
+                aria-label="Aumentar oitava"
+                disabled={startOctave >= 6}
+                onClick={() => setStartOctave((value) => Math.min(6, value + 1))}
+                className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-35"
               >
                 +
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-md px-2 py-0.5">
-            <span className="text-[9px] font-bold text-slate-400 uppercase">Canal:</span>
+          {/* Canal MIDI */}
+          <label
+            className="flex h-8 items-center gap-2 rounded-lg border px-2.5"
+            style={{
+              background: '#0f172a',
+              borderColor: 'rgba(148,163,184,0.2)',
+            }}
+          >
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Canal
+            </span>
+
             <select
+              aria-label="Canal MIDI"
               value={selectedChannel}
-              onChange={(e) => onSelectChannel(Number(e.target.value))}
-              className="bg-transparent text-xs text-sky-300 font-bold outline-none cursor-pointer"
+              onChange={(event) => onSelectChannel(Number(event.target.value))}
+              className="cursor-pointer bg-transparent text-xs font-bold text-cyan-300 outline-none"
             >
-              {Array.from({ length: 16 }, (_, i) => (
-                <option key={i + 1} value={i + 1} className="bg-slate-900 text-white">
-                  {i + 1}
+              {Array.from({ length: 16 }, (_, index) => (
+                <option
+                  key={index + 1}
+                  value={index + 1}
+                  className="bg-slate-900 text-white"
+                >
+                  {String(index + 1).padStart(2, '0')}
                 </option>
               ))}
             </select>
-          </div>
+          </label>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-slate-400 font-medium">Zoom:</span>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Zoom */}
+          <label className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Zoom
+            </span>
+
             <input
+              aria-label="Zoom das teclas"
               type="range"
               min={minKeyWidth}
-              max="95"
+              max={MAX_KEY_WIDTH}
               value={keyWidth}
-              onChange={(e) => setKeyWidth(Number(e.target.value))}
-              className="w-20 accent-sky-500 h-1 bg-slate-700 rounded-lg cursor-pointer"
+              onChange={(event) => setKeyWidth(Number(event.target.value))}
+              className="h-1.5 w-20 cursor-pointer accent-cyan-400"
             />
-          </div>
 
+            <span className="min-w-[30px] text-right font-mono text-[10px] text-slate-400">
+              {keyWidth}px
+            </span>
+          </label>
+
+          {/* Bloqueio da rolagem */}
           <button
-            onClick={() => setIsScrollLocked(!isScrollLocked)}
-            className={`px-2.5 py-1 rounded-md text-[10px] font-bold border transition flex items-center gap-1 ${
-              isScrollLocked
-                ? 'bg-amber-950/80 border-amber-600 text-amber-200'
-                : 'bg-slate-800 border-slate-700 text-slate-300'
-            }`}
+            type="button"
+            aria-pressed={isScrollLocked}
+            onClick={() => setIsScrollLocked((value) => !value)}
+            className="flex h-8 items-center gap-2 rounded-lg border px-3 text-[10px] font-bold transition"
+            style={{
+              background: isScrollLocked
+                ? 'rgba(245,158,11,0.12)'
+                : 'rgba(51,65,85,0.3)',
+              borderColor: isScrollLocked
+                ? 'rgba(245,158,11,0.45)'
+                : 'rgba(148,163,184,0.2)',
+              color: isScrollLocked ? '#fbbf24' : '#cbd5e1',
+            }}
           >
-            {isScrollLocked ? '🔒 Bloqueado' : '🔓 Rolagem Livre'}
+            <span aria-hidden="true">{isScrollLocked ? '🔒' : '↔'}</span>
+            {isScrollLocked ? 'Bloqueado' : 'Rolagem livre'}
           </button>
         </div>
       </div>
 
-      {/* ÁREA DO TECLADO COM PREENCHIMENTO TOTAL E TECLAS PRETAS PROPORCIONAIS */}
-      <div 
+      {/* Indicadores de estado */}
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-2">
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{
+              background: isConnected ? '#10b981' : '#f59e0b',
+              boxShadow: isConnected
+                ? '0 0 10px rgba(16,185,129,0.55)'
+                : '0 0 10px rgba(245,158,11,0.35)',
+            }}
+          />
+
+          <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-400">
+            {isConnected ? 'Pronto para tocar' : 'Aguardando conexão MIDI'}
+          </span>
+        </div>
+
+        <span className="text-[10px] font-mono text-slate-500">
+          {pressedNotes.size > 0
+            ? `${pressedNotes.size} nota${pressedNotes.size > 1 ? 's' : ''} ativa${pressedNotes.size > 1 ? 's' : ''}`
+            : 'Nenhuma nota ativa'}
+        </span>
+      </div>
+
+      {/* Teclado */}
+      <div
         ref={containerRef}
-        className={`flex-1 w-full bg-slate-950 rounded-lg border border-slate-800 relative flex overflow-x-auto custom-scrollbar p-1 ${
-          isScrollLocked ? 'overflow-x-hidden justify-center' : ''
+        className={`relative min-h-[190px] flex-1 rounded-xl border p-2 ${
+          isScrollLocked
+            ? 'overflow-hidden'
+            : 'overflow-x-auto overflow-y-hidden'
         }`}
+        style={{
+          background:
+            'radial-gradient(ellipse at 50% 0%, rgba(30,41,59,0.72), rgba(2,6,23,0.98) 78%)',
+          borderColor: 'rgba(148,163,184,0.14)',
+          touchAction: 'pan-y',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#334155 #0b1120',
+        }}
       >
-        <div className="relative flex h-full items-start w-full">
+        <div
+          className="relative flex h-full items-stretch"
+          style={{
+            width: `${keyboardWidth}px`,
+            minWidth: `${keyboardWidth}px`,
+            marginInline: isScrollLocked ? 'auto' : undefined,
+          }}
+        >
           {renderKeys()}
         </div>
       </div>
 
-    </div>
+      {/* Rodapé */}
+      <div className="flex shrink-0 items-center justify-between gap-2 px-1">
+        <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500">
+          NexusMIDI Pro · Virtual Keyboard
+        </span>
+
+        <span className="text-[9px] font-mono text-slate-500">
+          2 oitavas · 16 canais MIDI
+        </span>
+      </div>
+    </section>
   );
 }
