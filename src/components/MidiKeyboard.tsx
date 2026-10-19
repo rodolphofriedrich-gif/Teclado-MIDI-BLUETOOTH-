@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 
 interface MidiKeyboardProps {
@@ -314,7 +313,7 @@ export function MidiKeyboard({
 
   return (
     <section
-      className="flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden rounded-2xl border p-3 shadow-2xl"
+      className="nexus-midi-keyboard flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden rounded-2xl border p-2 sm:gap-3 sm:p-3"
       style={{
         background:
           'linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,13,25,0.99))',
@@ -324,7 +323,7 @@ export function MidiKeyboard({
     >
       {/* Cabeçalho e controles */}
       <div
-        className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-3"
+        className="nexus-midi-controls flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-3"
         style={{
           background: 'rgba(5,10,22,0.76)',
           borderColor: 'rgba(148,163,184,0.14)',
@@ -473,7 +472,7 @@ export function MidiKeyboard({
       {/* Teclado */}
       <div
         ref={containerRef}
-        className={`relative min-h-[190px] flex-1 rounded-xl border p-2 ${
+        className={`nexus-midi-viewport relative min-h-0 flex-1 rounded-xl border p-1 sm:p-2 ${
           isScrollLocked
             ? 'overflow-hidden'
             : 'overflow-x-auto overflow-y-hidden'
