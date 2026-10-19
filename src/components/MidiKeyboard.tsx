@@ -10,6 +10,8 @@ interface MidiKeyboardProps {
   onDisabledPress: () => void;
   customWhiteKeyColor: string;
   customBlackKeyColor: string;
+  // NOVO: Propriedade para avisar o App sobre as notas ativas
+  onActiveNotesChange?: (count: number) => void;
 }
 
 const OCTAVE_NOTES = [
@@ -40,6 +42,7 @@ export function MidiKeyboard({
   onDisabledPress,
   customWhiteKeyColor,
   customBlackKeyColor,
+  onActiveNotesChange,
 }: MidiKeyboardProps) {
   const [startOctave, setStartOctave] = useState(3);
   const [keyWidth, setKeyWidth] = useState(60);
@@ -57,6 +60,13 @@ export function MidiKeyboard({
 
   const onNoteOffRef = useRef(onNoteOff);
   const onDisabledPressRef = useRef(onDisabledPress);
+
+  // NOVO: Efeito para notificar o App quando o número de notas mudar
+  useEffect(() => {
+    if (onActiveNotesChange) {
+      onActiveNotesChange(pressedNotes.size);
+    }
+  }, [pressedNotes.size, onActiveNotesChange]);
 
   useEffect(() => {
     onNoteOffRef.current = onNoteOff;
@@ -193,8 +203,6 @@ export function MidiKeyboard({
 
         const isWhite = noteDef.type === 'white';
         const isPressed = pressedNotes.has(midiNote);
-        
-        // ALTERADO AQUI: Unindo a letra ao número da oitava (ex: C3)
         const noteLabel = noteDef.name === 'C' ? `C${octave}` : noteDef.name;
 
         if (isWhite) {
@@ -220,14 +228,13 @@ export function MidiKeyboard({
                 borderColor: isPressed ? '#22d3ee' : 'rgba(100,116,139,0.75)',
                 boxShadow: isPressed
                   ? 'inset 0 3px 9px rgba(15,23,42,0.22), 0 0 12px rgba(34,211,238,0.28)'
-                  : '0 3px 0 rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.25)', // ALTERADO AQUI: Sombra da tecla branca mais sutil
+                  : '0 3px 0 rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.25)',
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
               }}
             >
               <span
                 className="mb-3 rounded px-1 text-[10px] font-bold select-none"
                 style={{
-                  // ALTERADO AQUI: Cor do texto escura para contraste, e display do C3 junto
                   color: isPressed ? '#075985' : '#1e293b',
                   background: isPressed
                     ? 'rgba(255,255,255,0.45)'
@@ -252,7 +259,7 @@ export function MidiKeyboard({
               onPointerUp={(event) => releaseNote(midiNote, event)}
               onPointerCancel={(event) => releaseNote(midiNote, event)}
               onLostPointerCapture={() => releaseNote(midiNote)}
-              className="absolute top-0 z-30 flex h-[62%] cursor-pointer flex-col items-center justify-end rounded-b-sm border select-none" // ALTERADO AQUI: Altura para 62% e borda rounded-b-sm
+              className="absolute top-0 z-30 flex h-[62%] cursor-pointer flex-col items-center justify-end rounded-b-sm border select-none"
               style={{
                 width: `${blackWidth}px`,
                 left: `${left}px`,
@@ -260,7 +267,6 @@ export function MidiKeyboard({
                   ? 'linear-gradient(180deg, #38bdf8 0%, #0369a1 100%)'
                   : `linear-gradient(180deg, ${customBlackKeyColor} 0%, ${customBlackKeyColor} 72%, #020617 100%)`,
                 borderColor: isPressed ? '#67e8f9' : '#020617',
-                // ALTERADO AQUI: Redução drástica da sombra para não parecer flutuante
                 boxShadow: isPressed
                   ? '0 0 12px rgba(34,211,238,0.55), inset 0 0 5px rgba(255,255,255,0.25)'
                   : '0 3px 4px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.1)',
@@ -268,7 +274,7 @@ export function MidiKeyboard({
               }}
             >
               <span
-                className="mb-3 text-[9px] font-bold select-none" // ALTERADO AQUI: mb-3 para subir o texto e tamanho 9 para melhor leitura
+                className="mb-3 text-[9px] font-bold select-none"
                 style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}
               >
                 {noteDef.name}
@@ -303,7 +309,141 @@ export function MidiKeyboard({
           '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035)',
       }}
     >
-      {/* 1. TECLADO */}
+      {/* 1. PAINEL SUPERIOR: CONTROLES (Vermelho) */}
+      <div
+        className="nexus-midi-controls flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-3"
+        style={{
+          background: 'rgba(5,10,22,0.76)',
+          borderColor: 'rgba(148,163,184,0.14)',
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Oitavas */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+              Oitavas
+            </span>
+            <div
+              className="flex items-center overflow-hidden rounded-lg border"
+              style={{
+                background: '#0f172a',
+                borderColor: 'rgba(148,163,184,0.2)',
+              }}
+            >
+              <button
+                type="button"
+                aria-label="Diminuir oitava"
+                disabled={startOctave <= 1}
+                onClick={() => setStartOctave((value) => Math.max(1, value - 1))}
+                className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                −
+              </button>
+              <span className="min-w-[48px] text-center font-mono text-xs font-bold text-cyan-300">
+                C{startOctave}
+              </span>
+              <button
+                type="button"
+                aria-label="Aumentar oitava"
+                disabled={startOctave >= 6}
+                onClick={() => setStartOctave((value) => Math.min(6, value + 1))}
+                className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          {/* Canal MIDI */}
+          <div className="relative" ref={channelDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsChannelOpen(!isChannelOpen)}
+              className="flex h-8 items-center gap-2 rounded-lg border px-2.5 transition hover:bg-slate-800"
+              style={{
+                background: '#0f172a',
+                borderColor: 'rgba(148,163,184,0.2)',
+              }}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Canal
+              </span>
+              <span className="min-w-[20px] text-center font-mono text-xs font-bold text-cyan-300">
+                {String(selectedChannel).padStart(2, '0')}
+              </span>
+              <ChevronDown size={14} className="text-slate-400" />
+            </button>
+            {isChannelOpen && (
+              <div className="nexus-dropdown absolute bottom-full left-0 z-[100] mb-2 max-h-48 w-24 overflow-y-auto rounded-xl custom-scrollbar shadow-xl">
+                <div className="nexus-dropdown-list flex flex-col gap-0.5 p-1">
+                  {Array.from({ length: 16 }, (_, index) => {
+                    const ch = index + 1;
+                    const selected = selectedChannel === ch;
+                    return (
+                      <button
+                        key={ch}
+                        type="button"
+                        onClick={() => {
+                          onSelectChannel(ch);
+                          setIsChannelOpen(false);
+                        }}
+                        className={`nexus-device-option justify-center py-1.5 font-mono text-xs ${
+                          selected ? 'is-selected' : ''
+                        }`}
+                      >
+                        {String(ch).padStart(2, '0')}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Zoom */}
+          <label className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Zoom
+            </span>
+            <input
+              aria-label="Zoom das teclas"
+              type="range"
+              min={minKeyWidth}
+              max={MAX_KEY_WIDTH}
+              value={keyWidth}
+              onChange={(event) => setKeyWidth(Number(event.target.value))}
+              className="h-1.5 w-20 cursor-pointer accent-cyan-400"
+            />
+            <span className="min-w-[30px] text-right font-mono text-[10px] text-slate-400">
+              {keyWidth}px
+            </span>
+          </label>
+
+          {/* Bloqueio da rolagem */}
+          <button
+            type="button"
+            aria-pressed={isScrollLocked}
+            onClick={() => setIsScrollLocked((value) => !value)}
+            className="flex h-8 items-center gap-2 rounded-lg border px-3 text-[10px] font-bold transition"
+            style={{
+              background: isScrollLocked
+                ? 'rgba(245,158,11,0.12)'
+                : 'rgba(51,65,85,0.3)',
+              borderColor: isScrollLocked
+                ? 'rgba(245,158,11,0.45)'
+                : 'rgba(148,163,184,0.2)',
+              color: isScrollLocked ? '#fbbf24' : '#cbd5e1',
+            }}
+          >
+            <span aria-hidden="true">{isScrollLocked ? '🔒' : '↔'}</span>
+            {isScrollLocked ? 'Bloqueado' : 'Rolagem livre'}
+          </button>
+        </div>
+      </div>
+
+      {/* 2. TECLADO (No meio) */}
       <div
         ref={containerRef}
         className={`nexus-midi-viewport relative flex-1 rounded-xl border p-1 sm:p-2 ${
@@ -331,188 +471,6 @@ export function MidiKeyboard({
         >
           {renderKeys()}
         </div>
-      </div>
-
-      {/* 2. PAINEL INFERIOR */}
-      <div className="flex shrink-0 flex-col gap-2">
-        
-        {/* Controles */}
-        <div
-          className="nexus-midi-controls flex flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-3"
-          style={{
-            background: 'rgba(5,10,22,0.76)',
-            borderColor: 'rgba(148,163,184,0.14)',
-          }}
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Oitavas */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                Oitavas
-              </span>
-
-              <div
-                className="flex items-center overflow-hidden rounded-lg border"
-                style={{
-                  background: '#0f172a',
-                  borderColor: 'rgba(148,163,184,0.2)',
-                }}
-              >
-                <button
-                  type="button"
-                  aria-label="Diminuir oitava"
-                  disabled={startOctave <= 1}
-                  onClick={() => setStartOctave((value) => Math.max(1, value - 1))}
-                  className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" // ALTERADO AQUI: hover:text-white
-                >
-                  −
-                </button>
-
-                {/* ALTERADO AQUI: Mostra apenas a oitava base atual, com largura ajustada */}
-                <span className="min-w-[48px] text-center font-mono text-xs font-bold text-cyan-300">
-                  C{startOctave}
-                </span>
-
-                <button
-                  type="button"
-                  aria-label="Aumentar oitava"
-                  disabled={startOctave >= 6}
-                  onClick={() => setStartOctave((value) => Math.min(6, value + 1))}
-                  className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35" // ALTERADO AQUI: hover:text-white
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            {/* Canal MIDI (Dropdown Customizado) */}
-            <div className="relative" ref={channelDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setIsChannelOpen(!isChannelOpen)}
-                className="flex h-8 items-center gap-2 rounded-lg border px-2.5 transition hover:bg-slate-800"
-                style={{
-                  background: '#0f172a',
-                  borderColor: 'rgba(148,163,184,0.2)',
-                }}
-              >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Canal
-                </span>
-                <span className="min-w-[20px] text-center font-mono text-xs font-bold text-cyan-300">
-                  {String(selectedChannel).padStart(2, '0')}
-                </span>
-                <ChevronDown size={14} className="text-slate-400" />
-              </button>
-
-              {/* Menu abre para CIMA e flutua sobre o teclado */}
-              {isChannelOpen && (
-                <div className="nexus-dropdown absolute bottom-full left-0 z-[100] mb-2 max-h-48 w-24 overflow-y-auto rounded-xl custom-scrollbar shadow-xl">
-                  <div className="nexus-dropdown-list flex flex-col gap-0.5 p-1">
-                    {Array.from({ length: 16 }, (_, index) => {
-                      const ch = index + 1;
-                      const selected = selectedChannel === ch;
-                      return (
-                        <button
-                          key={ch}
-                          type="button"
-                          onClick={() => {
-                            onSelectChannel(ch);
-                            setIsChannelOpen(false);
-                          }}
-                          className={`nexus-device-option justify-center py-1.5 font-mono text-xs ${
-                            selected ? 'is-selected' : ''
-                          }`}
-                        >
-                          {String(ch).padStart(2, '0')}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Zoom */}
-            <label className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Zoom
-              </span>
-
-              <input
-                aria-label="Zoom das teclas"
-                type="range"
-                min={minKeyWidth}
-                max={MAX_KEY_WIDTH}
-                value={keyWidth}
-                onChange={(event) => setKeyWidth(Number(event.target.value))}
-                className="h-1.5 w-20 cursor-pointer accent-cyan-400"
-              />
-
-              <span className="min-w-[30px] text-right font-mono text-[10px] text-slate-400">
-                {keyWidth}px
-              </span>
-            </label>
-
-            {/* Bloqueio da rolagem */}
-            <button
-              type="button"
-              aria-pressed={isScrollLocked}
-              onClick={() => setIsScrollLocked((value) => !value)}
-              className="flex h-8 items-center gap-2 rounded-lg border px-3 text-[10px] font-bold transition"
-              style={{
-                background: isScrollLocked
-                  ? 'rgba(245,158,11,0.12)'
-                  : 'rgba(51,65,85,0.3)',
-                borderColor: isScrollLocked
-                  ? 'rgba(245,158,11,0.45)'
-                  : 'rgba(148,163,184,0.2)',
-                color: isScrollLocked ? '#fbbf24' : '#cbd5e1',
-              }}
-            >
-              <span aria-hidden="true">{isScrollLocked ? '🔒' : '↔'}</span>
-              {isScrollLocked ? 'Bloqueado' : 'Rolagem livre'}
-            </button>
-          </div>
-        </div>
-
-        {/* Indicadores de Status */}
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-2">
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{
-                background: isConnected ? '#10b981' : '#f59e0b',
-                boxShadow: isConnected
-                  ? '0 0 10px rgba(16,185,129,0.55)'
-                  : '0 0 10px rgba(245,158,11,0.35)',
-              }}
-            />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-400">
-              {isConnected ? 'Pronto para tocar' : 'Aguardando conexão MIDI'}
-            </span>
-          </div>
-
-          <span className="text-[10px] font-mono text-slate-500">
-            {pressedNotes.size > 0
-              ? `${pressedNotes.size} nota${pressedNotes.size > 1 ? 's' : ''} ativa${pressedNotes.size > 1 ? 's' : ''}`
-              : 'Nenhuma nota ativa'}
-          </span>
-        </div>
-
-        {/* Rodapé Original */}
-        <div className="flex items-center justify-between gap-2 px-1 border-t pt-2" style={{ borderColor: 'rgba(148,163,184,0.1)' }}>
-          <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500">
-            NexusMIDI Pro · Virtual Keyboard
-          </span>
-
-          <span className="text-[9px] font-mono text-slate-500">
-            2 oitavas · 16 canais MIDI
-          </span>
-        </div>
-        
       </div>
     </section>
   );
