@@ -1,4 +1,3 @@
-
 /**
  * NexusMIDI Pro - Aplicativo Android / Web MIDI Router Hub
  * Redesign visual: Midnight Studio / Blue Indigo.
@@ -396,7 +395,7 @@ export default function App() {
   };
 
   return (
-    <div className="nexus-app fixed inset-0 flex h-screen w-screen flex-col overflow-hidden font-sans antialiased select-none">
+    <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
       {/* CABEÇALHO */}
       <header className="nexus-header relative z-50 flex w-full shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-3 sm:px-5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
