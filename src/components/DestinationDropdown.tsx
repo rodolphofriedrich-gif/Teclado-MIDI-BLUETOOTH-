@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MidiDestination } from '../types/midi';
+import { ChevronDown, CheckCircle2, Circle, RefreshCw, Usb, Bluetooth, Radio, X } from 'lucide-react';
 
 interface DestinationDropdownProps {
   destinations: MidiDestination[];
@@ -60,11 +61,6 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
   const usbDestinations = destinations.filter((dest) => dest.type === 'usb' || dest.type === 'virtual');
   const bleDestinations = destinations.filter((dest) => dest.type === 'ble');
 
-  // Label do botão principal da lista suspensa
-  const buttonLabel = connectedDestination
-    ? `${connectedDestination.displayName} ✅ Conectado`
-    : 'Desconectado';
-
   return (
     <div
       className={`relative inline-block text-left ${isOpen ? 'z-[100]' : 'z-20'}`}
@@ -78,66 +74,72 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
         aria-expanded={isOpen}
         className={`flex items-center justify-between gap-2.5 px-3 py-2 min-w-[160px] sm:min-w-[200px] max-w-[260px] sm:max-w-[340px] rounded-lg border text-left shadow-sm transition-all focus:outline-none focus:ring-2 ${
           connectedDestination
-            ? 'bg-emerald-950/50 hover:bg-emerald-950/70 border-emerald-500/60 text-emerald-200 focus:ring-emerald-400/50'
-            : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300 focus:ring-slate-400/50'
+            ? 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-700/60 text-emerald-300 focus:ring-emerald-500/50'
+            : 'bg-[#0f172a] hover:bg-slate-800 border-slate-700 text-slate-300 focus:ring-slate-500/50'
         }`}
       >
-        <span className="truncate text-xs sm:text-sm font-semibold">
-          {buttonLabel}
-        </span>
-        <span
-          className={`text-[10px] text-slate-400 transition-transform duration-150 shrink-0 ${
+        <div className="flex items-center gap-2 truncate">
+          {connectedDestination ? (
+            <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+          ) : (
+            <Circle size={16} className="text-slate-500 shrink-0" />
+          )}
+          <span className="truncate text-xs sm:text-sm font-semibold">
+            {connectedDestination ? connectedDestination.displayName : 'Desconectado'}
+          </span>
+        </div>
+        <ChevronDown
+          size={16}
+          className={`text-slate-400 transition-transform duration-200 shrink-0 ${
             isOpen ? 'rotate-180' : ''
           }`}
-        >
-          ▼
-        </span>
+        />
       </button>
 
       {/* Menu Suspenso */}
       {isOpen && (
         <div
           role="listbox"
-          style={{ backgroundColor: '#0f172a' }}
-          className="absolute right-0 mt-1.5 w-72 sm:w-84 max-h-[75vh] overflow-y-auto bg-slate-900 border-2 border-slate-700 rounded-lg shadow-2xl z-[100] py-1.5 divide-y divide-slate-800 animate-in fade-in duration-100 opacity-100"
+          className="absolute right-0 mt-2 w-[280px] sm:w-[320px] max-h-[75vh] overflow-y-auto bg-[#0f172a] border border-[#1e293b] rounded-xl shadow-2xl z-[100] divide-y divide-[#1e293b] custom-scrollbar"
         >
           {/* Cabeçalho */}
-          <div className="px-3 py-1.5 flex items-center justify-between gap-2 text-xs bg-slate-950/80">
+          <div className="px-3 py-2 flex items-center justify-between gap-2 bg-[#0a0f1c] rounded-t-xl">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-              Gerenciar Conexões MIDI
+              Gerenciar Conexões
             </span>
             <button
               type="button"
               onClick={onRefresh}
-              className="text-[11px] text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 transition"
+              className="flex items-center gap-1 text-[10px] font-bold text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 transition"
               title="Atualizar lista de dispositivos"
             >
-              ↻ Atualizar
+              <RefreshCw size={12} /> Atualizar
             </button>
           </div>
 
           {/* Opção de Desconectar */}
           {connectedDestination && (
-            <div className="p-1.5 bg-slate-900">
+            <div className="p-2 bg-[#0f172a]">
               <button
                 type="button"
                 onClick={handleDisconnectClick}
-                className="w-full text-left px-3 py-1.5 text-xs font-semibold text-rose-300 bg-rose-950/60 hover:bg-rose-950/80 border border-rose-800/80 rounded flex items-center justify-between transition-colors"
+                className="w-full text-left px-3 py-2 text-xs font-bold text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-900/50 rounded-lg flex items-center justify-between transition-colors"
               >
-                <span>Desconectar destino atual</span>
-                <span>⚪</span>
+                <span className="flex items-center gap-2">
+                  <X size={14} /> Desconectar destino atual
+                </span>
               </button>
             </div>
           )}
 
           {/* SEÇÃO 1: Dispositivos USB / Locais */}
-          <div className="py-1 bg-slate-900">
-            <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400 bg-slate-950/40 flex items-center gap-1.5">
-              <span>🔌</span> Dispositivos USB / Locais ({usbDestinations.length})
+          <div className="py-1">
+            <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-emerald-400 bg-emerald-950/20 flex items-center gap-1.5">
+              <Usb size={12} /> USB / Locais ({usbDestinations.length})
             </div>
             {usbDestinations.length === 0 ? (
-              <div className="px-3 py-1.5 text-xs text-slate-500 italic">
-                Nenhum dispositivo USB conectado.
+              <div className="px-4 py-2 text-[11px] text-slate-500 italic">
+                Nenhum dispositivo USB.
               </div>
             ) : (
               usbDestinations.map((dest) => {
@@ -149,23 +151,25 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
                     onClick={() => handleSelect(dest)}
                     className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
                       isSelected
-                        ? 'bg-emerald-950/60 text-emerald-300 font-bold border-l-2 border-emerald-400'
-                        : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                        ? 'bg-emerald-900/30 text-emerald-300 border-l-2 border-emerald-500'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent'
                     }`}
                   >
                     <div className="truncate pr-2">
-                      <div className="truncate font-medium flex items-center gap-1.5">
-                        <span>🔌</span> {dest.displayName}
+                      <div className="truncate font-semibold flex items-center gap-1.5">
+                        {dest.displayName}
                       </div>
                       {dest.manufacturer && (
-                        <div className="text-[10px] text-slate-400 truncate pl-5">
+                        <div className="text-[10px] text-slate-500 truncate mt-0.5">
                           {dest.manufacturer}
                         </div>
                       )}
                     </div>
-                    <span className="text-xs shrink-0 font-medium">
-                      {isSelected ? '🟢 Conectado' : '⚪'}
-                    </span>
+                    {isSelected ? (
+                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                    ) : (
+                      <Circle size={14} className="text-slate-600 shrink-0" />
+                    )}
                   </button>
                 );
               })
@@ -173,13 +177,13 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
           </div>
 
           {/* SEÇÃO 2: Dispositivos Bluetooth BLE */}
-          <div className="py-1 bg-slate-900">
-            <div className="px-3 py-1 text-[10px] uppercase font-bold text-sky-400 bg-sky-950/30 flex items-center gap-1.5">
-              <span>📡</span> Dispositivos Bluetooth BLE ({bleDestinations.length})
+          <div className="py-1">
+            <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-cyan-400 bg-cyan-950/20 flex items-center gap-1.5">
+              <Bluetooth size={12} /> Bluetooth BLE ({bleDestinations.length})
             </div>
             {bleDestinations.length === 0 ? (
-              <div className="px-3 py-1.5 text-xs text-slate-500 italic">
-                Nenhum dispositivo BLE pareado. Use a busca abaixo.
+              <div className="px-4 py-2 text-[11px] text-slate-500 italic">
+                Nenhum dispositivo BLE pareado.
               </div>
             ) : (
               bleDestinations.map((dest) => {
@@ -191,23 +195,25 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
                     onClick={() => handleSelect(dest)}
                     className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors ${
                       isSelected
-                        ? 'bg-emerald-950/60 text-emerald-300 font-bold border-l-2 border-emerald-400'
-                        : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                        ? 'bg-cyan-900/30 text-cyan-300 border-l-2 border-cyan-500'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white border-l-2 border-transparent'
                     }`}
                   >
                     <div className="truncate pr-2">
-                      <div className="truncate font-medium flex items-center gap-1.5">
-                        <span>📡</span> {dest.displayName}
+                      <div className="truncate font-semibold flex items-center gap-1.5">
+                        {dest.displayName}
                       </div>
                       {dest.manufacturer && (
-                        <div className="text-[10px] text-slate-400 truncate pl-5">
+                        <div className="text-[10px] text-slate-500 truncate mt-0.5">
                           {dest.manufacturer}
                         </div>
                       )}
                     </div>
-                    <span className="text-xs shrink-0 font-medium">
-                      {isSelected ? '🟢 Conectado' : '⚪'}
-                    </span>
+                    {isSelected ? (
+                      <CheckCircle2 size={14} className="text-cyan-400 shrink-0" />
+                    ) : (
+                      <Circle size={14} className="text-slate-600 shrink-0" />
+                    )}
                   </button>
                 );
               })
@@ -215,28 +221,22 @@ export const DestinationDropdown: React.FC<DestinationDropdownProps> = ({
           </div>
 
           {/* Botão de Busca BLE */}
-          <div className="p-1.5 bg-slate-950">
+          <div className="p-2 bg-[#0a0f1c] rounded-b-xl">
             <button
               type="button"
-              onClick={() => {
-                onScanBle();
-              }}
+              onClick={onScanBle}
               disabled={isScanningBle}
-              className={`w-full text-left px-3 py-2 text-xs font-semibold border rounded flex items-center justify-between transition active:scale-[0.99] ${
+              className={`w-full text-left px-3 py-2 text-xs font-bold border rounded-lg flex items-center justify-between transition-colors ${
                 isScanningBle 
                   ? 'text-slate-400 bg-slate-800 border-slate-700 cursor-wait' 
-                  : 'text-sky-300 bg-sky-950/60 hover:bg-sky-900/60 border-sky-800/80'
+                  : 'text-cyan-300 bg-cyan-950/40 hover:bg-cyan-900/60 border-cyan-800/50'
               }`}
             >
-              <span className="flex items-center gap-1.5">
-                <span className={isScanningBle ? 'animate-pulse' : ''}>📡</span>
-                <span>
-                  {isScanningBle
-                    ? 'Buscando dispositivos BLE...'
-                    : '+ Buscar dispositivo BLE ao alcance'}
-                </span>
+              <span className="flex items-center gap-2">
+                <Radio size={14} className={isScanningBle ? 'animate-pulse' : ''} />
+                {isScanningBle ? 'Buscando dispositivos...' : 'Buscar dispositivo BLE'}
               </span>
-              <span className={`text-[10px] uppercase font-bold ${isScanningBle ? 'text-slate-500' : 'text-sky-400'}`}>BLE</span>
+              <span className="text-[9px] uppercase font-bold opacity-70">Scan</span>
             </button>
           </div>
         </div>
