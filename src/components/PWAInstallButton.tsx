@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -10,6 +11,7 @@ export const PWAInstallButton: React.FC = () => {
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
 
   useEffect(() => {
+    // Verifica se o app já está rodando como PWA instalado
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
@@ -44,6 +46,7 @@ export const PWAInstallButton: React.FC = () => {
     }
   };
 
+  // Se já está instalado ou o navegador não suporta o prompt, não renderiza nada
   if (isInstalled || !deferredPrompt) {
     return null;
   }
@@ -52,10 +55,10 @@ export const PWAInstallButton: React.FC = () => {
     <button
       type="button"
       onClick={handleInstallClick}
-      className="text-xs px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-medium flex items-center gap-1.5 shadow-sm transition active:scale-95"
+      className="flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-95 shadow-sm border bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border-emerald-800/50"
       title="Instalar no Android como aplicativo nativo"
     >
-      <span>📲</span>
+      <Download size={14} className="animate-bounce" style={{ animationDuration: '2s' }} />
       <span>Instalar App</span>
     </button>
   );
