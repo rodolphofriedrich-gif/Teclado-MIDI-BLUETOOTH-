@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Play, Save, SlidersHorizontal, Trash2, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Play, Save, SlidersHorizontal, Trash2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { midiManager } from '../services/midiService';
 
 type MidiPreset = {
@@ -88,6 +88,7 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
     try {
       setModWheel(preset.modWheel); setVolume(preset.volume); setExpression(preset.expression); setPan(preset.pan);
       setSustain(preset.sustain); setProgram(preset.program); setPitchBend(preset.pitchBend); setPressure(preset.pressure);
+      
       await midiManager.sendControlChange(channel, 1, preset.modWheel);
       await midiManager.sendControlChange(channel, 7, preset.volume);
       await midiManager.sendControlChange(channel, 11, preset.expression);
@@ -96,6 +97,7 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
       await midiManager.sendProgramChange(channel, preset.program - 1);
       await midiManager.sendPitchBend(channel, preset.pitchBend);
       await midiManager.sendChannelPressure(channel, preset.pressure);
+      
       onStatus(`Preset “${preset.name}” aplicado no canal ${channel}.`, 'success');
     } catch (error: any) {
       onStatus(`Não foi possível aplicar o preset: ${error?.message || 'erro desconhecido'}`, 'error');
@@ -115,6 +117,7 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
   const resetControls = () => {
     setModWheel(DEFAULT_CONTROLS.modWheel); setVolume(DEFAULT_CONTROLS.volume); setExpression(DEFAULT_CONTROLS.expression);
     setPan(DEFAULT_CONTROLS.pan); setSustain(false); setProgram(1); setPitchBend(8192); setPressure(0);
+    onStatus('Controles redefinidos localmente.', 'info');
   };
 
   const panic = async () => {
@@ -129,31 +132,54 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
     } finally { setBusy(false); }
   };
 
-  const slider = (label: string, value: number, setValue: (value: number) => void, onCommit: (value: number) => void, description?: string) => (
-    <label className="block rounded-lg border border-slate-800 bg-slate-900/80 p-3">
-      <span className="flex items-center justify-between gap-3 text-xs font-semibold text-slate-200">
-        <span>{label}</span><span className="font-mono text-sky-300">{value}</span>
-      </span>
-      {description && <span className="mt-1 block text-[10px] text-slate-500">{description}</span>}
-      <input className="mt-3 w-full accent-sky-500" type="range" min="0" max="127" value={value} onChange={(event) => setValue(Number(event.target.value))} onPointerUp={() => onCommit(value)} onKeyUp={() => onCommit(value)} />
-    </label>
+  // CORREÇÃO: O valor é enviado usando o target do evento, evitando atraso do estado do React
+  const slider = (
+    label: string, 
+    value: number, 
+    setValue: (value: number) => void, 
+    onCommit: (value: number) => void, 
+    description?: string,
+    accentColor: string = 'accent-cyan-500'
+  ) => (
+    <div className="flex flex-col rounded-xl border border-[#1e293b] bg-[#0f172a] p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <label className="text-[11px] font-bold uppercase tracking-wide text-slate-300">{label}</label>
+        <span className="rounded bg-[#0a0f1c] px-2 py-0.5 font-mono text-xs font-bold text-cyan-400 border border-[#1e293b]">{value}</span>
+      </div>
+      {description && <span className="mb-3 block text-[9px] text-slate-500 leading-tight">{description}</span>}
+      <input 
+        className={`w-full ${accentColor} h-2 cursor-pointer`} 
+        type="range" 
+        min="0" 
+        max="127" 
+        value={value} 
+        onChange={(event) => setValue(Number(event.target.value))} 
+        onPointerUp={(event) => onCommit(Number((event.target as HTMLInputElement).value))} 
+        onKeyUp={(event) => onCommit(Number((event.target as HTMLInputElement).value))} 
+      />
+    </div>
   );
 
   return (
-    <section className="flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-xl border border-slate-800 bg-slate-950 p-3 sm:p-4 space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="text-sky-400" size={20} />
+    <section className="flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-xl border border-[#1e293b] bg-[#0a0f1c] p-3 sm:p-5 space-y-5">
+      
+      {/* CABEÇALHO */}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1e293b] pb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-cyan-900/30 rounded-lg text-cyan-400">
+            <SlidersHorizontal size={20} />
+          </div>
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-sky-300">Controles MIDI</h2>
-            <p className="text-[10px] text-slate-500">Mensagens de controle para o canal {channel}</p>
+            <h2 className="text-base font-bold uppercase tracking-wider text-cyan-400">Controles MIDI</h2>
+            <p className="text-[10px] text-slate-400">Mensagens de controle para o canal {channel}</p>
           </div>
         </div>
-        <div className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${isConnected ? 'border-emerald-700 bg-emerald-950 text-emerald-300' : 'border-amber-700 bg-amber-950 text-amber-200'}`}>
-          {isConnected ? 'MIDI conectado' : 'Sem conexão MIDI'}
+        <div className={`rounded-full border px-3 py-1.5 text-[10px] font-bold tracking-wide ${isConnected ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400' : 'border-amber-700/50 bg-amber-900/20 text-amber-400'}`}>
+          {isConnected ? 'MIDI CONECTADO' : 'SEM CONEXÃO MIDI'}
         </div>
       </header>
 
+      {/* SLIDERS GRID */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {slider('Modulação • CC1', modWheel, setModWheel, (value) => void sendCC(1, value, 'Modulação'))}
         {slider('Volume • CC7', volume, setVolume, (value) => void sendCC(7, value, 'Volume'))}
@@ -161,47 +187,158 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
         {slider('Panorama • CC10', pan, setPan, (value) => void sendCC(10, value, 'Panorama'), '0 = esquerda • 64 = centro • 127 = direita')}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">Performance</h3>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-950 p-3">
-            <div><div className="text-xs font-semibold text-slate-200">Sustain • CC64</div><div className="text-[10px] text-slate-500">Mantém as notas enquanto estiver ligado.</div></div>
-            <button disabled={busy || !isConnected} onClick={() => { const next = !sustain; setSustain(next); void sendCC(64, next ? 127 : 0, next ? 'Sustain ligado' : 'Sustain desligado'); }} className={`rounded-lg border px-4 py-2 text-xs font-bold disabled:opacity-40 ${sustain ? 'border-emerald-500 bg-emerald-700 text-white' : 'border-slate-700 bg-slate-800 text-slate-300'}`}>{sustain ? 'Ligado' : 'Desligado'}</button>
-          </div>
-          <label className="block text-xs text-slate-300">Program Change <span className="text-slate-500">(1–128)</span>
-            <div className="mt-2 flex gap-2">
-              <input type="number" min="1" max="128" value={program} onChange={(event) => setProgram(Math.max(1, Math.min(128, Number(event.target.value) || 1)))} className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-sky-300" />
-              <button disabled={busy || !isConnected} onClick={() => void sendAction(() => midiManager.sendProgramChange(channel, program - 1), `Program ${program} enviado • Canal ${channel}`)} className="rounded-lg bg-sky-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Enviar</button>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        
+        {/* CARD PERFORMANCE */}
+        <div className="rounded-xl border border-[#1e293b] bg-[#0f172a] p-4 space-y-4 shadow-sm">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span> Performance
+          </h3>
+          
+          {/* SUSTAIN */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-3">
+            <div>
+              <div className="text-xs font-semibold text-slate-200">Sustain • CC64</div>
+              <div className="text-[10px] text-slate-500">Mantém as notas enquanto estiver ligado.</div>
             </div>
-          </label>
-          {slider('Channel Pressure • Aftertouch', pressure, setPressure, (value) => void sendAction(() => midiManager.sendChannelPressure(channel, value), `Channel Pressure: ${value} • Canal ${channel}`))}
+            <button 
+              disabled={busy || !isConnected} 
+              onClick={() => { const next = !sustain; setSustain(next); void sendCC(64, next ? 127 : 0, next ? 'Sustain ligado' : 'Sustain desligado'); }} 
+              className={`rounded-lg border px-5 py-2 text-xs font-bold transition-all disabled:opacity-40 ${sustain ? 'border-emerald-500 bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]' : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            >
+              {sustain ? 'Ligado' : 'Desligado'}
+            </button>
+          </div>
+
+          {/* PROGRAM CHANGE */}
+          <div className="rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-3">
+            <label className="block text-xs font-semibold text-slate-200 mb-2">Program Change <span className="text-slate-500 font-normal">(1–128)</span></label>
+            <div className="flex gap-2">
+              <input 
+                type="number" 
+                min="1" 
+                max="128" 
+                value={program} 
+                onChange={(event) => setProgram(Math.max(1, Math.min(128, Number(event.target.value) || 1)))} 
+                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-[#0f172a] px-3 py-2 font-mono text-sm text-cyan-300 outline-none focus:border-cyan-500" 
+              />
+              <button 
+                disabled={busy || !isConnected} 
+                onClick={() => void sendAction(() => midiManager.sendProgramChange(channel, program - 1), `Program ${program} enviado • Canal ${channel}`)} 
+                className="rounded-lg bg-cyan-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 hover:bg-cyan-600 transition"
+              >
+                Enviar
+              </button>
+            </div>
+          </div>
+
+          {/* PRESSURE */}
+          {slider('Channel Pressure • Aftertouch', pressure, setPressure, (value) => void sendAction(() => midiManager.sendChannelPressure(channel, value), `Channel Pressure: ${value} • Canal ${channel}`), undefined, 'accent-fuchsia-500')}
         </div>
 
-        <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3 space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">Pitch Bend</h3>
-          <div className="rounded-lg bg-slate-950 p-3">
-            <div className="flex items-center justify-between text-xs"><span className="text-slate-400">Grave</span><span className="font-mono font-bold text-sky-300">{pitchBend - 8192 > 0 ? '+' : ''}{pitchBend - 8192}</span><span className="text-slate-400">Agudo</span></div>
-            <input aria-label="Pitch Bend" className="mt-4 w-full accent-fuchsia-500" type="range" min="0" max="16383" value={pitchBend} onChange={(event) => setPitchBend(Number(event.target.value))} onPointerUp={() => void sendAction(() => midiManager.sendPitchBend(channel, pitchBend), `Pitch Bend enviado • Canal ${channel}`)} onKeyUp={() => void sendAction(() => midiManager.sendPitchBend(channel, pitchBend), `Pitch Bend enviado • Canal ${channel}`)} />
-            <button disabled={busy || !isConnected} onClick={() => { setPitchBend(8192); void sendAction(() => midiManager.sendPitchBend(channel, 8192), `Pitch Bend centralizado • Canal ${channel}`); }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-200 disabled:opacity-40"><RotateCcw size={14} /> Centralizar Pitch Bend</button>
+        {/* CARD PITCH BEND E PANIC */}
+        <div className="rounded-xl border border-[#1e293b] bg-[#0f172a] p-4 space-y-4 shadow-sm flex flex-col">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-500"></span> Pitch Bend
+          </h3>
+          
+          <div className="rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-4 flex-1">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-500 mb-2">
+              <span>Grave</span>
+              <span className="font-mono text-sm text-fuchsia-400">{pitchBend - 8192 > 0 ? '+' : ''}{pitchBend - 8192}</span>
+              <span>Agudo</span>
+            </div>
+            <input 
+              aria-label="Pitch Bend" 
+              className="w-full accent-fuchsia-500 h-2 cursor-pointer" 
+              type="range" 
+              min="0" 
+              max="16383" 
+              value={pitchBend} 
+              onChange={(event) => setPitchBend(Number(event.target.value))} 
+              onPointerUp={(event) => void sendAction(() => midiManager.sendPitchBend(channel, Number((event.target as HTMLInputElement).value)), `Pitch Bend enviado • Canal ${channel}`)} 
+              onKeyUp={(event) => void sendAction(() => midiManager.sendPitchBend(channel, Number((event.target as HTMLInputElement).value)), `Pitch Bend enviado • Canal ${channel}`)} 
+            />
+            <button 
+              disabled={busy || !isConnected} 
+              onClick={() => { setPitchBend(8192); void sendAction(() => midiManager.sendPitchBend(channel, 8192), `Pitch Bend centralizado • Canal ${channel}`); }} 
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-300 disabled:opacity-40 hover:bg-slate-700 transition"
+            >
+              <RotateCcw size={14} /> Centralizar
+            </button>
           </div>
-          <button disabled={busy || !isConnected} onClick={() => void panic()} className="flex w-full items-center justify-center gap-2 rounded-lg border border-rose-700 bg-rose-950/80 px-3 py-3 text-xs font-extrabold uppercase tracking-wide text-rose-200 hover:bg-rose-900 disabled:opacity-40"><AlertTriangle size={16} /> MIDI Panic — canal {channel}</button>
-          <p className="text-[10px] leading-relaxed text-slate-500">Envia All Notes Off, All Sound Off e Reset All Controllers para o canal selecionado.</p>
+
+          <div className="flex flex-col gap-2 mt-auto">
+            <button 
+              disabled={busy || !isConnected} 
+              onClick={() => void panic()} 
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-800/60 bg-red-950/40 px-3 py-3 text-xs font-extrabold uppercase tracking-wide text-red-400 hover:bg-red-900/60 transition shadow-[inset_0_0_15px_rgba(220,38,38,0.1)] disabled:opacity-40"
+            >
+              <ShieldAlert size={16} /> MIDI Panic — Canal {channel}
+            </button>
+            <p className="text-[9px] text-center leading-relaxed text-slate-500 px-2">
+              Envia All Notes Off, All Sound Off e Reset All Controllers para o canal.
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3 space-y-3">
-        <div className="flex items-center gap-2"><Save size={16} className="text-emerald-400" /><h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">Presets de controles</h3></div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input aria-label="Nome do preset" value={presetName} onChange={(event) => setPresetName(event.target.value)} maxLength={40} placeholder="Nome do preset" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100" />
-          <button onClick={savePreset} className="flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600"><Save size={14} /> Salvar preset</button>
+      {/* PRESETS */}
+      <div className="rounded-xl border border-[#1e293b] bg-[#0f172a] p-4 space-y-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Save size={16} className="text-emerald-400" />
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">Presets de Controles</h3>
+          </div>
+          <button onClick={resetControls} className="text-[10px] text-slate-400 hover:text-white transition flex items-center gap-1">
+            <RotateCcw size={12} /> Redefinir tudo
+          </button>
         </div>
-        {presets.length === 0 ? <p className="text-[10px] text-slate-500">Nenhum preset salvo neste dispositivo ainda.</p> : (
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input 
+            aria-label="Nome do preset" 
+            value={presetName} 
+            onChange={(event) => setPresetName(event.target.value)} 
+            maxLength={40} 
+            placeholder="Nome do preset" 
+            className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-[#0a0f1c] px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500 transition" 
+          />
+          <button 
+            onClick={savePreset} 
+            className="flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 transition"
+          >
+            <Save size={14} /> Salvar
+          </button>
+        </div>
+        
+        {presets.length === 0 ? (
+          <div className="py-6 text-center border border-dashed border-slate-800 rounded-lg">
+            <p className="text-[11px] text-slate-500">Nenhum preset salvo ainda.</p>
+          </div>
+        ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {presets.map((preset) => (
-              <div key={preset.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-800 bg-slate-950 p-2">
-                <div className="min-w-0 flex-1"><div className="truncate text-xs font-semibold text-slate-200">{preset.name}</div><div className="text-[10px] text-slate-500">Program {preset.program} • Mod {preset.modWheel} • Vol {preset.volume}</div></div>
-                <button title={`Aplicar ${preset.name}`} disabled={busy || !isConnected} onClick={() => void applyPreset(preset)} className="rounded-md bg-sky-800 p-2 text-sky-100 disabled:opacity-40"><Play size={14} /></button>
-                <button title={`Excluir ${preset.name}`} onClick={() => setPresets((current) => current.filter((item) => item.id !== preset.id))} className="rounded-md border border-slate-800 p-2 text-rose-300 hover:bg-rose-950"><Trash2 size={14} /></button>
+              <div key={preset.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-[#1e293b] bg-[#0a0f1c] p-2 hover:border-slate-600 transition group">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-bold text-slate-200">{preset.name}</div>
+                  <div className="text-[9px] text-slate-500 truncate">P.Prg {preset.program} • Vol {preset.volume} • Pan {preset.pan}</div>
+                </div>
+                <button 
+                  title={`Aplicar ${preset.name}`} 
+                  disabled={busy || !isConnected} 
+                  onClick={() => void applyPreset(preset)} 
+                  className="rounded-md bg-cyan-900/40 p-2 text-cyan-400 hover:bg-cyan-800/60 disabled:opacity-40 transition-colors"
+                >
+                  <Play size={14} />
+                </button>
+                <button 
+                  title={`Excluir ${preset.name}`} 
+                  onClick={() => setPresets((current) => current.filter((item) => item.id !== preset.id))} 
+                  className="rounded-md border border-slate-800 p-2 text-slate-500 hover:bg-red-950/50 hover:text-red-400 hover:border-red-900/50 transition-colors"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             ))}
           </div>
