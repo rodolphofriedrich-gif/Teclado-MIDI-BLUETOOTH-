@@ -35,7 +35,6 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -68,7 +67,7 @@ public class NativeMidiPlugin extends Plugin {
 
     private BluetoothLeScanner bleScanner;
     private ScanCallback activeScanCallback;
-    private PluginCall pendingScanCall; // Para segurar a promessa do React durante o scan
+    private PluginCall pendingScanCall;
 
     @Override
     public void load() {
@@ -131,7 +130,7 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // ================================================================
-    // BLE – Scan CORRIGIDO (Agora espera o tempo e retorna a lista)
+    // BLE – Scan
     // ================================================================
     @PluginMethod
     public void scanBleDevices(PluginCall call) {
@@ -156,13 +155,11 @@ public class NativeMidiPlugin extends Plugin {
 
         stopBleScanInternal();
 
-        // Pega a duração do JS, padrão de 10 segundos
         int durationMs = call.getInt("durationMs", 10000);
         
-        // Salva a chamada para responder quando o tempo acabar
         pendingScanCall = call;
         final JSArray foundDevices = new JSArray();
-        final Set<String> foundAddresses = new HashSet<>(); // Para não duplicar aparelhos
+        final Set<String> foundAddresses = new HashSet<>();
 
         ScanFilter filter = new ScanFilter.Builder()
                 .setServiceUuid(new ParcelUuid(MIDI_SERVICE_UUID))
@@ -178,7 +175,6 @@ public class NativeMidiPlugin extends Plugin {
                 BluetoothDevice device = result.getDevice();
                 String address = device.getAddress();
                 
-                // Adiciona apenas se ainda não foi encontrado neste scan
                 if (!foundAddresses.contains(address)) {
                     foundAddresses.add(address);
                     JSObject item = new JSObject();
@@ -187,7 +183,6 @@ public class NativeMidiPlugin extends Plugin {
                     item.put("rssi", result.getRssi());
                     foundDevices.put(item);
                     
-                    // Avisa o JS em tempo real (opcional, para a interface ir atualizando)
                     notifyListeners("bleDeviceFound", item);
                 }
             }
@@ -195,7 +190,6 @@ public class NativeMidiPlugin extends Plugin {
 
         bleScanner.startScan(java.util.Collections.singletonList(filter), settings, activeScanCallback);
 
-        // Agenda o fim do scan e a resposta para o JS
         mainHandler.postDelayed(() -> {
             stopBleScanInternal();
             if (pendingScanCall != null) {
@@ -212,7 +206,7 @@ public class NativeMidiPlugin extends Plugin {
         stopBleScanInternal();
         if (pendingScanCall != null) {
             JSObject result = new JSObject();
-            result.put("devices", new JSArray()); // Retorna vazio se cancelado manualmente
+            result.put("devices", new JSArray());
             pendingScanCall.resolve(result);
             pendingScanCall = null;
         }
@@ -229,11 +223,11 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // ================================================================
-    // BLE – Conexão (Protegido contra API antiga)
+    // BLE – Conexão
     // ================================================================
     @PluginMethod
     public void connectBleMidi(PluginCall call) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) { // TIRAMISU = Android 13
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             call.reject("A conexão direta BLE requer Android 13 ou superior. Use o emparelhamento nas configurações do sistema.");
             return;
         }
@@ -600,10 +594,10 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     @Override
-    protected void onDestroy() {
+    protected void handleOnDestroy() {
         stopBleScanInternal();
         closeAllInputConnections();
         closeAllOutputConnections();
-        super.onDestroy();
+        super.handleOnDestroy();
     }
 }
