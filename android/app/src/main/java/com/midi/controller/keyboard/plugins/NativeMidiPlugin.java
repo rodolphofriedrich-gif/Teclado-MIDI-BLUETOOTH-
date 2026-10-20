@@ -33,6 +33,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.IOException;
 import java.util.HashSet;
@@ -81,6 +82,19 @@ public class NativeMidiPlugin extends Plugin {
             call.reject("MidiManager indisponível neste dispositivo");
         } else {
             call.resolve();
+        }
+    }
+
+    // ================================================================
+    // Permissões BLE (Faltava este método no código original)
+    // ================================================================
+    @PermissionCallback
+    private void blePermissionCallback(PluginCall call) {
+        if (hasBlePermissions()) {
+            // Se o usuário aceitou, tenta rodar a busca novamente
+            scanBleDevices(call);
+        } else {
+            call.reject("Permissão de Bluetooth negada. Vá nas configurações do Android e permita.");
         }
     }
 
