@@ -1,6 +1,5 @@
 /**
  * NexusMIDI Pro - Aplicativo Android / Web MIDI Router Hub
- * Layout alinhado estilo Midnight Studio com abas coloridas individuais.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -12,23 +11,9 @@ import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { MidiControlsScreen } from './components/MidiControlsScreen';
 import { NativeMidi } from './services/nativeMidi';
 import {
-  Music2,
-  GitBranch,
-  Activity,
-  SlidersHorizontal,
-  Settings,
-  Usb,
-  Bluetooth,
-  Radio,
-  RefreshCw,
-  ChevronDown,
-  X,
-  LogOut,
-  CheckCircle2,
-  AlertTriangle,
-  Info,
-  Circle,
-  Power,
+  Music2, GitBranch, Activity, SlidersHorizontal, Settings,
+  Usb, Bluetooth, Radio, RefreshCw, ChevronDown, X, LogOut,
+  CheckCircle2, AlertTriangle, Info, Circle, Power,
 } from 'lucide-react';
 
 export const KEYBOARD_PALETTES = [
@@ -175,7 +160,8 @@ export default function App() {
     setIsScanningBle(true);
     try {
       const found = await midiManager.scanBleDevice();
-      await refreshDestinations();
+      await refreshDestinations(); // Garante que o App vai renderizar a lista nova
+      
       if (found.length === 0) {
         showMessage('Nenhum dispositivo BLE MIDI encontrado.', 'info', 3000);
       } else {
@@ -250,7 +236,6 @@ export default function App() {
   return (
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
       
-      {/* CABEÇALHO */}
       <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <button type="button" className="nexus-brand flex min-w-0 items-center gap-2" onClick={() => { setActiveTab('keyboard'); closeConnectionMenus(); }}>
@@ -275,7 +260,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* USB */}
           <div className="relative">
             <button
               type="button" onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); void refreshDestinations(); }}
@@ -317,7 +301,6 @@ export default function App() {
             )}
           </div>
 
-          {/* BLUETOOTH */}
           <div className="relative">
             <button
               type="button" onClick={() => { setIsBleOpen(!isBleOpen); setIsUsbOpen(false); void refreshDestinations(); }}
@@ -449,7 +432,6 @@ export default function App() {
         ) : activeTab === 'monitor' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         ) : (
-          /* CONFIGURAÇÕES */
           <div className="nexus-settings-page min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
             <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6 bg-[#0f172a] border border-[#1e293b]">
               <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5 border-b border-[#1e293b]">
