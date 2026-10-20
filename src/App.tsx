@@ -1,5 +1,6 @@
 /**
  * NexusMIDI Pro - Aplicativo Android / Web MIDI Router Hub
+ * Layout alinhado estilo Midnight Studio com abas coloridas individuais.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -232,6 +233,7 @@ export default function App() {
   }, [connectedDestination, isBleServerActive]);
 
   const handleDisabledPress = useCallback(() => { showMessage('Selecione um destino MIDI primeiro.', 'warn', 2500); }, [showMessage]);
+  
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
     try { await (NativeMidi as any).fecharApp(); } catch { try { window.close(); } catch {} }
@@ -248,7 +250,7 @@ export default function App() {
   return (
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
       
-      {/* CORREÇÃO 1: Header alterado para z-[100] para ficar acima do teclado */}
+      {/* CABEÇALHO */}
       <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <button type="button" className="nexus-brand flex min-w-0 items-center gap-2" onClick={() => { setActiveTab('keyboard'); closeConnectionMenus(); }}>
@@ -288,7 +290,6 @@ export default function App() {
             </button>
             
             {isUsbOpen && (
-              // CORREÇÃO 2: Adicionado bg-[#0f172a] e z-[110] para não vazar o fundo e ficar acima de tudo
               <div className="nexus-dropdown absolute right-0 top-full z-[110] mt-2 w-[calc(100vw-32px)] max-w-[256px] overflow-hidden rounded-2xl bg-[#0f172a] border border-[#1e293b] shadow-2xl">
                 <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3 border-b border-[#1e293b]">
                   <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONEXÃO USB</p><p className="mt-1 text-sm font-semibold text-white">Portas disponíveis</p></div>
@@ -331,7 +332,6 @@ export default function App() {
             </button>
             
             {isBleOpen && (
-              // CORREÇÃO 3: Adicionado bg-[#0f172a] e z-[110] no menu do bluetooth também
               <div className="nexus-dropdown absolute right-0 top-full z-[110] mt-2 w-[calc(100vw-32px)] max-w-[320px] overflow-hidden rounded-2xl bg-[#0f172a] border border-[#1e293b] shadow-2xl">
                 <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3 border-b border-[#1e293b]">
                   <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONECTIVIDADE</p><p className="mt-1 text-sm font-semibold text-white">Bluetooth MIDI</p></div>
@@ -449,28 +449,63 @@ export default function App() {
         ) : activeTab === 'monitor' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         ) : (
+          /* CONFIGURAÇÕES */
           <div className="nexus-settings-page min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
             <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6 bg-[#0f172a] border border-[#1e293b]">
               <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5 border-b border-[#1e293b]">
                 <div className="nexus-settings-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300"><Settings size={24} /></div>
                 <div className="min-w-0"><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">PERSONALIZAÇÃO</p><h2 className="mt-1 text-lg font-bold sm:text-xl text-white">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm text-slate-400">Ajuste a resposta e a aparência.</p></div>
               </div>
+              
               <section className="nexus-settings-section mb-7">
                 <div className="mb-3"><h3 className="text-sm font-semibold text-white">Intensidade das notas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Velocity — força enviada ao tocar.</p></div>
                 <div className="grid grid-cols-2 gap-3">
-                  {VELOCITY_OPTIONS.map((vel) => (
-                    <button key={vel.id} type="button" onClick={() => setSelectedVelocity(vel.id)} className={`nexus-setting-option flex justify-between items-center p-3 rounded-lg border transition-colors ${selectedVelocity === vel.id ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
-                      <span className="flex min-w-0 flex-col items-start gap-1"><span className="text-sm font-semibold">{vel.name}</span><span className="nexus-option-caption text-[10px] opacity-70">VELOCITY</span></span>
-                      <span className="nexus-option-value font-mono">{vel.id}</span>
-                    </button>
-                  ))}
+                  {VELOCITY_OPTIONS.map((vel) => {
+                    const selected = selectedVelocity === vel.id;
+                    return (
+                      <button 
+                        key={vel.id} 
+                        type="button" 
+                        onClick={() => setSelectedVelocity(vel.id)} 
+                        aria-pressed={selected} 
+                        className={`flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${
+                          selected 
+                            ? 'bg-cyan-950/40 border-cyan-500/60 ring-1 ring-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' 
+                            : 'bg-[#0a0f1c] border-[#1e293b] hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                          <span className={`text-sm font-bold ${selected ? 'text-cyan-300' : 'text-slate-300'}`}>
+                            {vel.name}
+                          </span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                            MIDI Velocity
+                          </span>
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          {selected && <CheckCircle2 size={16} className="text-cyan-400" />}
+                          <span 
+                            className={`flex h-8 min-w-[32px] items-center justify-center rounded-lg border text-xs font-bold font-mono transition-colors ${
+                              selected 
+                                ? 'bg-cyan-600 border-cyan-500 text-white shadow-sm' 
+                                : 'bg-[#0f172a] border-[#1e293b] text-slate-500'
+                            }`}
+                          >
+                            {vel.id}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </section>
+
               <section className="nexus-settings-section">
                 <div className="mb-3"><h3 className="text-sm font-semibold text-white">Aparência das teclas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Combinação de cores do piano.</p></div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {KEYBOARD_PALETTES.map((pal) => (
-                    <button key={pal.id} type="button" onClick={() => setSelectedPaletteId(pal.id)} className={`nexus-palette-option flex items-center gap-3 p-2 rounded-lg border transition-colors ${selectedPaletteId === pal.id ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
+                    <button key={pal.id} type="button" onClick={() => setSelectedPaletteId(pal.id)} className={`nexus-palette-option flex items-center gap-3 p-2 rounded-lg border transition-colors ${selectedPaletteId === pal.id ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' : 'bg-[#0a0f1c] border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
                       <span className="nexus-palette-preview flex shrink-0 items-center border border-slate-600 rounded overflow-hidden">
                         <span className="nexus-palette-white-key w-4 h-8" style={{ backgroundColor: pal.white }} />
                         <span className="nexus-palette-black-key w-3 h-5 -ml-1 z-10" style={{ backgroundColor: pal.black }} />
