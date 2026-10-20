@@ -10,15 +10,8 @@ export interface MidiMessage {
 }
 
 export const getNoteName = (note: number): string => {
-  const noteNames = [
-    'C', 'C#', 'D', 'D#', 'E', 'F',
-    'F#', 'G', 'G#', 'A', 'A#', 'B',
-  ];
-
-  if (!Number.isInteger(note) || note < 0 || note > 127) {
-    return '--';
-  }
-
+  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  if (!Number.isInteger(note) || note < 0 || note > 127) return '--';
   const octave = Math.floor(note / 12) - 1;
   return `${noteNames[note % 12]}${octave}`;
 };
@@ -41,10 +34,11 @@ const DEFAULT_ROUTE_CONFIG: MidiRouteConfig = {
 
 class MidiService {
   private destinations: MidiDestination[] = [];
-  private scannedBleDevices: MidiDestination[] = []; // Armazena BLEs escaneados que ainda não estão no sistema
+  private scannedBleDevices: MidiDestination[] = [];
   private connectedOutput: MidiDestination | null = null;
   private connectedInputs = new Map<string, boolean>();
   private messageListeners: Array<(message: MidiMessage) => void> = [];
+  private activityListeners: Array<(velocity: number) => void> = []; // NOVO: Para o VU Meter
   private onRefreshCallback?: (destinations?: MidiDestination[]) => void;
   private onDisconnectCallback?: (destination: MidiDestination) => void;
   private routeConfig: MidiRouteConfig = { ...DEFAULT_ROUTE_CONFIG };
@@ -58,20 +52,14 @@ class MidiService {
     try {
       await NativeMidi.addListener('midiMessage', (data) => {
         if (!data || !Array.isArray(data.data)) return;
-        this.handleIncomingBytes(
-          data.data,
-          data.sourceId != null ? String(data.sourceId) : undefined,
-        );
+        this.handleIncomingBytes(data.data, data.sourceId != null ? String(data.sourceId) : undefined);
       });
     } catch (error) {
       console.error('Não foi possível registrar o listener MIDI:', error);
     }
   }
 
-  public setCallbacks(
-    onRefresh: (destinations?: MidiDestination[]) => void,
-    onDisconnect: (destination: MidiDestination) => void,
-  ): void {
+  public setCallbacks(onRefresh: (destinations?: MidiDestination[]) => void, onDisconnect: (destination: MidiDestination) => void): void {
     this.onRefreshCallback = onRefresh;
     this.onDisconnectCallback = onDisconnect;
   }
@@ -88,7 +76,6 @@ class MidiService {
   public async refreshDevices(): Promise<MidiDestination[]> {
     try {
       const result = await NativeMidi.getDevices();
-
       const nativeDevices: MidiDestination[] = (result.devices || []).map((device) => {
         const type = device.type;
         return {
@@ -111,10 +98,8 @@ class MidiService {
         outputPortCount: 0,
       };
 
-      // 1. Cria a lista base
-      let merged = [virtualKeyboard, ...nativeDevices.filter((device) => device.id !== virtualKeyboard.id)];
+      let merged = [virtualKeyboard, ...nativeDevices.filter((d) => d.id !== virtualKeyboard.id)];
 
-      // 2. Mescla os dispositivos BLE escaneados que ainda não estão no sistema nativo
       for (const ble of this.scannedBleDevices) {
         if (!merged.some(d => d.bleAddress === ble.bleAddress || d.id === ble.id)) {
           merged.push(ble);
@@ -135,7 +120,6 @@ class MidiService {
       const result = await NativeMidi.scanBleDevices({ durationMs: 10000 });
       const devices = result.devices || [];
 
-      // Salva os BLEs encontrados na lista interna
       this.scannedBleDevices = devices.map((dev: any) => ({
         id: `ble-${dev.address}`,
         name: dev.name,
@@ -146,7 +130,6 @@ class MidiService {
         outputPortCount: 1,
       }));
 
-      // Atualiza a lista global para que o App possa renderizar
       await this.refreshDevices();
       return devices;
     } catch (error) {
@@ -155,21 +138,10 @@ class MidiService {
     }
   }
 
-  public getDestinations(): MidiDestination[] {
-    return [...this.destinations];
-  }
-
-  public setRouteConfig(config: MidiRouteConfig): void {
-    this.routeConfig = { ...config };
-  }
-
-  public getRouteConfig(): MidiRouteConfig {
-    return { ...this.routeConfig };
-  }
-
-  public async connect(destination: MidiDestination): Promise<void> {
-    await this.connectOutput(destination);
-  }
+  public getDestinations(): MidiDestination[] { return [...this.destinations]; }
+  public setRouteConfig(config: MidiRouteConfig): void { this.routeConfig = { ...config }; }
+  public getRouteConfig(): MidiRouteConfig { return { ...this.routeConfig }; }
+  public async connect(destination: MidiDestination): Promise<void> { await this.connectOutput(destination); }
 
   public async connectOutput(destination: MidiDestination): Promise<void> {
     if (this.connectedOutput && this.connectedOutput.id !== destination.id) {
@@ -177,21 +149,12 @@ class MidiService {
     }
 
     if (destination.id !== 'virtual-main') {
-      // Se for BLE escaneado (tem endereço MAC), usa o método correto
       if (destination.type === 'ble' && destination.bleAddress) {
-        await NativeMidi.connectBleMidi({
-          address: destination.bleAddress,
-          outputPortIndex: 0,
-          inputPortIndex: 0
-        });
+        await NativeMidi.connectBleMidi({ address: destination.bleAddress, outputPortIndex: 0, inputPortIndex: 0 });
       } else {
-        await NativeMidi.connectOutput({
-          id: String(destination.id),
-          portIndex: 0,
-        });
+        await NativeMidi.connectOutput({ id: String(destination.id), portIndex: 0 });
       }
     }
-
     this.connectedOutput = destination;
   }
 
@@ -206,9 +169,7 @@ class MidiService {
   public async disconnectOutput(): Promise<void> {
     await this.allNotesOff();
     const destination = this.connectedOutput;
-
     if (destination && destination.id !== 'virtual-main') {
-      // Para BLE, a chave de desconexão no Java é o MAC address
       if (destination.type === 'ble' && destination.bleAddress) {
         await NativeMidi.disconnectOutput({ id: destination.bleAddress });
       } else {
@@ -233,32 +194,30 @@ class MidiService {
   }
 
   public async isBleServerRunning(): Promise<boolean> {
-    try {
-      const result = await NativeMidi.isBleServerRunning();
-      return result.active === true;
-    } catch { return false; }
+    try { return (await NativeMidi.isBleServerRunning()).active === true; } catch { return false; }
   }
 
   public async startBleServer(): Promise<boolean> {
-    try {
-      const result = await NativeMidi.startBleServer();
-      return result.active === true;
-    } catch { return false; }
+    try { return (await NativeMidi.startBleServer()).active === true; } catch { return false; }
   }
 
-  public async stopBleServer(): Promise<void> {
-    await NativeMidi.stopBleServer();
+  public async stopBleServer(): Promise<void> { await NativeMidi.stopBleServer(); }
+
+  // NOVO: Registra e notifica os ouvintes do VU Meter
+  public addActivityListener(listener: (velocity: number) => void): void {
+    if (!this.activityListeners.includes(listener)) this.activityListeners.push(listener);
+  }
+
+  public removeActivityListener(listener: (velocity: number) => void): void {
+    this.activityListeners = this.activityListeners.filter((item) => item !== listener);
   }
 
   public async sendKeyboardNote(channel: number, note: number, velocity: number, isNoteOn: boolean): Promise<{ hex: string }> {
     const safeChannel = this.clamp(Math.trunc(channel), 1, 16);
     const safeNote = this.clamp(Math.trunc(note), 0, 127);
     const safeVelocity = this.clamp(Math.trunc(velocity), 0, 127);
-
     const status = isNoteOn && safeVelocity > 0 ? 0x90 + safeChannel - 1 : 0x80 + safeChannel - 1;
-
     this.sendRoutedMessage(status, safeNote, safeVelocity);
-
     return { hex: [status, safeNote, safeVelocity].map((v) => v.toString(16).padStart(2, '0')).join(' ') };
   }
 
@@ -266,44 +225,36 @@ class MidiService {
     const status = 0xB0 + this.clamp(Math.trunc(channel), 1, 16) - 1;
     const cc = this.clamp(Math.trunc(controller), 0, 127);
     const safeValue = this.clamp(Math.trunc(value), 0, 127);
-
     this.sendRoutedMessage(status, cc, safeValue);
-
     return { hex: this.toHex([status, cc, safeValue]) };
   }
 
   public async sendProgramChange(channel: number, program: number): Promise<{ hex: string }> {
     const status = 0xC0 + this.clamp(Math.trunc(channel), 1, 16) - 1;
     const safeProgram = this.clamp(Math.trunc(program), 0, 127);
-
     if (this.routeConfig.enabled && this.routeConfig.allowProgramChange) {
       const finalChannel = this.getOutputChannel((status & 0x0F) + 1);
       await this.transmitBytesNow([0xC0 + finalChannel - 1, safeProgram]);
     }
-
     return { hex: this.toHex([status, safeProgram]) };
   }
 
   public async sendPitchBend(channel: number, value: number): Promise<{ hex: string }> {
     const safeChannel = this.clamp(Math.trunc(channel), 1, 16);
     const safeValue = this.clamp(Math.trunc(value), 0, 16383);
-
     const status = 0xE0 + safeChannel - 1;
     const lsb = safeValue & 0x7F;
     const msb = (safeValue >> 7) & 0x7F;
-
     if (this.routeConfig.enabled && this.routeConfig.allowPitchBend) {
       const finalChannel = this.getOutputChannel(safeChannel);
       await this.transmitBytesNow([0xE0 + finalChannel - 1, lsb, msb]);
     }
-
     return { hex: this.toHex([status, lsb, msb]) };
   }
 
   public async sendPanic(channels: number[]): Promise<void> {
     const destination = this.connectedOutput;
     if (!destination || destination.id === 'virtual-main') return;
-
     const targetId = destination.bleAddress || String(destination.id);
 
     for (const ch of channels) {
@@ -317,24 +268,15 @@ class MidiService {
 
   public sendRoutedMessage(status: number, data1: number, data2: number): void {
     if (!this.routeConfig.enabled) return;
-
     const command = status & 0xF0;
     const inputChannel = (status & 0x0F) + 1;
-
     if (this.routeConfig.inputChannel > 0 && inputChannel !== this.routeConfig.inputChannel) return;
-
-    if (command === 0x90 || command === 0x80) {
-      if (!this.routeConfig.allowNotes) return;
-    } else if (command === 0xB0 && !this.routeConfig.allowControlChange) {
-      return;
-    } else if (command === 0xC0 && !this.routeConfig.allowProgramChange) {
-      return;
-    } else if (command === 0xE0 && !this.routeConfig.allowPitchBend) {
-      return;
-    }
+    if (command === 0x90 || command === 0x80) { if (!this.routeConfig.allowNotes) return; }
+    else if (command === 0xB0 && !this.routeConfig.allowControlChange) return;
+    else if (command === 0xC0 && !this.routeConfig.allowProgramChange) return;
+    else if (command === 0xE0 && !this.routeConfig.allowPitchBend) return;
 
     const outputChannel = this.getOutputChannel(inputChannel);
-
     if (command === 0xC0) { void this.transmitBytesNow([0xC0 + outputChannel - 1, this.clamp(data1, 0, 127)]); return; }
     if (command === 0xD0) { void this.transmitBytesNow([0xD0 + outputChannel - 1, this.clamp(data1, 0, 127)]); return; }
 
@@ -347,7 +289,6 @@ class MidiService {
         finalData2 = this.clamp(finalData2, this.routeConfig.velocityMin, this.routeConfig.velocityMax);
       }
     }
-
     void this.transmitBytesNow([command + outputChannel - 1, finalData1, finalData2]);
   }
 
@@ -358,13 +299,8 @@ class MidiService {
   private async transmitBytesNow(bytes: number[], targetDest?: MidiDestination | null): Promise<void> {
     const destination = targetDest !== undefined ? targetDest : this.connectedOutput;
     if (!destination || destination.id === 'virtual-main') return;
-
     try {
-      // Usa o MAC address para BLE ou o ID normal para USB
-      await NativeMidi.sendTo({
-        id: destination.bleAddress || String(destination.id),
-        data: bytes,
-      });
+      await NativeMidi.sendTo({ id: destination.bleAddress || String(destination.id), data: bytes });
     } catch (error) {
       console.error('Erro ao transmitir mensagem MIDI:', error);
     }
@@ -373,7 +309,6 @@ class MidiService {
   public async allNotesOff(): Promise<void> {
     const destination = this.connectedOutput;
     if (!destination || destination.id === 'virtual-main') return;
-
     for (let channel = 1; channel <= 16; channel++) {
       const status = 0xB0 + channel - 1;
       await this.transmitBytesNow([status, 123, 0], destination);
@@ -382,18 +317,22 @@ class MidiService {
 
   public handleIncomingBytes(bytes: number[], sourceId?: string): void {
     if (!Array.isArray(bytes) || bytes.length < 2) return;
-
     const status = bytes[0] & 0xFF;
     if (status < 0x80 || status >= 0xF0) return;
-
     const command = status & 0xF0;
     const requiredLength = command === 0xC0 || command === 0xD0 ? 2 : 3;
     if (bytes.length < requiredLength) return;
 
     const data1 = this.clamp(bytes[1], 0, 127);
     const data2 = requiredLength === 3 ? this.clamp(bytes[2], 0, 127) : 0;
-
     const message: MidiMessage = { status, data1, data2, timestamp: Date.now(), sourceId };
+
+    // NOVO: Se for Note On, dispara o VU Meter
+    if (command === 0x90 && data2 > 0) {
+      this.activityListeners.forEach(listener => {
+        try { listener(data2); } catch {}
+      });
+    }
 
     this.messageListeners.forEach((listener) => {
       try { listener(message); } catch (error) { console.error('Erro em listener MIDI:', error); }
@@ -404,7 +343,6 @@ class MidiService {
     } else if (sourceId && sourceId !== 'virtual-main') {
       return;
     }
-
     this.sendRoutedMessage(status, data1, data2);
   }
 
@@ -416,9 +354,7 @@ class MidiService {
     this.messageListeners = this.messageListeners.filter((item) => item !== listener);
   }
 
-  public getConnectedDestination(): MidiDestination | null {
-    return this.connectedOutput;
-  }
+  public getConnectedDestination(): MidiDestination | null { return this.connectedOutput; }
 
   private clamp(value: number, minimum: number, maximum: number): number {
     return Math.max(minimum, Math.min(maximum, value));
