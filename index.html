@@ -3,22 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Teclado MIDI Controller</title>
-    <meta name="description" content="Controlador e enviador de comandos MIDI exclusivo para Android e Web MIDI/BLE." />
-    <meta property="og:title" content="Teclado MIDI Controller" />
-    <meta property="og:description" content="Controlador e enviador de comandos MIDI exclusivo para Android e Web MIDI/BLE." />
+    
+    <!-- CORRIGIDO: Nome do app padronizado para NexusMIDI Pro -->
+    <title>NexusMIDI Pro</title>
+    <meta name="description" content="Controlador e roteador MIDI avançado para Android, USB e BLE." />
+    
+    <meta property="og:title" content="NexusMIDI Pro" />
+    <meta property="og:description" content="Controlador e roteador MIDI avançado para Android, USB e BLE." />
     <meta property="og:type" content="website" />
-    <meta name="theme-color" content="#0f172a" />
+    
+    <!-- Tema escuro combinando com o topo do app -->
+    <meta name="theme-color" content="#0a0e1a" />
+    
+    <!-- PWA e iOS -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Teclado MIDI" />
+    <meta name="apple-mobile-web-app-title" content="NexusMIDI Pro" />
+    
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
   </head>
-  <body class="bg-slate-950 text-slate-100 select-none overflow-x-hidden antialiased">
+  <!-- CORRIGIDO: Removidas as classes do Tailwind do body. O arquivo index.css já cuida do fundo e das cores. -->
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
