@@ -58,7 +58,6 @@ export function MidiKeyboard({
   const onNoteOffRef = useRef(onNoteOff);
   const onDisabledPressRef = useRef(onDisabledPress);
 
-  // Avisa o App quando o número de notas mudar
   useEffect(() => {
     if (onActiveNotesChange) {
       onActiveNotesChange(pressedNotes.size);
@@ -196,7 +195,7 @@ export function MidiKeyboard({
               }}
             >
               <span
-                className="mb-3 rounded px-1 text-[10px] font-bold select-none"
+                className="mb-4 rounded px-1 text-[10px] font-bold select-none"
                 style={{ color: isPressed ? '#075985' : '#1e293b', background: isPressed ? 'rgba(255,255,255,0.45)' : 'transparent' }}
               >
                 {noteLabel}
@@ -231,7 +230,7 @@ export function MidiKeyboard({
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
               }}
             >
-              <span className="mb-3 text-[9px] font-bold select-none" style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}>
+              <span className="mb-4 text-[9px] font-bold select-none" style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}>
                 {noteDef.name}
               </span>
             </div>
@@ -246,7 +245,7 @@ export function MidiKeyboard({
 
   return (
     <section
-      className="nexus-midi-keyboard flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden rounded-2xl border p-2 sm:gap-3 sm:p-3"
+      className="nexus-midi-keyboard flex min-h-0 w-full flex-1 flex-col gap-2 rounded-2xl border p-2 sm:gap-3 sm:p-3"
       style={{
         background: 'linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,13,25,0.99))',
         borderColor: 'rgba(148,163,184,0.16)',
@@ -255,7 +254,7 @@ export function MidiKeyboard({
     >
       {/* PAINEL SUPERIOR: CONTROLES (Acima do Teclado) */}
       <div
-        className="nexus-midi-controls flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-3"
+        className="nexus-midi-controls relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-2"
         style={{ background: 'rgba(5,10,22,0.76)', borderColor: 'rgba(148,163,184,0.14)' }}
       >
         <div className="flex flex-wrap items-center gap-3">
@@ -300,7 +299,8 @@ export function MidiKeyboard({
               <ChevronDown size={14} className="text-slate-400" />
             </button>
             {isChannelOpen && (
-              <div className="nexus-dropdown absolute bottom-full left-0 z-[100] mb-2 max-h-48 w-24 overflow-y-auto rounded-xl custom-scrollbar shadow-xl">
+              // ALTERADO AQUI: top-full para abrir para baixo, z-[150] para ficar na frente do teclado
+              <div className="nexus-dropdown absolute top-full left-0 z-[150] mt-2 max-h-48 w-24 overflow-y-auto rounded-xl custom-scrollbar shadow-2xl bg-[#0f172a] border border-slate-700">
                 <div className="nexus-dropdown-list flex flex-col gap-0.5 p-1">
                   {Array.from({ length: 16 }, (_, index) => {
                     const ch = index + 1;
@@ -310,7 +310,7 @@ export function MidiKeyboard({
                         key={ch}
                         type="button"
                         onClick={() => { onSelectChannel(ch); setIsChannelOpen(false); }}
-                        className={`nexus-device-option justify-center py-1.5 font-mono text-xs ${selected ? 'is-selected' : ''}`}
+                        className={`nexus-device-option justify-center py-1.5 font-mono text-xs ${selected ? 'is-selected bg-cyan-900/50 text-cyan-300' : 'text-slate-300 hover:bg-slate-800'}`}
                       >
                         {String(ch).padStart(2, '0')}
                       </button>
@@ -354,7 +354,7 @@ export function MidiKeyboard({
         </div>
       </div>
 
-      {/* TECLADO (No meio) */}
+      {/* TECLADO (No meio, ocupando todo o resto do espaço) */}
       <div
         ref={containerRef}
         className={`nexus-midi-viewport relative flex-1 rounded-xl border p-1 sm:p-2 ${isScrollLocked ? 'overflow-hidden' : 'overflow-x-auto overflow-y-hidden'}`}
