@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
 import { MidiDestination } from '../types/midi';
+import { 
+  Network, 
+  RefreshCw, 
+  Download, 
+  Upload, 
+  Keyboard, 
+  CheckCircle2, 
+  Circle,
+  Unplug
+} from 'lucide-react';
 
 interface MidiHubScreenProps {
   destinations: MidiDestination[];
@@ -20,7 +30,8 @@ export function MidiHubScreen({
   const [isVirtualKeyboardActive, setIsVirtualKeyboardActive] = useState(true);
   const [selectedInputId, setSelectedInputId] = useState<string>('virtual-main');
 
-  const inputDevices = destinations.filter(d => d.type === 'usb' || d.type === 'virtual' || d.type === 'local');
+  // CORREÇÃO: Removido o 'virtual' do filtro para não duplicar o Teclado Virtual na lista
+  const inputDevices = destinations.filter(d => d.type === 'usb' || d.type === 'local');
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -32,131 +43,151 @@ export function MidiHubScreen({
   };
 
   return (
-    <div className="flex-1 w-full bg-slate-950 p-4 flex flex-col gap-4 text-slate-100 overflow-y-auto">
-      <div className="flex justify-between items-center border-b border-slate-800 pb-3 shrink-0">
+    <div className="flex-1 w-full bg-[#0a0f1c] p-3 sm:p-5 flex flex-col gap-4 text-slate-100 overflow-y-auto custom-scrollbar">
+      
+      {/* CABEÇALHO */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4 shrink-0">
         <div>
-          <h2 className="text-base font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2">
-            <span>🎛️</span> MIDI Hub & Router
+          <h2 className="text-base font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+            <Network size={18} /> MIDI Hub & Router
           </h2>
-          <p className="text-xs text-slate-400">Direcione portas de entrada (MIDI In) para as saídas de áudio/hardware.</p>
+          <p className="text-xs text-slate-400 mt-1">Direcione portas de entrada (MIDI In) para as saídas de áudio/hardware.</p>
         </div>
         <button
           onClick={handleManualRefresh}
           disabled={isRefreshing}
-          className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-sky-300 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+          className="px-3.5 py-1.5 bg-[#0f172a] hover:bg-slate-800 text-cyan-300 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-2 shadow-sm disabled:opacity-50 shrink-0"
         >
-          <span className={`inline-block ${isRefreshing ? 'animate-spin' : ''}`}>↻</span>
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
           <span>{isRefreshing ? 'Atualizando...' : 'Atualizar Portas'}</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 overflow-hidden">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-0">
         
-        {/* CARD DE ENTRADAS COM SELEÇÃO E ATIVAÇÃO */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col shadow-lg max-h-[350px]">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
-            <span className="text-xs font-bold uppercase tracking-wide text-emerald-400 flex items-center gap-1.5">
-              <span>📥</span> MIDI Inputs (Origem)
+        {/* CARD DE ENTRADAS (MIDI IN) */}
+        <div className="bg-[#0f172a] border border-[#1e293b] rounded-xl p-4 flex flex-col shadow-lg max-h-[400px]">
+          <div className="flex items-center justify-between pb-3 border-b border-[#1e293b] shrink-0">
+            <span className="text-xs font-bold uppercase tracking-wide text-emerald-400 flex items-center gap-2">
+              <Download size={14} /> MIDI Inputs (Origem)
             </span>
-            <span className="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-800">
-              {inputDevices.length + 1} Disponíveis
+            <span className="text-[10px] font-bold bg-emerald-950/50 text-emerald-400 px-2 py-0.5 rounded border border-emerald-800/50">
+              {inputDevices.length + 1} Disp.
             </span>
           </div>
           
           <div className="space-y-2 overflow-y-auto pr-1 pt-3 flex-1 custom-scrollbar">
-            {/* Teclado Virtual com Botão de Ativar/Desativar */}
-            <div 
+            
+            {/* Teclado Virtual */}
+            <button 
+              type="button"
               onClick={() => {
                 setIsVirtualKeyboardActive(!isVirtualKeyboardActive);
                 if (!isVirtualKeyboardActive) setSelectedInputId('virtual-main');
               }}
-              className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between shadow ${
+              className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between shadow-sm select-none active:scale-[0.99] ${
                 isVirtualKeyboardActive 
-                  ? 'bg-emerald-950/40 border-emerald-500 text-emerald-200' 
-                  : 'bg-slate-950 border-slate-800 text-slate-500'
+                  ? 'bg-emerald-900/20 border-emerald-700/60 ring-1 ring-emerald-500/30 text-emerald-300' 
+                  : 'bg-[#0a0f1c] border-[#1e293b] text-slate-500 hover:border-slate-700'
               }`}
             >
-              <div className="flex flex-col">
-                <span className="text-xs font-bold">Teclado Virtual (NexusMIDI Pro)</span>
-                <span className="text-[10px]">
-                  {isVirtualKeyboardActive ? '🟢 Entrada Ativa' : '⚪ Desativado (Clique para ativar)'}
-                </span>
+              <div className="flex items-center gap-3">
+                <Keyboard size={18} className={isVirtualKeyboardActive ? 'text-emerald-400' : 'text-slate-600'} />
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold">Teclado Virtual</span>
+                  <span className="text-[10px] opacity-80 mt-0.5">
+                    {isVirtualKeyboardActive ? 'Entrada Ativa' : 'Clique para ativar'}
+                  </span>
+                </div>
               </div>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded ${isVirtualKeyboardActive ? 'bg-emerald-900 text-white' : 'bg-slate-800 text-slate-400'}`}>
+              <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider ${
+                isVirtualKeyboardActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'
+              }`}>
                 {isVirtualKeyboardActive ? 'Ativo' : 'Inativo'}
               </span>
-            </div>
+            </button>
 
             {/* Outros dispositivos de entrada (USB / Físicos) */}
             {inputDevices.map((dev) => {
               const isSelected = selectedInputId === dev.id;
               return (
-                <div
+                <button
                   key={`in-${dev.id}`}
+                  type="button"
                   onClick={() => {
                     setSelectedInputId(dev.id);
                     setIsVirtualKeyboardActive(false);
                   }}
-                  className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between shadow ${
+                  className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between shadow-sm select-none active:scale-[0.99] ${
                     isSelected
-                      ? 'bg-sky-950/40 border-sky-500 text-sky-200'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      ? 'bg-cyan-900/20 border-cyan-700/60 ring-1 ring-cyan-500/30 text-cyan-300'
+                      : 'bg-[#0a0f1c] border-[#1e293b] text-slate-300 hover:border-slate-700'
                   }`}
                 >
-                  <div className="flex flex-col truncate">
-                    <span className="text-xs font-bold truncate">{dev.displayName}</span>
-                    <span className="text-[10px] text-slate-500 uppercase">USB / Hardware In</span>
+                  <div className="flex flex-col truncate pr-2">
+                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-cyan-300' : ''}`}>{dev.displayName}</span>
+                    <span className="text-[10px] text-slate-500 uppercase mt-0.5">USB / Hardware In</span>
                   </div>
-                  <span className={`text-xs font-semibold ${isSelected ? 'text-sky-400 font-bold' : 'text-slate-500'}`}>
-                    {isSelected ? '🟢 Selecionado' : 'Selecionar'}
-                  </span>
-                </div>
+                  {isSelected ? (
+                    <CheckCircle2 size={16} className="text-cyan-400 shrink-0" />
+                  ) : (
+                    <Circle size={16} className="text-slate-600 shrink-0" />
+                  )}
+                </button>
               );
             })}
           </div>
         </div>
 
         {/* CARD DE SAÍDAS (MIDI OUT) */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col shadow-lg max-h-[350px]">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
-            <span className="text-xs font-bold uppercase tracking-wide text-sky-400 flex items-center gap-1.5">
-              <span>📤</span> MIDI Outputs (Destino)
+        <div className="bg-[#0f172a] border border-[#1e293b] rounded-xl p-4 flex flex-col shadow-lg max-h-[400px]">
+          <div className="flex items-center justify-between pb-3 border-b border-[#1e293b] shrink-0">
+            <span className="text-xs font-bold uppercase tracking-wide text-cyan-400 flex items-center gap-2">
+              <Upload size={14} /> MIDI Outputs (Destino)
             </span>
-            <span className="text-[10px] bg-sky-950 text-sky-300 px-2 py-0.5 rounded border border-sky-800">
-              {destinations.length} Dispositivos
+            <span className="text-[10px] font-bold bg-cyan-950/50 text-cyan-400 px-2 py-0.5 rounded border border-cyan-800/50">
+              {destinations.length} Disp.
             </span>
           </div>
 
           <div className="space-y-2 overflow-y-auto pr-1 pt-3 flex-1 custom-scrollbar">
+            
+            {/* Destino Conectado Atual */}
             {connectedDestination && (
-              <div className="p-2.5 bg-emerald-950/60 border border-emerald-500 rounded-lg flex items-center justify-between text-xs shadow">
-                <div className="flex flex-col truncate">
-                  <span className="font-bold text-emerald-200 truncate">{connectedDestination.displayName}</span>
-                  <span className="text-[10px] text-emerald-400">🟢 Conectado Atualmente</span>
+              <div className="p-3 bg-emerald-950/30 border border-emerald-800/50 rounded-xl flex items-center justify-between text-xs shadow-sm">
+                <div className="flex items-center gap-3 truncate">
+                  <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                  <div className="flex flex-col truncate">
+                    <span className="font-bold text-emerald-300 truncate">{connectedDestination.displayName}</span>
+                    <span className="text-[10px] text-emerald-500 mt-0.5">Conectado Atualmente</span>
+                  </div>
                 </div>
                 <button
+                  type="button"
                   onClick={onDisconnect}
-                  className="px-2 py-1 bg-rose-950 hover:bg-rose-900 text-rose-200 rounded text-[10px] font-bold border border-rose-800 transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/50 text-rose-400 rounded-lg text-[10px] font-bold border border-rose-900/50 transition-colors shrink-0 ml-2"
                 >
-                  Desconectar
+                  <Unplug size={12} /> Desconectar
                 </button>
               </div>
             )}
 
+            {/* Lista de Outros Destinos */}
             {destinations.length === 0 ? (
-              <div className="text-xs text-slate-500 italic p-3 text-center">Nenhum destino de saída encontrado.</div>
+              <div className="text-xs text-slate-500 italic p-4 text-center border border-dashed border-slate-800 rounded-xl">Nenhum destino de saída encontrado.</div>
             ) : (
               destinations.map((dest) => {
                 if (connectedDestination?.id === dest.id) return null;
                 return (
-                  <div
+                  <button
                     key={dest.id}
+                    type="button"
                     onClick={() => onConnect(dest)}
-                    className="p-3 rounded-lg border bg-slate-950 border-slate-800 hover:border-slate-700 cursor-pointer transition flex items-center justify-between text-slate-300 shadow-sm"
+                    className="w-full text-left p-3 rounded-xl border bg-[#0a0f1c] border-[#1e293b] hover:border-slate-600 hover:bg-slate-800 transition-all flex items-center justify-between text-slate-300 shadow-sm select-none active:scale-[0.99]"
                   >
-                    <span className="text-xs font-medium truncate">{dest.displayName}</span>
-                    <span className="text-[10px] text-slate-500 uppercase">{dest.type}</span>
-                  </div>
+                    <span className="text-xs font-semibold truncate pr-2">{dest.displayName}</span>
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider bg-slate-800/50 px-2 py-0.5 rounded">{dest.type}</span>
+                  </button>
                 );
               })
             )}
