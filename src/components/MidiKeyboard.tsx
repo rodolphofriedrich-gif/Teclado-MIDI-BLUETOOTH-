@@ -11,7 +11,7 @@ interface MidiKeyboardProps {
   customWhiteKeyColor: string;
   customBlackKeyColor: string;
   onActiveNotesChange?: (count: number) => void;
-  onActivity?: (velocity: number) => void; // NOVO: Dispara o VU Meter
+  onActivity?: (velocity: number) => void;
 }
 
 const OCTAVE_NOTES = [
@@ -56,6 +56,10 @@ export function MidiKeyboard({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const activeNotesRef = useRef<Set<number>>(new Set());
+  
+  // NOVOS REFS para controlar o deslizar (Glissando)
+  const isTouchingRef = useRef(false);
+  const lastTouchedNoteRef = useRef<number | null>(null);
 
   const onNoteOffRef = useRef(onNoteOff);
   const onDisabledPressRef = useRef(onDisabledPress);
@@ -100,28 +104,40 @@ export function MidiKeyboard({
     };
   }, []);
 
-  const pressNote = (note: number, event: React.PointerEvent<HTMLDivElement>) => {
+  const pressNote = (note: number, event?: React.PointerEvent<HTMLDivElement>) => {
     if (!isConnected) {
       onDisabledPressRef.current();
       return;
     }
+
+    // Se estiver deslizando e mudar de nota, libera a nota anterior
+    if (lastTouchedNoteRef.current !== null && lastTouchedNoteRef.current !== note) {
+      releaseNote(lastTouchedNoteRef.current);
+    }
+
     if (activeNotesRef.current.has(note)) return;
+
     activeNotesRef.current.add(note);
+    lastTouchedNoteRef.current = note;
+
     setPressedNotes((current) => {
       const next = new Set(current);
       next.add(note);
       return next;
     });
 
-    // NOVO: Dispara atividade para o VU Meter reagir ao toque
     if (onActivity) onActivity(100 + Math.random() * 27); 
-
     void onNoteOn(note);
   };
 
   const releaseNote = (note: number, _event?: React.PointerEvent<HTMLDivElement>) => {
     if (!activeNotesRef.current.has(note)) return;
+    
     activeNotesRef.current.delete(note);
+    if (lastTouchedNoteRef.current === note) {
+      lastTouchedNoteRef.current = null;
+    }
+
     setPressedNotes((current) => {
       const next = new Set(current);
       next.delete(note);
@@ -130,12 +146,23 @@ export function MidiKeyboard({
     void onNoteOffRef.current(note);
   };
 
+  // NOVO: Efeito para garantir que nenhuma nota fique presa se soltar o dedo fora do teclado
   useEffect(() => {
     const releaseAllNotes = () => {
       const notes = Array.from(activeNotesRef.current);
       activeNotesRef.current.clear();
+      lastTouchedNoteRef.current = null;
+      isTouchingRef.current = false;
       setPressedNotes(new Set());
-      for (const note of notes) void onNoteOffRef.current(note);
+      for (const note of notes) {
+        void onNoteOffRef.current(note);
+      }
+    };
+
+    const handleGlobalPointerUp = () => {
+      if (isTouchingRef.current) {
+        releaseAllNotes();
+      }
     };
 
     const handleVisibilityChange = () => {
@@ -143,10 +170,14 @@ export function MidiKeyboard({
     };
 
     window.addEventListener('blur', releaseAllNotes);
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    window.addEventListener('pointercancel', handleGlobalPointerUp);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('blur', releaseAllNotes);
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointercancel', handleGlobalPointerUp);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       releaseAllNotes();
     };
@@ -165,14 +196,36 @@ export function MidiKeyboard({
         const isPressed = pressedNotes.has(midiNote);
         const noteLabel = noteDef.name === 'C' ? `C${octave}` : noteDef.name;
 
+        // Handler unificado para deslizar (Glissando)
+        const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+          isTouchingRef.current = true;
+          e.currentTarget.releasePointerCapture(e.pointerId); // A MÁGICA ACONTECE AQUI
+          pressNote(midiNote, e);
+        };
+
+        const handlePointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
+          if (isTouchingRef.current) {
+            pressNote(midiNote, e);
+          }
+        };
+
+        const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+          isTouchingRef.current = false;
+          releaseNote(midiNote, e);
+        };
+
         if (isWhite) {
           whiteIndex++;
           keys.push(
             <div
-              key={midiNote} role="button" aria-label={`Nota ${noteLabel}`} aria-pressed={isPressed}
-              onPointerDown={(event) => pressNote(midiNote, event)}
-              onPointerUp={(event) => releaseNote(midiNote, event)}
-              onPointerCancel={(event) => releaseNote(midiNote, event)}
+              key={midiNote} 
+              role="button" 
+              aria-label={`Nota ${noteLabel}`} 
+              aria-pressed={isPressed}
+              onPointerDown={handlePointerDown}
+              onPointerEnter={handlePointerEnter}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
               onLostPointerCapture={() => releaseNote(midiNote)}
               className="relative z-10 flex h-full shrink-0 cursor-pointer flex-col items-center justify-end rounded-b-lg border transition-[filter,transform,box-shadow] duration-75 select-none"
               style={{
@@ -194,10 +247,14 @@ export function MidiKeyboard({
 
           keys.push(
             <div
-              key={midiNote} role="button" aria-label={`Nota ${noteLabel}`} aria-pressed={isPressed}
-              onPointerDown={(event) => pressNote(midiNote, event)}
-              onPointerUp={(event) => releaseNote(midiNote, event)}
-              onPointerCancel={(event) => releaseNote(midiNote, event)}
+              key={midiNote} 
+              role="button" 
+              aria-label={`Nota ${noteLabel}`} 
+              aria-pressed={isPressed}
+              onPointerDown={handlePointerDown}
+              onPointerEnter={handlePointerEnter}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
               onLostPointerCapture={() => releaseNote(midiNote)}
               className="absolute top-0 z-30 flex h-[62%] cursor-pointer flex-col items-center justify-end rounded-b-sm border select-none"
               style={{
