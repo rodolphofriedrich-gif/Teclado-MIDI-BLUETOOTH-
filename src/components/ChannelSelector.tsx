@@ -1,4 +1,5 @@
 import React from 'react';
+import { Music } from 'lucide-react';
 
 interface ChannelSelectorProps {
   selectedChannel: number;
@@ -10,17 +11,18 @@ export const ChannelSelector: React.FC<ChannelSelectorProps> = ({
   onSelectChannel,
 }) => {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-md">
-      <div className="flex items-center justify-between mb-2">
-        <label htmlFor="midi-channel-select" className="text-xs font-semibold tracking-wider uppercase text-slate-400 flex items-center gap-1.5">
-          <span className="text-amber-400">🎵</span> Canal MIDI de Envio
+    <div className="bg-[#0f172a] border border-[#1e293b] rounded-xl p-4 shadow-lg">
+      <div className="flex items-center justify-between mb-3">
+        <label htmlFor="midi-channel-select" className="text-xs font-bold tracking-wider uppercase text-slate-300 flex items-center gap-2">
+          <Music size={14} className="text-cyan-400" /> Canal MIDI de Envio
         </label>
-        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-          CH {selectedChannel}
+        <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-md bg-cyan-900/30 text-cyan-400 border border-cyan-800/50">
+          CH {String(selectedChannel).padStart(2, '0')}
         </span>
       </div>
 
-      <div className="grid grid-cols-8 sm:grid-cols-16 gap-1.5">
+      {/* CORREÇÃO: grid-cols-[repeat(16,minmax(0,1fr))] evita o bug de classe inexistente no Tailwind */}
+      <div className="grid grid-cols-8 sm:grid-cols-[repeat(16,minmax(0,1fr))] gap-1.5 sm:gap-2">
         {Array.from({ length: 16 }, (_, i) => i + 1).map((ch) => {
           const isActive = ch === selectedChannel;
           return (
@@ -28,22 +30,26 @@ export const ChannelSelector: React.FC<ChannelSelectorProps> = ({
               key={ch}
               type="button"
               onClick={() => onSelectChannel(ch)}
-              className={`py-1.5 text-xs font-mono font-bold rounded transition-all select-none active:scale-95 ${
+              className={`py-2 text-xs font-mono font-bold rounded-lg transition-all select-none active:scale-95 border ${
                 isActive
-                  ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-400 shadow-sm shadow-amber-500/30'
-                  : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+                  ? 'bg-cyan-600 text-white border-cyan-500 ring-2 ring-cyan-400/50 shadow-md shadow-cyan-900/50'
+                  : 'bg-[#0a0f1c] text-slate-400 border-[#1e293b] hover:bg-slate-800 hover:text-white hover:border-slate-600'
               }`}
               title={`Selecionar Canal ${ch}`}
             >
-              {ch}
+              {String(ch).padStart(2, '0')}
             </button>
           );
         })}
       </div>
-      <p className="text-[11px] text-slate-400 mt-2 flex items-center justify-between">
-        <span>Transmissão em tempo real</span>
-        <span className="text-slate-400">Padrão: Canal 1</span>
-      </p>
+      
+      <div className="mt-3 flex items-center justify-between text-[10px] text-slate-500 font-medium">
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          Transmissão em tempo real
+        </span>
+        <span>Padrão: Canal 01</span>
+      </div>
     </div>
   );
 };
