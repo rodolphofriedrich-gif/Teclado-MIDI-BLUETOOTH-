@@ -182,7 +182,6 @@ class MidiService {
     };
   }
 
-  // Mantém compatibilidade com as telas que usam connect().
   public async connect(
     destination: MidiDestination,
   ): Promise<void> {
@@ -220,7 +219,8 @@ class MidiService {
   }
 
   public async disconnectOutput(): Promise<void> {
-    this.allNotesOff();
+    // CORREÇÃO: Await no allNotesOff para garantir que as notas parem antes de fechar a porta
+    await this.allNotesOff();
 
     const destination = this.connectedOutput;
 
@@ -405,6 +405,22 @@ class MidiService {
     };
   }
 
+  // CORREÇÃO: Adicionado sendPanic que faltava para a tela de Controles funcionar
+  public async sendPanic(channels: number[]): Promise<void> {
+    const destination = this.connectedOutput;
+    if (!destination || destination.id === 'virtual-main') return;
+
+    for (const ch of channels) {
+      const safeCh = this.clamp(Math.trunc(ch), 1, 16);
+      const status = 0xB0 + safeCh - 1;
+      
+      // Envia All Sound Off (120), Reset All Controllers (121), All Notes Off (123)
+      await NativeMidi.sendTo({ id: String(destination.id), data: [status, 120, 0] });
+      await NativeMidi.sendTo({ id: String(destination.id), data: [status, 121, 0] });
+      await NativeMidi.sendTo({ id: String(destination.id), data: [status, 123, 0] });
+    }
+  }
+
   public sendRoutedMessage(
     status: number,
     data1: number,
@@ -473,7 +489,6 @@ class MidiService {
         127,
       );
 
-      // A nota desligada deve preservar a semântica de Note Off.
       if (command === 0x90 && finalData2 > 0) {
         finalData2 = this.clamp(
           finalData2,
@@ -496,8 +511,9 @@ class MidiService {
       : inputChannel;
   }
 
-  private async transmitBytesNow(bytes: number[]): Promise<void> {
-    const destination = this.connectedOutput;
+  private async transmitBytesNow(bytes: number[], targetDest?: MidiDestination | null): Promise<void> {
+    // CORREÇÃO: Aceita um targetDest opcional para garantir o envio em momentos de disconnect
+    const destination = targetDest !== undefined ? targetDest : this.connectedOutput;
 
     if (!destination || destination.id === 'virtual-main') {
       return;
@@ -513,16 +529,16 @@ class MidiService {
     }
   }
 
-  public allNotesOff(): void {
-    if (!this.connectedOutput ||
-        this.connectedOutput.id === 'virtual-main') {
+  public async allNotesOff(): Promise<void> {
+    // CORREÇÃO: Guarda a referência do destino atual para não perdermos a conexão no meio do loop assíncrono
+    const destination = this.connectedOutput;
+    if (!destination || destination.id === 'virtual-main') {
       return;
     }
 
     for (let channel = 1; channel <= 16; channel++) {
       const status = 0xB0 + channel - 1;
-
-      void this.transmitBytesNow([status, 123, 0]);
+      await this.transmitBytesNow([status, 123, 0], destination);
     }
   }
 
@@ -561,8 +577,6 @@ class MidiService {
       sourceId,
     };
 
-    // A mensagem continua disponível para o monitor mesmo quando
-    // não corresponde à origem selecionada para o roteamento.
     this.messageListeners.forEach((listener) => {
       try {
         listener(message);
@@ -624,6 +638,4 @@ class MidiService {
 }
 
 export const midiService = new MidiService();
-
-// Mantém o nome utilizado pelo App.tsx.
 export const midiManager = midiService;
