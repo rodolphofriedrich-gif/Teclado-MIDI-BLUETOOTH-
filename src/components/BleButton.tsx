@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { midiManager } from '../services/midiService';
+import { Bluetooth, Loader2 } from 'lucide-react';
 
 interface BleButtonProps {
   onBluetoothDisabledAlert: (msg: string) => void;
@@ -52,14 +53,20 @@ export const BleButton: React.FC<BleButtonProps> = ({ onBluetoothDisabledAlert }
       type="button"
       onClick={handleToggle}
       disabled={isBusy}
-      title={isActive ? 'Bluetooth ligado' : 'Bluetooth desligado'}
-      className={`px-4 py-1.5 text-xs font-bold rounded-md border tracking-wider transition-colors active:scale-95 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400/50 disabled:opacity-60 ${
+      title={isActive ? 'Bluetooth ativado' : 'Ativar Bluetooth'}
+      className={`flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg border tracking-wide transition-all active:scale-95 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-60 ${
         isActive
-          ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-500 shadow-blue-900/30'
-          : 'bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600'
+          ? 'bg-cyan-900/30 hover:bg-cyan-800/50 text-cyan-400 border-cyan-700/50 shadow-[0_0_10px_rgba(8,145,178,0.2)]'
+          : 'bg-[#0f172a] hover:bg-slate-800 text-slate-400 border-[#1e293b]'
       }`}
     >
-      {isBusy ? 'BLE...' : 'BLE'}
+      {isBusy ? (
+        <Loader2 size={14} className="animate-spin" />
+      ) : (
+        <Bluetooth size={14} className={isActive ? 'text-cyan-400' : 'text-slate-500'} />
+      )}
+      
+      <span>{isBusy ? 'Ativando...' : isActive ? 'Bluetooth ON' : 'Ativar Bluetooth'}</span>
     </button>
   );
 };
