@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Play, Save, SlidersHorizontal, Trash2, RotateCcw, ShieldAlert } from 'lucide-react';
+import { Play, Save, SlidersHorizontal, Trash2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { midiManager } from '../services/midiService';
-import { StudioFader } from './StudioFader'; // Importando o novo componente
+import { StudioFader } from './StudioFader';
 
 type MidiPreset = {
   id: string;
@@ -136,7 +136,6 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
   return (
     <section className="flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-xl border border-[#1e293b] bg-[#0a0f1c] p-3 sm:p-5 space-y-5">
       
-      {/* CABEÇALHO */}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1e293b] pb-4">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-cyan-900/30 rounded-lg text-cyan-400">
@@ -152,30 +151,26 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
         </div>
       </header>
 
-      {/* MESA DE MIXAGEM (FADERS VERTICAIS) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[#0a0f1c] p-3 rounded-2xl border border-[#1e293b] shadow-inner">
+      {/* MESA DE MIXAGEM - 4 FADERS FIXOS LADO A LADO */}
+      <div className="grid grid-cols-4 gap-1.5 bg-[#0a0f1c] p-1.5 rounded-2xl border border-[#1e293b] shadow-inner">
         <StudioFader 
           label="Modulação" sublabel="CC 1" 
-          value={modWheel} 
-          onChange={setModWheel} 
+          value={modWheel} onChange={setModWheel} 
           onCommit={(v) => void sendCC(1, v, 'Modulação')} 
         />
         <StudioFader 
           label="Volume" sublabel="CC 7" 
-          value={volume} 
-          onChange={setVolume} 
+          value={volume} onChange={setVolume} 
           onCommit={(v) => void sendCC(7, v, 'Volume')} 
         />
         <StudioFader 
           label="Expressão" sublabel="CC 11" 
-          value={expression} 
-          onChange={setExpression} 
+          value={expression} onChange={setExpression} 
           onCommit={(v) => void sendCC(11, v, 'Expressão')} 
         />
         <StudioFader 
           label="Panorama" sublabel="CC 10" 
-          value={pan} 
-          onChange={setPan} 
+          value={pan} onChange={setPan} 
           onCommit={(v) => void sendCC(10, v, 'Panorama')} 
         />
       </div>
@@ -233,7 +228,6 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
               <span className="font-mono text-sm text-fuchsia-400">{pitchBend - 8192 > 0 ? '+' : ''}{pitchBend - 8192}</span>
               <span>Agudo</span>
             </div>
-            {/* O Pitch Bend continua como slider horizontal (é o formato padrão em sintetizadores para essa função) */}
             <input 
               aria-label="Pitch Bend" 
               className="w-full accent-fuchsia-500 h-2 cursor-pointer" 
