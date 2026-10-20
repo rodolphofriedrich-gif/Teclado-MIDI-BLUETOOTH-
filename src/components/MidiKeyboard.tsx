@@ -253,8 +253,9 @@ export function MidiKeyboard({
       }}
     >
       {/* PAINEL SUPERIOR: CONTROLES (Acima do Teclado) */}
+      {/* CORREÇÃO AQUI: z-50 garante que fique na frente do teclado */}
       <div
-        className="nexus-midi-controls relative z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-2"
+        className="nexus-midi-controls relative z-50 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-2"
         style={{ background: 'rgba(5,10,22,0.76)', borderColor: 'rgba(148,163,184,0.14)' }}
       >
         <div className="flex flex-wrap items-center gap-3">
@@ -299,8 +300,8 @@ export function MidiKeyboard({
               <ChevronDown size={14} className="text-slate-400" />
             </button>
             {isChannelOpen && (
-              // ALTERADO AQUI: top-full para abrir para baixo, z-[150] para ficar na frente do teclado
-              <div className="nexus-dropdown absolute top-full left-0 z-[150] mt-2 max-h-48 w-24 overflow-y-auto rounded-xl custom-scrollbar shadow-2xl bg-[#0f172a] border border-slate-700">
+              // CORREÇÃO AQUI: z-[9999] e bg-slate-900 forçam o menu a ficar na frente e opaco
+              <div className="absolute top-full left-0 z-[9999] mt-2 max-h-48 w-24 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-2xl custom-scrollbar">
                 <div className="nexus-dropdown-list flex flex-col gap-0.5 p-1">
                   {Array.from({ length: 16 }, (_, index) => {
                     const ch = index + 1;
@@ -310,7 +311,7 @@ export function MidiKeyboard({
                         key={ch}
                         type="button"
                         onClick={() => { onSelectChannel(ch); setIsChannelOpen(false); }}
-                        className={`nexus-device-option justify-center py-1.5 font-mono text-xs ${selected ? 'is-selected bg-cyan-900/50 text-cyan-300' : 'text-slate-300 hover:bg-slate-800'}`}
+                        className={`justify-center py-1.5 font-mono text-xs rounded transition-colors ${selected ? 'bg-cyan-900/50 text-cyan-300 font-bold' : 'text-slate-300 hover:bg-slate-800'}`}
                       >
                         {String(ch).padStart(2, '0')}
                       </button>
@@ -354,10 +355,11 @@ export function MidiKeyboard({
         </div>
       </div>
 
-      {/* TECLADO (No meio, ocupando todo o resto do espaço) */}
+      {/* TECLADO (No meio) */}
+      {/* CORREÇÃO AQUI: Adicionado isolamento (isolate) para controlar as camadas z-index internas */}
       <div
         ref={containerRef}
-        className={`nexus-midi-viewport relative flex-1 rounded-xl border p-1 sm:p-2 ${isScrollLocked ? 'overflow-hidden' : 'overflow-x-auto overflow-y-hidden'}`}
+        className={`nexus-midi-viewport relative isolate flex-1 rounded-xl border p-1 sm:p-2 ${isScrollLocked ? 'overflow-hidden' : 'overflow-x-auto overflow-y-hidden'}`}
         style={{
           background: 'radial-gradient(ellipse at 50% 0%, rgba(30,41,59,0.72), rgba(2,6,23,0.98) 78%)',
           borderColor: 'rgba(148,163,184,0.14)',
