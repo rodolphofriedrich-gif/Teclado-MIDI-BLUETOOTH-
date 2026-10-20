@@ -56,22 +56,19 @@ import java.util.concurrent.ConcurrentHashMap;
 )
 public class NativeMidiPlugin extends Plugin {
 
-    // UUID oficial do serviço BLE-MIDI (MIDI Association)
-    private static final UUID MIDI_SERVICE_UUID =
-        UUID.fromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
+    private static final UUID MIDI_SERVICE_UUID = UUID.fromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
 
     private MidiManager midiManager;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    // Maps thread-safe (callbacks MIDI rodam em outra thread)
     private final Map<String, MidiDevice> outputDevices = new ConcurrentHashMap<>();
     private final Map<String, MidiInputPort> outputPorts = new ConcurrentHashMap<>();
     private final Map<String, MidiDevice> inputDevices = new ConcurrentHashMap<>();
     private final Map<String, MidiOutputPort> inputPorts = new ConcurrentHashMap<>();
 
-    // BLE
     private BluetoothLeScanner bleScanner;
     private ScanCallback activeScanCallback;
+    private PluginCall pendingScanCall; // Para segurar a promessa do React durante o scan
 
     @Override
     public void load() {
@@ -87,10 +84,6 @@ public class NativeMidiPlugin extends Plugin {
             call.resolve();
         }
     }
-
-    // ================================================================
-    // Enumeração de dispositivos MIDI (USB, BLE já pareados, virtuais)
-    // ================================================================
 
     @PluginMethod
     public void getDevices(PluginCall call) {
@@ -111,9 +104,7 @@ public class NativeMidiPlugin extends Plugin {
         String manufacturer = properties != null ? properties.getString("manufacturer") : null;
 
         if (name == null || name.trim().isEmpty()) {
-            name = (manufacturer != null && !manufacturer.trim().isEmpty())
-                ? manufacturer
-                : "Dispositivo MIDI";
+            name = (manufacturer != null && !manufacturer.trim().isEmpty()) ? manufacturer : "Dispositivo MIDI";
         }
 
         JSObject item = new JSObject();
@@ -140,9 +131,8 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // ================================================================
-    // BLE – Scan
+    // BLE – Scan CORRIGIDO (Agora espera o tempo e retorna a lista)
     // ================================================================
-
     @PluginMethod
     public void scanBleDevices(PluginCall call) {
         if (!hasBlePermissions()) {
@@ -150,8 +140,7 @@ public class NativeMidiPlugin extends Plugin {
             return;
         }
 
-        BluetoothManager btManager = (BluetoothManager) getContext()
-                .getSystemService(Context.BLUETOOTH_SERVICE);
+        BluetoothManager btManager = (BluetoothManager) getContext().getSystemService(Context.BLUETOOTH_SERVICE);
         BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
 
         if (adapter == null || !adapter.isEnabled()) {
@@ -165,8 +154,15 @@ public class NativeMidiPlugin extends Plugin {
             return;
         }
 
-        // Se já houver um scan ativo, para antes de iniciar outro
         stopBleScanInternal();
+
+        // Pega a duração do JS, padrão de 10 segundos
+        int durationMs = call.getInt("durationMs", 10000);
+        
+        // Salva a chamada para responder quando o tempo acabar
+        pendingScanCall = call;
+        final JSArray foundDevices = new JSArray();
+        final Set<String> foundAddresses = new HashSet<>(); // Para não duplicar aparelhos
 
         ScanFilter filter = new ScanFilter.Builder()
                 .setServiceUuid(new ParcelUuid(MIDI_SERVICE_UUID))
@@ -180,34 +176,47 @@ public class NativeMidiPlugin extends Plugin {
             @Override
             public void onScanResult(int callbackType, ScanResult result) {
                 BluetoothDevice device = result.getDevice();
-                JSObject item = new JSObject();
-                item.put("address", device.getAddress());
-                item.put("name", device.getName() != null ? device.getName() : "Dispositivo BLE MIDI");
-                item.put("rssi", result.getRssi());
-                notifyListeners("bleDeviceFound", item);
-            }
-
-            @Override
-            public void onScanFailed(int errorCode) {
-                JSObject err = new JSObject();
-                err.put("errorCode", errorCode);
-                notifyListeners("bleScanFailed", err);
+                String address = device.getAddress();
+                
+                // Adiciona apenas se ainda não foi encontrado neste scan
+                if (!foundAddresses.contains(address)) {
+                    foundAddresses.add(address);
+                    JSObject item = new JSObject();
+                    item.put("address", address);
+                    item.put("name", device.getName() != null ? device.getName() : "Dispositivo BLE MIDI");
+                    item.put("rssi", result.getRssi());
+                    foundDevices.put(item);
+                    
+                    // Avisa o JS em tempo real (opcional, para a interface ir atualizando)
+                    notifyListeners("bleDeviceFound", item);
+                }
             }
         };
 
         bleScanner.startScan(java.util.Collections.singletonList(filter), settings, activeScanCallback);
 
-        JSObject result = new JSObject();
-        result.put("scanning", true);
-        call.resolve(result);
+        // Agenda o fim do scan e a resposta para o JS
+        mainHandler.postDelayed(() -> {
+            stopBleScanInternal();
+            if (pendingScanCall != null) {
+                JSObject result = new JSObject();
+                result.put("devices", foundDevices);
+                pendingScanCall.resolve(result);
+                pendingScanCall = null;
+            }
+        }, durationMs);
     }
 
     @PluginMethod
     public void stopBleScan(PluginCall call) {
         stopBleScanInternal();
-        JSObject result = new JSObject();
-        result.put("scanning", false);
-        call.resolve(result);
+        if (pendingScanCall != null) {
+            JSObject result = new JSObject();
+            result.put("devices", new JSArray()); // Retorna vazio se cancelado manualmente
+            pendingScanCall.resolve(result);
+            pendingScanCall = null;
+        }
+        call.resolve();
     }
 
     private void stopBleScanInternal() {
@@ -220,23 +229,15 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // ================================================================
-    // BLE – Conexão
+    // BLE – Conexão (Protegido contra API antiga)
     // ================================================================
-
-    /**
-     * Conecta a um dispositivo BLE MIDI usando o endereço MAC obtido no scan.
-     * Abre a porta de saída (para enviar MIDI ao equipamento) e,
-     * opcionalmente, a porta de entrada (para receber MIDI do equipamento).
-     *
-     * Exemplo de chamada JS:
-     *   NativeMidi.connectBleMidi({
-     *     address: "AA:BB:CC:DD:EE:FF",
-     *     outputPortIndex: 0,
-     *     inputPortIndex: 0   // opcional
-     *   })
-     */
     @PluginMethod
     public void connectBleMidi(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) { // TIRAMISU = Android 13
+            call.reject("A conexão direta BLE requer Android 13 ou superior. Use o emparelhamento nas configurações do sistema.");
+            return;
+        }
+
         if (!hasBlePermissions()) {
             requestPermissionForAlias("bluetooth", call, "blePermissionCallback");
             return;
@@ -249,10 +250,9 @@ public class NativeMidiPlugin extends Plugin {
         }
 
         int outputPortIndex = call.getInt("outputPortIndex", 0);
-        int inputPortIndex = call.getInt("inputPortIndex", -1); // -1 = não abrir entrada
+        int inputPortIndex = call.getInt("inputPortIndex", -1);
 
-        BluetoothManager btManager = (BluetoothManager) getContext()
-                .getSystemService(Context.BLUETOOTH_SERVICE);
+        BluetoothManager btManager = (BluetoothManager) getContext().getSystemService(Context.BLUETOOTH_SERVICE);
         BluetoothAdapter adapter = btManager != null ? btManager.getAdapter() : null;
 
         if (adapter == null) {
@@ -274,7 +274,6 @@ public class NativeMidiPlugin extends Plugin {
                 return;
             }
 
-            // Abre a porta de saída (envio de MIDI)
             MidiInputPort outputPort = device.openInputPort(outputPortIndex);
             if (outputPort == null) {
                 closeDevice(device);
@@ -285,7 +284,6 @@ public class NativeMidiPlugin extends Plugin {
             outputPorts.put(address, outputPort);
             outputDevices.put(address, device);
 
-            // Abre a porta de entrada (recebimento de MIDI), se solicitado
             if (inputPortIndex >= 0) {
                 MidiOutputPort inputPort = device.openOutputPort(inputPortIndex);
                 if (inputPort != null) {
@@ -318,9 +316,8 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // ================================================================
-    // Conexões USB / já pareadas (mantidas)
+    // Conexões USB / já pareadas
     // ================================================================
-
     @PluginMethod
     public void connect(PluginCall call) { connectOutputInternal(call); }
 
@@ -446,7 +443,6 @@ public class NativeMidiPlugin extends Plugin {
     // ================================================================
     // Desconexões
     // ================================================================
-
     @PluginMethod
     public void disconnect(PluginCall call) { disconnectOutput(call); }
 
@@ -469,7 +465,6 @@ public class NativeMidiPlugin extends Plugin {
     // ================================================================
     // Envio de MIDI
     // ================================================================
-
     @PluginMethod
     public void send(PluginCall call)   { sendToDevice(call); }
 
@@ -517,16 +512,12 @@ public class NativeMidiPlugin extends Plugin {
     // ================================================================
     // Utilitários
     // ================================================================
-
     private boolean hasBlePermissions() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            // Em versões antigas, as permissões BLUETOOTH_* são normais e concedidas na instalação
             return true;
         }
-        return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_SCAN)
-                == PackageManager.PERMISSION_GRANTED
-            && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_CONNECT)
-                == PackageManager.PERMISSION_GRANTED;
+        return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+            && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
     }
 
     private int getPortIndex(PluginCall call) {
@@ -554,7 +545,6 @@ public class NativeMidiPlugin extends Plugin {
 
     private void closeOutputConnection(String id) {
         closePort(outputPorts.remove(id));
-        // Só fecha o MidiDevice se não houver mais nenhuma porta aberta para este id
         if (!inputPorts.containsKey(id)) {
             closeDevice(outputDevices.remove(id));
         }
@@ -594,7 +584,6 @@ public class NativeMidiPlugin extends Plugin {
     // ================================================================
     // Ciclo de vida
     // ================================================================
-
     @PluginMethod
     public void fecharApp(PluginCall call) {
         Activity activity = getActivity();
@@ -611,10 +600,10 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     @Override
-    protected void handleOnDestroy() {
+    protected void onDestroy() {
         stopBleScanInternal();
         closeAllInputConnections();
         closeAllOutputConnections();
-        super.handleOnDestroy();
+        super.onDestroy();
     }
 }
