@@ -1,7 +1,6 @@
-
 /** Tipos usados pelo controlador MIDI. */
 
-export type DestinationType = 'local' | 'ble' | 'usb' | 'virtual';
+export type DestinationType = 'local' | 'ble' | 'usb' | 'virtual' | 'unknown';
 
 export interface MidiDestination {
   id: string;
@@ -40,26 +39,36 @@ export interface MidiLogEntry {
   source?: string;
 }
 
+export interface MidiMessage {
+  status: number;
+  data1: number;
+  data2: number;
+  timestamp: number;
+  sourceId?: string;
+}
+
 export interface MidiRouteConfig {
   enabled: boolean;
 
   /** Origem das mensagens encaminhadas pelo roteador. */
   source: 'virtual' | 'device';
 
-  /**
-   * Identificador da entrada física selecionada.
-   * null ou ausente mantém compatibilidade com a configuração anterior.
-   */
+  /** Identificador da entrada física selecionada. */
   sourceId?: string | null;
 
   /** Identificador da saída MIDI selecionada. */
   destinationId: string | null;
 
+  /** Canal de entrada (0 = Omni / Todos). */
   inputChannel: number;
+  
+  /** Canal de saída (0 = Manter o mesmo da entrada). */
   outputChannel: number;
+
   transpose: number;
   velocityMin: number;
   velocityMax: number;
+  
   allowNotes: boolean;
   allowControlChange: boolean;
   allowProgramChange: boolean;
