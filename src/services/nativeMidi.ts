@@ -33,6 +33,12 @@ export interface NativeBleServerStatus {
   clients?: number;
 }
 
+// NOVO: Tipagem exata para a mensagem que vem do Android
+export interface NativeMidiMessageEvent {
+  data: number[];
+  sourceId?: string | number;
+}
+
 export interface NativeMidiPlugin {
   initialize(): Promise<void>;
 
@@ -102,12 +108,16 @@ export interface NativeMidiPlugin {
 
   fecharApp(): Promise<void>;
 
+  // MELHORIA: Sobrecarga de métodos (Overloads) para tipar corretamente cada evento
   addListener(
-    eventName: 'devicesChanged' | 'midiMessage',
-    listenerFunc: (data: any) => void,
-  ): Promise<{
-    remove: () => Promise<void>;
-  }>;
+    eventName: 'midiMessage',
+    listenerFunc: (data: NativeMidiMessageEvent) => void,
+  ): Promise<{ remove: () => Promise<void> }>;
+
+  addListener(
+    eventName: 'devicesChanged',
+    listenerFunc: () => void,
+  ): Promise<{ remove: () => Promise<void> }>;
 }
 
 export const NativeMidi =
