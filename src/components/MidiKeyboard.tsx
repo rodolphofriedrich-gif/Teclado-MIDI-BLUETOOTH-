@@ -57,9 +57,8 @@ export function MidiKeyboard({
   const containerRef = useRef<HTMLDivElement>(null);
   const activeNotesRef = useRef<Set<number>>(new Set());
   
-  // NOVOS REFS para controlar o deslizar (Glissando)
-  const isTouchingRef = useRef(false);
-  const lastTouchedNoteRef = useRef<number | null>(null);
+  // MAPA DE PONTEIROS: Rastreia qual dedo (pointerId) está em qual nota
+  const activePointersRef = useRef<Map<number, number>>(new Map());
 
   const onNoteOffRef = useRef(onNoteOff);
   const onDisabledPressRef = useRef(onDisabledPress);
@@ -104,64 +103,75 @@ export function MidiKeyboard({
     };
   }, []);
 
-  const pressNote = (note: number, event?: React.PointerEvent<HTMLDivElement>) => {
+  // PRESSIONA NOTA (Recebe o ID do dedo para saber quem está tocando)
+  const pressNote = (note: number, pointerId: number) => {
     if (!isConnected) {
       onDisabledPressRef.current();
       return;
     }
 
-    // Se estiver deslizando e mudar de nota, libera a nota anterior
-    if (lastTouchedNoteRef.current !== null && lastTouchedNoteRef.current !== note) {
-      releaseNote(lastTouchedNoteRef.current);
+    const previousNote = activePointersRef.current.get(pointerId);
+
+    // Se este MESMO dedo estava em outra nota, solta a anterior (Glissando)
+    if (previousNote !== undefined && previousNote !== note) {
+      releaseNote(previousNote, pointerId);
     }
 
-    if (activeNotesRef.current.has(note)) return;
-
-    activeNotesRef.current.add(note);
-    lastTouchedNoteRef.current = note;
-
-    setPressedNotes((current) => {
-      const next = new Set(current);
-      next.add(note);
-      return next;
-    });
-
-    if (onActivity) onActivity(100 + Math.random() * 27); 
-    void onNoteOn(note);
-  };
-
-  const releaseNote = (note: number, _event?: React.PointerEvent<HTMLDivElement>) => {
-    if (!activeNotesRef.current.has(note)) return;
+    // Se nenhuma outra tecla/estado está com essa nota, liga o som
+    if (!activeNotesRef.current.has(note)) {
+      activeNotesRef.current.add(note);
+      setPressedNotes((current) => {
+        const next = new Set(current);
+        next.add(note);
+        return next;
+      });
+      if (onActivity) onActivity(100 + Math.random() * 27); 
+      void onNoteOn(note);
+    }
     
-    activeNotesRef.current.delete(note);
-    if (lastTouchedNoteRef.current === note) {
-      lastTouchedNoteRef.current = null;
-    }
-
-    setPressedNotes((current) => {
-      const next = new Set(current);
-      next.delete(note);
-      return next;
-    });
-    void onNoteOffRef.current(note);
+    // Registra que este dedo está nesta nota
+    activePointersRef.current.set(pointerId, note);
   };
 
-  // NOVO: Efeito para garantir que nenhuma nota fique presa se soltar o dedo fora do teclado
+  // SOLTA NOTA
+  const releaseNote = (note: number, pointerId: number) => {
+    // Remove o dedo do mapa
+    activePointersRef.current.delete(pointerId);
+    
+    // Verifica se OUTRO dedo ainda está segurando essa mesma nota
+    let isStillPressed = false;
+    activePointersRef.current.forEach((heldNote) => {
+      if (heldNote === note) isStillPressed = true;
+    });
+
+    // Só desliga a nota se nenhum outro dedo estiver nela
+    if (!isStillPressed && activeNotesRef.current.has(note)) {
+      activeNotesRef.current.delete(note);
+      setPressedNotes((current) => {
+        const next = new Set(current);
+        next.delete(note);
+        return next;
+      });
+      void onNoteOffRef.current(note);
+    }
+  };
+
+  // Efeito para limpar notas se o usuário soltar o dedo fora da tela ou trocar de app
   useEffect(() => {
     const releaseAllNotes = () => {
       const notes = Array.from(activeNotesRef.current);
       activeNotesRef.current.clear();
-      lastTouchedNoteRef.current = null;
-      isTouchingRef.current = false;
+      activePointersRef.current.clear();
       setPressedNotes(new Set());
       for (const note of notes) {
         void onNoteOffRef.current(note);
       }
     };
 
-    const handleGlobalPointerUp = () => {
-      if (isTouchingRef.current) {
-        releaseAllNotes();
+    const handleGlobalPointerUp = (e: PointerEvent) => {
+      const note = activePointersRef.current.get(e.pointerId);
+      if (note !== undefined) {
+        releaseNote(note, e.pointerId);
       }
     };
 
@@ -181,7 +191,7 @@ export function MidiKeyboard({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       releaseAllNotes();
     };
-  }, []);
+  }, []); // Dependências vazias pois as funções usam apenas refs estáveis
 
   const renderKeys = () => {
     const keys: React.ReactNode[] = [];
@@ -196,22 +206,23 @@ export function MidiKeyboard({
         const isPressed = pressedNotes.has(midiNote);
         const noteLabel = noteDef.name === 'C' ? `C${octave}` : noteDef.name;
 
-        // Handler unificado para deslizar (Glissando)
+        // Handlers para toque, deslize e soltar
         const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-          isTouchingRef.current = true;
-          e.currentTarget.releasePointerCapture(e.pointerId); // A MÁGICA ACONTECE AQUI
-          pressNote(midiNote, e);
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          }
+          pressNote(midiNote, e.pointerId);
         };
 
         const handlePointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
-          if (isTouchingRef.current) {
-            pressNote(midiNote, e);
+          // Se este dedo já está pressionado em outra tecla, desliza para cá
+          if (activePointersRef.current.has(e.pointerId)) {
+            pressNote(midiNote, e.pointerId);
           }
         };
 
         const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-          isTouchingRef.current = false;
-          releaseNote(midiNote, e);
+          releaseNote(midiNote, e.pointerId);
         };
 
         if (isWhite) {
@@ -226,7 +237,7 @@ export function MidiKeyboard({
               onPointerEnter={handlePointerEnter}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              onLostPointerCapture={() => releaseNote(midiNote)}
+              onLostPointerCapture={() => releaseNote(midiNote, -1)}
               className="relative z-10 flex h-full shrink-0 cursor-pointer flex-col items-center justify-end rounded-b-lg border transition-[filter,transform,box-shadow] duration-75 select-none"
               style={{
                 width: `${keyWidth}px`,
@@ -234,6 +245,7 @@ export function MidiKeyboard({
                 borderColor: isPressed ? '#22d3ee' : 'rgba(100,116,139,0.75)',
                 boxShadow: isPressed ? 'inset 0 3px 9px rgba(15,23,42,0.22), 0 0 12px rgba(34,211,238,0.28)' : '0 3px 0 rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.25)',
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
+                touchAction: 'none', // EVITA SCROLL ACIDENTAL
               }}
             >
               <span className="mb-4 rounded px-1 text-[10px] font-bold select-none" style={{ color: isPressed ? '#075985' : '#1e293b', background: isPressed ? 'rgba(255,255,255,0.45)' : 'transparent' }}>
@@ -255,7 +267,7 @@ export function MidiKeyboard({
               onPointerEnter={handlePointerEnter}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              onLostPointerCapture={() => releaseNote(midiNote)}
+              onLostPointerCapture={() => releaseNote(midiNote, -1)}
               className="absolute top-0 z-30 flex h-[62%] cursor-pointer flex-col items-center justify-end rounded-b-sm border select-none"
               style={{
                 width: `${blackWidth}px`,
@@ -264,6 +276,7 @@ export function MidiKeyboard({
                 borderColor: isPressed ? '#67e8f9' : '#020617',
                 boxShadow: isPressed ? '0 0 12px rgba(34,211,238,0.55), inset 0 0 5px rgba(255,255,255,0.25)' : '0 3px 4px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.1)',
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
+                touchAction: 'none', // EVITA SCROLL ACIDENTAL
               }}
             >
               <span className="mb-4 text-[9px] font-bold select-none" style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}>
