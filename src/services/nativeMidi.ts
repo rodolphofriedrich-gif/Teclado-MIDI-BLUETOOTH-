@@ -33,7 +33,6 @@ export interface NativeBleServerStatus {
   clients?: number;
 }
 
-// NOVO: Tipagem exata para a mensagem que vem do Android
 export interface NativeMidiMessageEvent {
   data: number[];
   sourceId?: string | number;
@@ -88,10 +87,24 @@ export interface NativeMidiPlugin {
     data: number[];
   }): Promise<void>;
 
+  // Funções de BLE corrigidas e adicionadas
   scanBleDevices(options?: {
     durationMs?: number;
   }): Promise<{
     devices: NativeBleDevice[];
+  }>;
+
+  stopBleScan(): Promise<void>;
+
+  connectBleMidi(options: {
+    address: string;
+    outputPortIndex?: number;
+    inputPortIndex?: number;
+  }): Promise<{
+    address: string;
+    name: string;
+    outputConnected: boolean;
+    inputConnected: boolean;
   }>;
 
   scanBluetoothMidi(options?: {
@@ -101,14 +114,10 @@ export interface NativeMidiPlugin {
   }>;
 
   startBleServer(): Promise<NativeBleServerStatus>;
-
   stopBleServer(): Promise<NativeBleServerStatus | void>;
-
   isBleServerRunning(): Promise<NativeBleServerStatus>;
-
   fecharApp(): Promise<void>;
 
-  // MELHORIA: Sobrecarga de métodos (Overloads) para tipar corretamente cada evento
   addListener(
     eventName: 'midiMessage',
     listenerFunc: (data: NativeMidiMessageEvent) => void,
@@ -120,5 +129,4 @@ export interface NativeMidiPlugin {
   ): Promise<{ remove: () => Promise<void> }>;
 }
 
-export const NativeMidi =
-  registerPlugin<NativeMidiPlugin>('NativeMidi');
+export const NativeMidi = registerPlugin<NativeMidiPlugin>('NativeMidi');
