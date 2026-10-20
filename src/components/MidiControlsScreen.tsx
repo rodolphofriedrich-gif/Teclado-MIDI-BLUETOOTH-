@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Play, Save, SlidersHorizontal, Trash2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { midiManager } from '../services/midiService';
+import { StudioFader } from './StudioFader'; // Importando o novo componente
 
 type MidiPreset = {
   id: string;
@@ -132,34 +133,6 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
     } finally { setBusy(false); }
   };
 
-  // CORREÇÃO: O valor é enviado usando o target do evento, evitando atraso do estado do React
-  const slider = (
-    label: string, 
-    value: number, 
-    setValue: (value: number) => void, 
-    onCommit: (value: number) => void, 
-    description?: string,
-    accentColor: string = 'accent-cyan-500'
-  ) => (
-    <div className="flex flex-col rounded-xl border border-[#1e293b] bg-[#0f172a] p-3 shadow-sm">
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <label className="text-[11px] font-bold uppercase tracking-wide text-slate-300">{label}</label>
-        <span className="rounded bg-[#0a0f1c] px-2 py-0.5 font-mono text-xs font-bold text-cyan-400 border border-[#1e293b]">{value}</span>
-      </div>
-      {description && <span className="mb-3 block text-[9px] text-slate-500 leading-tight">{description}</span>}
-      <input 
-        className={`w-full ${accentColor} h-2 cursor-pointer`} 
-        type="range" 
-        min="0" 
-        max="127" 
-        value={value} 
-        onChange={(event) => setValue(Number(event.target.value))} 
-        onPointerUp={(event) => onCommit(Number((event.target as HTMLInputElement).value))} 
-        onKeyUp={(event) => onCommit(Number((event.target as HTMLInputElement).value))} 
-      />
-    </div>
-  );
-
   return (
     <section className="flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-xl border border-[#1e293b] bg-[#0a0f1c] p-3 sm:p-5 space-y-5">
       
@@ -179,12 +152,32 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
         </div>
       </header>
 
-      {/* SLIDERS GRID */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {slider('Modulação • CC1', modWheel, setModWheel, (value) => void sendCC(1, value, 'Modulação'))}
-        {slider('Volume • CC7', volume, setVolume, (value) => void sendCC(7, value, 'Volume'))}
-        {slider('Expressão • CC11', expression, setExpression, (value) => void sendCC(11, value, 'Expressão'))}
-        {slider('Panorama • CC10', pan, setPan, (value) => void sendCC(10, value, 'Panorama'), '0 = esquerda • 64 = centro • 127 = direita')}
+      {/* MESA DE MIXAGEM (FADERS VERTICAIS) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[#0a0f1c] p-3 rounded-2xl border border-[#1e293b] shadow-inner">
+        <StudioFader 
+          label="Modulação" sublabel="CC 1" 
+          value={modWheel} 
+          onChange={setModWheel} 
+          onCommit={(v) => void sendCC(1, v, 'Modulação')} 
+        />
+        <StudioFader 
+          label="Volume" sublabel="CC 7" 
+          value={volume} 
+          onChange={setVolume} 
+          onCommit={(v) => void sendCC(7, v, 'Volume')} 
+        />
+        <StudioFader 
+          label="Expressão" sublabel="CC 11" 
+          value={expression} 
+          onChange={setExpression} 
+          onCommit={(v) => void sendCC(11, v, 'Expressão')} 
+        />
+        <StudioFader 
+          label="Panorama" sublabel="CC 10" 
+          value={pan} 
+          onChange={setPan} 
+          onCommit={(v) => void sendCC(10, v, 'Panorama')} 
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -195,7 +188,6 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span> Performance
           </h3>
           
-          {/* SUSTAIN */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-3">
             <div>
               <div className="text-xs font-semibold text-slate-200">Sustain • CC64</div>
@@ -210,15 +202,11 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
             </button>
           </div>
 
-          {/* PROGRAM CHANGE */}
           <div className="rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-3">
             <label className="block text-xs font-semibold text-slate-200 mb-2">Program Change <span className="text-slate-500 font-normal">(1–128)</span></label>
             <div className="flex gap-2">
               <input 
-                type="number" 
-                min="1" 
-                max="128" 
-                value={program} 
+                type="number" min="1" max="128" value={program} 
                 onChange={(event) => setProgram(Math.max(1, Math.min(128, Number(event.target.value) || 1)))} 
                 className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-[#0f172a] px-3 py-2 font-mono text-sm text-cyan-300 outline-none focus:border-cyan-500" 
               />
@@ -231,9 +219,6 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
               </button>
             </div>
           </div>
-
-          {/* PRESSURE */}
-          {slider('Channel Pressure • Aftertouch', pressure, setPressure, (value) => void sendAction(() => midiManager.sendChannelPressure(channel, value), `Channel Pressure: ${value} • Canal ${channel}`), undefined, 'accent-fuchsia-500')}
         </div>
 
         {/* CARD PITCH BEND E PANIC */}
@@ -242,19 +227,17 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
             <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-500"></span> Pitch Bend
           </h3>
           
-          <div className="rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-4 flex-1">
+          <div className="rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-4 flex-1 flex flex-col justify-center">
             <div className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-500 mb-2">
               <span>Grave</span>
               <span className="font-mono text-sm text-fuchsia-400">{pitchBend - 8192 > 0 ? '+' : ''}{pitchBend - 8192}</span>
               <span>Agudo</span>
             </div>
+            {/* O Pitch Bend continua como slider horizontal (é o formato padrão em sintetizadores para essa função) */}
             <input 
               aria-label="Pitch Bend" 
               className="w-full accent-fuchsia-500 h-2 cursor-pointer" 
-              type="range" 
-              min="0" 
-              max="16383" 
-              value={pitchBend} 
+              type="range" min="0" max="16383" value={pitchBend} 
               onChange={(event) => setPitchBend(Number(event.target.value))} 
               onPointerUp={(event) => void sendAction(() => midiManager.sendPitchBend(channel, Number((event.target as HTMLInputElement).value)), `Pitch Bend enviado • Canal ${channel}`)} 
               onKeyUp={(event) => void sendAction(() => midiManager.sendPitchBend(channel, Number((event.target as HTMLInputElement).value)), `Pitch Bend enviado • Canal ${channel}`)} 
@@ -276,9 +259,6 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
             >
               <ShieldAlert size={16} /> MIDI Panic — Canal {channel}
             </button>
-            <p className="text-[9px] text-center leading-relaxed text-slate-500 px-2">
-              Envia All Notes Off, All Sound Off e Reset All Controllers para o canal.
-            </p>
           </div>
         </div>
       </div>
@@ -297,17 +277,11 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <input 
-            aria-label="Nome do preset" 
-            value={presetName} 
-            onChange={(event) => setPresetName(event.target.value)} 
-            maxLength={40} 
-            placeholder="Nome do preset" 
+            aria-label="Nome do preset" value={presetName} onChange={(event) => setPresetName(event.target.value)} 
+            maxLength={40} placeholder="Nome do preset" 
             className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-[#0a0f1c] px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500 transition" 
           />
-          <button 
-            onClick={savePreset} 
-            className="flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 transition"
-          >
+          <button onClick={savePreset} className="flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 transition">
             <Save size={14} /> Salvar
           </button>
         </div>
@@ -325,16 +299,13 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
                   <div className="text-[9px] text-slate-500 truncate">P.Prg {preset.program} • Vol {preset.volume} • Pan {preset.pan}</div>
                 </div>
                 <button 
-                  title={`Aplicar ${preset.name}`} 
-                  disabled={busy || !isConnected} 
-                  onClick={() => void applyPreset(preset)} 
+                  title={`Aplicar ${preset.name}`} disabled={busy || !isConnected} onClick={() => void applyPreset(preset)} 
                   className="rounded-md bg-cyan-900/40 p-2 text-cyan-400 hover:bg-cyan-800/60 disabled:opacity-40 transition-colors"
                 >
                   <Play size={14} />
                 </button>
                 <button 
-                  title={`Excluir ${preset.name}`} 
-                  onClick={() => setPresets((current) => current.filter((item) => item.id !== preset.id))} 
+                  title={`Excluir ${preset.name}`} onClick={() => setPresets((current) => current.filter((item) => item.id !== preset.id))} 
                   className="rounded-md border border-slate-800 p-2 text-slate-500 hover:bg-red-950/50 hover:text-red-400 hover:border-red-900/50 transition-colors"
                 >
                   <Trash2 size={14} />
