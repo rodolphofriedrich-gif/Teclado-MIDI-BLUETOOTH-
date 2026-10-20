@@ -1,5 +1,6 @@
 import React from 'react';
 import { MidiDestination } from '../types/midi';
+import { Link2, RefreshCw, Radio, Smartphone, Bluetooth, CheckCircle2, Circle, Unplug } from 'lucide-react';
 
 interface DestinationListProps {
   destinations: MidiDestination[];
@@ -24,59 +25,63 @@ export const DestinationList: React.FC<DestinationListProps> = ({
   const bleDestinations = destinations.filter((d) => d.type === 'ble');
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-md flex flex-col gap-3">
-      {/* Header com ações */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="bg-[#0f172a] border border-[#1e293b] rounded-xl p-4 shadow-lg flex flex-col gap-4">
+      
+      {/* CABEÇALHO */}
+      <div className="flex items-center justify-between flex-wrap gap-2 border-b border-[#1e293b] pb-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold tracking-wider uppercase text-slate-400 flex items-center gap-1.5">
-            <span className="text-emerald-400">🔗</span> Destinos MIDI (Conexão Exclusiva)
+          <Link2 size={16} className="text-cyan-400" />
+          <span className="text-xs font-bold tracking-wider uppercase text-slate-300">
+            Destinos MIDI (Conexão Exclusiva)
           </span>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onRefresh}
-            className="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition active:scale-95"
+            className="text-xs px-2.5 py-1.5 bg-[#0a0f1c] hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-700 transition flex items-center gap-1.5 active:scale-95"
             title="Atualizar lista de receptores locais"
           >
-            ↻ Atualizar
+            <RefreshCw size={12} /> Atualizar
           </button>
           <button
             type="button"
             onClick={onScanBle}
             disabled={isScanningBle}
-            className="text-xs px-3 py-1 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded font-medium transition flex items-center gap-1 active:scale-95 shadow-sm"
+            className="text-xs px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 disabled:opacity-50 text-white rounded-lg font-semibold transition flex items-center gap-1.5 active:scale-95 shadow-md shadow-cyan-900/20"
           >
-            <span>📡</span>
+            <Radio size={14} className={isScanningBle ? 'animate-pulse' : ''} />
             <span>{isScanningBle ? 'Buscando...' : 'Buscar BLE'}</span>
           </button>
         </div>
       </div>
 
-      {/* Status da Conexão Ativa Atual */}
+      {/* STATUS DA CONEXÃO ATIVA */}
       <div
-        className={`p-2.5 rounded-lg border flex items-center justify-between text-xs transition-all ${
+        className={`p-3 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all ${
           connectedDestination
-            ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
-            : 'bg-slate-950/50 border-slate-800 text-slate-400'
+            ? 'bg-emerald-950/30 border-emerald-800/50'
+            : 'bg-[#0a0f1c] border-slate-800'
         }`}
       >
-        <div className="flex items-center gap-2 truncate">
-          <span className="text-sm">
-            {connectedDestination ? '🟢' : '⚪'}
-          </span>
+        <div className="flex items-center gap-3 truncate">
+          {connectedDestination ? (
+            <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
+          ) : (
+            <Circle size={20} className="text-slate-600 shrink-0" />
+          )}
           <div className="truncate">
-            <span className="font-semibold text-slate-200">
-              {connectedDestination ? 'Destino Conectado:' : 'Nenhum destino conectado'}
-            </span>{' '}
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+              {connectedDestination ? 'Destino Conectado' : 'Nenhum destino conectado'}
+            </div>
             {connectedDestination ? (
-              <span className="font-mono text-emerald-300 font-bold">
+              <div className="font-mono text-sm text-emerald-300 font-bold truncate">
                 {connectedDestination.displayName}
-              </span>
+              </div>
             ) : (
-              <span className="text-amber-400/90 font-medium">
-                (Toque em um item abaixo para conectar)
-              </span>
+              <div className="text-xs text-amber-400/80 font-medium">
+                Selecione um dispositivo abaixo para conectar
+              </div>
             )}
           </div>
         </div>
@@ -85,143 +90,132 @@ export const DestinationList: React.FC<DestinationListProps> = ({
           <button
             type="button"
             onClick={onDisconnect}
-            className="ml-2 px-2.5 py-1 text-xs bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded font-semibold transition active:scale-95 whitespace-nowrap"
+            className="px-3 py-1.5 text-xs bg-rose-950/50 hover:bg-rose-900/60 text-rose-400 border border-rose-900/50 rounded-lg font-bold transition flex items-center gap-1.5 active:scale-95 shrink-0"
           >
-            Desconectar
+            <Unplug size={14} /> Desconectar
           </button>
         )}
       </div>
 
-      {/* Lista Unificada Separada por Categorias */}
-      <div className="space-y-3">
-        {/* Categoria A: Neste aparelho */}
+      {/* LISTAS */}
+      <div className="space-y-5">
+        
+        {/* CATEGORIA A: LOCAL */}
         <div>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-            <span>📱</span> Neste aparelho (MidiManager / Receptores Instalados)
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            <Smartphone size={14} className="text-emerald-500" /> 
+            Neste aparelho (Receptores Instalados)
           </div>
+          
           {localDestinations.length === 0 ? (
-            <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800/80 text-xs text-slate-400 italic">
-              Nenhum aplicativo receptor MIDI local detectado neste instante. Inicie um app sintetizador/DAW no Android ou use a porta de teste virtual.
+            <div className="p-4 bg-[#0a0f1c] rounded-xl border border-dashed border-slate-800 text-xs text-slate-500 text-center">
+              Nenhum aplicativo receptor MIDI local detectado.<br/>Inicie um sintetizador/DAW no Android.
             </div>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {localDestinations.map((dest) => {
                 const isConnected = connectedDestination?.id === dest.id;
                 return (
-                  <div
+                  <button
                     key={dest.id}
+                    type="button"
                     onClick={() => {
-                      if (isConnected) {
-                        onDisconnect();
-                      } else {
-                        onConnect(dest);
-                      }
+                      if (isConnected) onDisconnect();
+                      else onConnect(dest);
                     }}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        if (isConnected) onDisconnect();
-                        else onConnect(dest);
-                      }
-                    }}
-                    className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between cursor-pointer select-none active:scale-[0.99] ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between select-none active:scale-[0.98] ${
                       isConnected
-                        ? 'bg-emerald-950/30 border-emerald-500/60 ring-1 ring-emerald-500/50'
-                        : 'bg-slate-800/50 hover:bg-slate-800 border-slate-700/60'
+                        ? 'bg-emerald-900/20 border-emerald-700/60 ring-1 ring-emerald-500/30'
+                        : 'bg-[#0a0f1c] hover:bg-slate-800/80 border-[#1e293b]'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 truncate">
-                      <span className="text-xs">
-                        {isConnected ? '🟢' : '⚪'}
-                      </span>
+                    <div className="flex items-center gap-3 truncate">
+                      {isConnected ? (
+                        <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                      ) : (
+                        <Circle size={16} className="text-slate-600 shrink-0" />
+                      )}
                       <div className="truncate">
-                        <div className="text-xs font-semibold text-slate-200 truncate">
+                        <div className={`text-xs font-semibold truncate ${isConnected ? 'text-emerald-300' : 'text-slate-200'}`}>
                           {dest.displayName}
                         </div>
                         {dest.manufacturer && (
-                          <div className="text-[10px] text-slate-400">
+                          <div className="text-[10px] text-slate-500 truncate mt-0.5">
                             {dest.manufacturer} {dest.isVirtual ? '• Emulação local' : '• MidiManager'}
                           </div>
                         )}
                       </div>
                     </div>
                     <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded whitespace-nowrap ${
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md whitespace-nowrap ml-2 ${
                         isConnected
                           ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-700/60 text-slate-400'
+                          : 'bg-slate-800 text-slate-400'
                       }`}
                     >
-                      {isConnected ? 'Conectado' : 'Conectar'}
+                      {isConnected ? 'Ativo' : 'Conectar'}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           )}
         </div>
 
-        {/* Categoria B: Dispositivos BLE */}
+        {/* CATEGORIA B: BLE */}
         <div>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-            <span>📡</span> Dispositivos BLE (Bluetooth MIDI Externo)
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            <Bluetooth size={14} className="text-cyan-500" /> 
+            Dispositivos BLE (Bluetooth MIDI Externo)
           </div>
+          
           {bleDestinations.length === 0 ? (
-            <div className="p-3 bg-slate-950/60 rounded-lg border border-slate-800/80 text-xs text-slate-400 flex items-center justify-between">
-              <span>Nenhum dispositivo BLE pareado. Toque em &quot;Buscar BLE&quot; para escanear sintetizadores, celulares ou tablets.</span>
+            <div className="p-4 bg-[#0a0f1c] rounded-xl border border-dashed border-slate-800 text-xs text-slate-500 text-center">
+              Nenhum dispositivo BLE pareado.<br/>Toque em "Buscar BLE" para escanear.
             </div>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {bleDestinations.map((dest) => {
                 const isConnected = connectedDestination?.id === dest.id;
                 return (
-                  <div
+                  <button
                     key={dest.id}
+                    type="button"
                     onClick={() => {
-                      if (isConnected) {
-                        onDisconnect();
-                      } else {
-                        onConnect(dest);
-                      }
+                      if (isConnected) onDisconnect();
+                      else onConnect(dest);
                     }}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        if (isConnected) onDisconnect();
-                        else onConnect(dest);
-                      }
-                    }}
-                    className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between cursor-pointer select-none active:scale-[0.99] ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between select-none active:scale-[0.98] ${
                       isConnected
-                        ? 'bg-emerald-950/30 border-emerald-500/60 ring-1 ring-emerald-500/50'
-                        : 'bg-slate-800/50 hover:bg-slate-800 border-slate-700/60'
+                        ? 'bg-cyan-900/20 border-cyan-700/60 ring-1 ring-cyan-500/30'
+                        : 'bg-[#0a0f1c] hover:bg-slate-800/80 border-[#1e293b]'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 truncate">
-                      <span className="text-xs">
-                        {isConnected ? '🟢' : '⚪'}
-                      </span>
+                    <div className="flex items-center gap-3 truncate">
+                      {isConnected ? (
+                        <CheckCircle2 size={16} className="text-cyan-400 shrink-0" />
+                      ) : (
+                        <Circle size={16} className="text-slate-600 shrink-0" />
+                      )}
                       <div className="truncate">
-                        <div className="text-xs font-semibold text-slate-200 truncate">
+                        <div className={`text-xs font-semibold truncate ${isConnected ? 'text-cyan-300' : 'text-slate-200'}`}>
                           {dest.displayName}
                         </div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className="text-[10px] text-slate-500 truncate mt-0.5">
                           Bluetooth Low Energy MIDI
                         </div>
                       </div>
                     </div>
                     <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded whitespace-nowrap ${
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md whitespace-nowrap ml-2 ${
                         isConnected
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-slate-700/60 text-slate-400'
+                          ? 'bg-cyan-500/20 text-cyan-400'
+                          : 'bg-slate-800 text-slate-400'
                       }`}
                     >
-                      {isConnected ? 'Conectado' : 'Conectar'}
+                      {isConnected ? 'Ativo' : 'Conectar'}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
