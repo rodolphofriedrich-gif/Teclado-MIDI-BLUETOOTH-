@@ -9,6 +9,7 @@ import { MidiKeyboard } from './components/MidiKeyboard';
 import { MidiRouterScreen } from './components/MidiRouterScreen';
 import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { MidiControlsScreen } from './components/MidiControlsScreen';
+import { VuMeter } from './components/VuMeter'; // NOVO
 import { NativeMidi } from './services/nativeMidi';
 import {
   Music2, GitBranch, Activity, SlidersHorizontal, Settings,
@@ -59,6 +60,7 @@ export default function App() {
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
   const [connectedDestination, setConnectedDestination] = useState<MidiDestination | null>(null);
   const [activeNotesCount, setActiveNotesCount] = useState(0);
+  const [vuLevel, setVuLevel] = useState(0); // NOVO: Estado do VU Meter
   const [isBleServerActive, setIsBleServerActive] = useState(false);
   const [isScanningBle, setIsScanningBle] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'warn' | 'error' | 'success'; } | null>(null);
@@ -81,6 +83,15 @@ export default function App() {
   useEffect(() => { channelRef.current = selectedChannel; }, [selectedChannel]);
   const velocityRef = useRef<number>(selectedVelocity);
   useEffect(() => { velocityRef.current = selectedVelocity; }, [selectedVelocity]);
+
+  // NOVO: Ouvinte global para o VU Meter
+  useEffect(() => {
+    const handleActivity = (velocity: number) => {
+      setVuLevel(velocity);
+    };
+    midiManager.addActivityListener(handleActivity);
+    return () => midiManager.removeActivityListener(handleActivity);
+  }, []);
 
   const showMessage = useCallback((text: string, type: 'info' | 'warn' | 'error' | 'success' = 'info', durationMs = 3500) => {
     setStatusMessage({ text, type });
@@ -160,8 +171,7 @@ export default function App() {
     setIsScanningBle(true);
     try {
       const found = await midiManager.scanBleDevice();
-      await refreshDestinations(); // Garante que o App vai renderizar a lista nova
-      
+      await refreshDestinations();
       if (found.length === 0) {
         showMessage('Nenhum dispositivo BLE MIDI encontrado.', 'info', 3000);
       } else {
@@ -385,18 +395,36 @@ export default function App() {
       <main className="nexus-main flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         {activeTab === 'keyboard' ? (
           <div className="nexus-keyboard-page flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden p-2 sm:p-3">
-            <div className="nexus-keyboard-container flex min-h-0 w-full flex-1 flex-col">
-              <MidiKeyboard
-                isConnected={isConnected}
-                selectedChannel={selectedChannel}
-                onSelectChannel={(ch) => { setSelectedChannel(ch); showMessage(`Canal: ${ch}`, 'info', 1500); }}
-                onNoteOn={handleNoteOn}
-                onNoteOff={handleNoteOff}
-                onDisabledPress={handleDisabledPress}
-                customWhiteKeyColor={activePalette.white}
-                customBlackKeyColor={activePalette.black}
-                onActiveNotesChange={setActiveNotesCount} 
-              />
+            
+            {/* NOVO: Container flex para colocar os VUs ao lado do teclado */}
+            <div className="flex flex-row flex-1 min-h-0 gap-2">
+              
+              {/* VU Meter Esquerdo */}
+              <div className="py-1">
+                <VuMeter level={vuLevel} />
+              </div>
+
+              {/* O Teclado */}
+              <div className="nexus-keyboard-container flex min-h-0 flex-1 flex-col">
+                <MidiKeyboard
+                  isConnected={isConnected}
+                  selectedChannel={selectedChannel}
+                  onSelectChannel={(ch) => { setSelectedChannel(ch); showMessage(`Canal: ${ch}`, 'info', 1500); }}
+                  onNoteOn={handleNoteOn}
+                  onNoteOff={handleNoteOff}
+                  onDisabledPress={handleDisabledPress}
+                  customWhiteKeyColor={activePalette.white}
+                  customBlackKeyColor={activePalette.black}
+                  onActiveNotesChange={setActiveNotesCount} 
+                  onActivity={(v) => { setVuLevel(v); setTimeout(() => setVuLevel(0), 100); }} // NOVO
+                />
+              </div>
+
+              {/* VU Meter Direito */}
+              <div className="py-1">
+                <VuMeter level={vuLevel} />
+              </div>
+
             </div>
 
             <div className="nexus-midi-status flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 bg-[#0a0f1c] border border-[#1e293b] rounded-xl">
