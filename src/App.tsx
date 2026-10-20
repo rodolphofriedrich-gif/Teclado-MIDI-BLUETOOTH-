@@ -247,7 +247,9 @@ export default function App() {
 
   return (
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
-      <header className="nexus-header relative z-50 flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
+      
+      {/* CORREÇÃO 1: Header alterado para z-[100] para ficar acima do teclado */}
+      <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <button type="button" className="nexus-brand flex min-w-0 items-center gap-2" onClick={() => { setActiveTab('keyboard'); closeConnectionMenus(); }}>
             <span className="nexus-brand-name whitespace-nowrap text-xs font-extrabold tracking-wider sm:text-sm">NEXUSMIDI <span>Pro</span></span>
@@ -284,25 +286,27 @@ export default function App() {
               </span>
               {isUsbConnected ? <span className="nexus-pulse-dot ml-1" /> : <ChevronDown size={14} className="ml-1 opacity-50" />}
             </button>
+            
             {isUsbOpen && (
-              <div className="nexus-dropdown absolute right-0 top-full z-[100] mt-2 w-[calc(100vw-32px)] max-w-[256px] overflow-hidden rounded-2xl">
-                <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3">
-                  <div><p className="nexus-eyebrow">CONEXÃO USB</p><p className="mt-1 text-sm font-semibold">Portas disponíveis</p></div>
-                  <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button"><RefreshCw size={16} /></button>
+              // CORREÇÃO 2: Adicionado bg-[#0f172a] e z-[110] para não vazar o fundo e ficar acima de tudo
+              <div className="nexus-dropdown absolute right-0 top-full z-[110] mt-2 w-[calc(100vw-32px)] max-w-[256px] overflow-hidden rounded-2xl bg-[#0f172a] border border-[#1e293b] shadow-2xl">
+                <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3 border-b border-[#1e293b]">
+                  <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONEXÃO USB</p><p className="mt-1 text-sm font-semibold text-white">Portas disponíveis</p></div>
+                  <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button hover:bg-slate-800 p-1 rounded text-slate-400"><RefreshCw size={16} /></button>
                 </div>
                 {isUsbConnected && (
-                  <button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger"><X size={16} /> Desconectar USB</button>
+                  <button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar USB</button>
                 )}
-                <div className="nexus-dropdown-list">
+                <div className="nexus-dropdown-list p-1">
                   {usbAndVirtualDestinations.length === 0 ? (
-                    <p className="nexus-empty-state">Nenhum dispositivo USB encontrado.</p>
+                    <p className="nexus-empty-state text-slate-400 p-3 text-sm text-center">Nenhum dispositivo USB encontrado.</p>
                   ) : (
                     usbAndVirtualDestinations.map((dest) => {
                       const selected = connectedDestination?.id === dest.id;
                       return (
-                        <button key={dest.id} type="button" onClick={() => void handleConnect(dest)} className={`nexus-device-option ${selected ? 'is-selected' : ''}`}>
-                          <span className="min-w-0 flex-1 truncate">{dest.displayName}</span>
-                          {selected ? <CheckCircle2 size={17} className="nexus-success-icon" /> : <Circle size={15} className="nexus-muted-icon" />}
+                        <button key={dest.id} type="button" onClick={() => void handleConnect(dest)} className={`nexus-device-option flex items-center justify-between w-full p-2 rounded hover:bg-slate-800 ${selected ? 'bg-slate-800 text-cyan-400' : 'text-slate-300'}`}>
+                          <span className="min-w-0 flex-1 truncate text-sm text-left">{dest.displayName}</span>
+                          {selected ? <CheckCircle2 size={17} className="text-cyan-400" /> : <Circle size={15} className="text-slate-600" />}
                         </button>
                       );
                     })
@@ -325,35 +329,37 @@ export default function App() {
               </span>
               {isBleConnected || isBleServerActive ? <span className="nexus-pulse-dot ml-1" /> : <ChevronDown size={14} className="ml-1 opacity-50" />}
             </button>
+            
             {isBleOpen && (
-              <div className="nexus-dropdown absolute right-0 top-full z-[100] mt-2 w-[calc(100vw-32px)] max-w-[320px] overflow-hidden rounded-2xl">
-                <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3">
-                  <div><p className="nexus-eyebrow">CONECTIVIDADE</p><p className="mt-1 text-sm font-semibold">Bluetooth MIDI</p></div>
-                  <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button"><RefreshCw size={16} /></button>
+              // CORREÇÃO 3: Adicionado bg-[#0f172a] e z-[110] no menu do bluetooth também
+              <div className="nexus-dropdown absolute right-0 top-full z-[110] mt-2 w-[calc(100vw-32px)] max-w-[320px] overflow-hidden rounded-2xl bg-[#0f172a] border border-[#1e293b] shadow-2xl">
+                <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3 border-b border-[#1e293b]">
+                  <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONECTIVIDADE</p><p className="mt-1 text-sm font-semibold text-white">Bluetooth MIDI</p></div>
+                  <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button hover:bg-slate-800 p-1 rounded text-slate-400"><RefreshCw size={16} /></button>
                 </div>
                 {(connectedDestination || isBleServerActive) && (
-                  <button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger"><X size={16} /> Desconectar</button>
+                  <button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar</button>
                 )}
-                <div className="nexus-dropdown-list max-h-[35vh] overflow-y-auto overscroll-contain custom-scrollbar">
+                <div className="nexus-dropdown-list max-h-[35vh] overflow-y-auto overscroll-contain custom-scrollbar p-1">
                   {bleDestinations.length === 0 ? (
-                    <p className="nexus-empty-state">Nenhum dispositivo BLE MIDI encontrado.</p>
+                    <p className="nexus-empty-state text-slate-400 p-3 text-sm text-center">Nenhum dispositivo BLE MIDI encontrado.</p>
                   ) : (
                     bleDestinations.map((dest) => {
                       const selected = connectedDestination?.id === dest.id;
                       return (
-                        <button key={dest.id} type="button" onClick={() => void handleConnect(dest)} className={`nexus-device-option ${selected ? 'is-selected' : ''}`}>
-                          <span className="min-w-0 flex-1 truncate">{dest.displayName}</span>
-                          {selected ? <CheckCircle2 size={17} className="nexus-success-icon" /> : <Circle size={15} className="nexus-muted-icon" />}
+                        <button key={dest.id} type="button" onClick={() => void handleConnect(dest)} className={`nexus-device-option flex items-center justify-between w-full p-2 rounded hover:bg-slate-800 ${selected ? 'bg-slate-800 text-cyan-400' : 'text-slate-300'}`}>
+                          <span className="min-w-0 flex-1 truncate text-sm text-left">{dest.displayName}</span>
+                          {selected ? <CheckCircle2 size={17} className="text-cyan-400" /> : <Circle size={15} className="text-slate-600" />}
                         </button>
                       );
                     })
                   )}
                 </div>
-                <div className="nexus-dropdown-footer flex flex-col gap-2 p-3">
-                  <button type="button" onClick={() => void handleScanBle()} disabled={isScanningBle} className="nexus-action-button nexus-action-primary w-full">
+                <div className="nexus-dropdown-footer flex flex-col gap-2 p-3 border-t border-[#1e293b]">
+                  <button type="button" onClick={() => void handleScanBle()} disabled={isScanningBle} className="nexus-action-button bg-blue-600 hover:bg-blue-500 text-white rounded p-2 flex items-center justify-center gap-2 text-sm w-full transition-colors">
                     <Radio size={17} className={isScanningBle ? 'animate-pulse' : ''} /> {isScanningBle ? 'Buscando...' : 'Buscar BLE'}
                   </button>
-                  <button type="button" onClick={() => void (isBleServerActive ? handleDisconnect() : handleStartBleServer())} className={`nexus-action-button w-full ${isBleServerActive ? 'nexus-action-danger' : 'nexus-action-secondary'}`}>
+                  <button type="button" onClick={() => void (isBleServerActive ? handleDisconnect() : handleStartBleServer())} className={`nexus-action-button w-full rounded p-2 flex items-center justify-center gap-2 text-sm transition-colors ${isBleServerActive ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}>
                     {isBleServerActive ? <Power size={17} /> : <Bluetooth size={17} />} {isBleServerActive ? 'Parar Visibilidade' : 'Ficar Visível'}
                   </button>
                 </div>
@@ -368,14 +374,14 @@ export default function App() {
       </header>
 
       {showExitConfirm && (
-        <div className="nexus-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowExitConfirm(false); }}>
-          <section className="nexus-modal w-full max-w-sm rounded-2xl p-5 sm:p-6">
-            <div className="nexus-modal-icon mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl"><LogOut size={27} /></div>
-            <h2 className="text-center text-lg font-bold">Fechar aplicativo?</h2>
-            <p className="nexus-secondary-text mt-2 text-center text-sm">Deseja realmente sair do NexusMIDI Pro?</p>
+        <div className="nexus-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowExitConfirm(false); }}>
+          <section className="nexus-modal w-full max-w-sm rounded-2xl p-5 sm:p-6 bg-[#0f172a] border border-slate-700 shadow-2xl">
+            <div className="nexus-modal-icon mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-500"><LogOut size={27} /></div>
+            <h2 className="text-center text-lg font-bold text-white">Fechar aplicativo?</h2>
+            <p className="nexus-secondary-text mt-2 text-center text-sm text-slate-400">Deseja realmente sair do NexusMIDI Pro?</p>
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setShowExitConfirm(false)} className="nexus-action-button nexus-action-secondary justify-center">Cancelar</button>
-              <button type="button" onClick={() => void handleConfirmExit()} className="nexus-action-button nexus-action-danger justify-center"><LogOut size={16} /> Sair</button>
+              <button type="button" onClick={() => setShowExitConfirm(false)} className="nexus-action-button bg-slate-800 hover:bg-slate-700 text-white rounded p-2 justify-center transition-colors">Cancelar</button>
+              <button type="button" onClick={() => void handleConfirmExit()} className="nexus-action-button bg-red-600 hover:bg-red-500 text-white rounded p-2 flex items-center justify-center gap-2 transition-colors"><LogOut size={16} /> Sair</button>
             </div>
           </section>
         </div>
@@ -383,19 +389,18 @@ export default function App() {
 
       {statusMessage && (
         <div className="nexus-toast-container fixed bottom-5 left-0 right-0 z-[150] flex justify-center px-4 pointer-events-none">
-          <div role="status" className={`nexus-toast pointer-events-auto flex max-w-md items-center gap-3 rounded-xl px-4 py-3 ${statusMessage.type === 'success' ? 'is-success' : statusMessage.type === 'warn' ? 'is-warning' : statusMessage.type === 'error' ? 'is-error' : 'is-info'}`}>
+          <div role="status" className={`nexus-toast pointer-events-auto flex max-w-md items-center gap-3 rounded-xl px-4 py-3 shadow-xl ${statusMessage.type === 'success' ? 'bg-emerald-900/90 text-emerald-100 border border-emerald-700' : statusMessage.type === 'warn' ? 'bg-amber-900/90 text-amber-100 border border-amber-700' : statusMessage.type === 'error' ? 'bg-red-900/90 text-red-100 border border-red-700' : 'bg-blue-900/90 text-blue-100 border border-blue-700'}`}>
             <span className="shrink-0">
               {statusMessage.type === 'success' ? <CheckCircle2 size={19} /> : statusMessage.type === 'warn' || statusMessage.type === 'error' ? <AlertTriangle size={19} /> : <Info size={19} />}
             </span>
             <span className="min-w-0 flex-1 text-sm font-medium">{statusMessage.text}</span>
-            <button type="button" onClick={() => setStatusMessage(null)} className="nexus-toast-close shrink-0"><X size={16} /></button>
+            <button type="button" onClick={() => setStatusMessage(null)} className="nexus-toast-close shrink-0 opacity-70 hover:opacity-100"><X size={16} /></button>
           </div>
         </div>
       )}
 
       <main className="nexus-main flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         {activeTab === 'keyboard' ? (
-          // Reduzido o gap e o padding para dar mais espaço ao teclado
           <div className="nexus-keyboard-page flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden p-2 sm:p-3">
             <div className="nexus-keyboard-container flex min-h-0 w-full flex-1 flex-col">
               <MidiKeyboard
@@ -411,9 +416,7 @@ export default function App() {
               />
             </div>
 
-            {/* HUD INFERIOR LIMPA (Sem Studio Mode) */}
             <div className="nexus-midi-status flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 bg-[#0a0f1c] border border-[#1e293b] rounded-xl">
-              
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full" style={{ background: isConnected ? '#10b981' : '#f59e0b', boxShadow: isConnected ? '0 0 10px rgba(16,185,129,0.55)' : 'none' }} />
@@ -437,7 +440,6 @@ export default function App() {
                   <span className="text-[11px] font-mono text-gray-500">Aguardando</span>
                 )}
               </div>
-
             </div>
           </div>
         ) : activeTab === 'router' ? (
@@ -448,38 +450,37 @@ export default function App() {
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         ) : (
           <div className="nexus-settings-page min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
-            <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6">
-              <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5">
-                <div className="nexus-settings-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"><Settings size={24} /></div>
-                <div className="min-w-0"><p className="nexus-eyebrow">PERSONALIZAÇÃO</p><h2 className="mt-1 text-lg font-bold sm:text-xl">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm">Ajuste a resposta e a aparência.</p></div>
+            <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6 bg-[#0f172a] border border-[#1e293b]">
+              <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5 border-b border-[#1e293b]">
+                <div className="nexus-settings-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300"><Settings size={24} /></div>
+                <div className="min-w-0"><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">PERSONALIZAÇÃO</p><h2 className="mt-1 text-lg font-bold sm:text-xl text-white">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm text-slate-400">Ajuste a resposta e a aparência.</p></div>
               </div>
               <section className="nexus-settings-section mb-7">
-                <div className="mb-3"><h3 className="text-sm font-semibold">Intensidade das notas</h3><p className="nexus-secondary-text mt-1 text-xs">Velocity — força enviada ao tocar.</p></div>
+                <div className="mb-3"><h3 className="text-sm font-semibold text-white">Intensidade das notas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Velocity — força enviada ao tocar.</p></div>
                 <div className="grid grid-cols-2 gap-3">
                   {VELOCITY_OPTIONS.map((vel) => (
-                    <button key={vel.id} type="button" onClick={() => setSelectedVelocity(vel.id)} className={`nexus-setting-option ${selectedVelocity === vel.id ? 'is-selected' : ''}`}>
-                      <span className="flex min-w-0 flex-col items-start gap-1"><span className="text-sm font-semibold">{vel.name}</span><span className="nexus-option-caption">VELOCITY</span></span>
-                      <span className="nexus-option-value">{vel.id}</span>
+                    <button key={vel.id} type="button" onClick={() => setSelectedVelocity(vel.id)} className={`nexus-setting-option flex justify-between items-center p-3 rounded-lg border transition-colors ${selectedVelocity === vel.id ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
+                      <span className="flex min-w-0 flex-col items-start gap-1"><span className="text-sm font-semibold">{vel.name}</span><span className="nexus-option-caption text-[10px] opacity-70">VELOCITY</span></span>
+                      <span className="nexus-option-value font-mono">{vel.id}</span>
                     </button>
                   ))}
                 </div>
               </section>
               <section className="nexus-settings-section">
-                <div className="mb-3"><h3 className="text-sm font-semibold">Aparência das teclas</h3><p className="nexus-secondary-text mt-1 text-xs">Combinação de cores do piano.</p></div>
+                <div className="mb-3"><h3 className="text-sm font-semibold text-white">Aparência das teclas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Combinação de cores do piano.</p></div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {KEYBOARD_PALETTES.map((pal) => (
-                    <button key={pal.id} type="button" onClick={() => setSelectedPaletteId(pal.id)} className={`nexus-palette-option ${selectedPaletteId === pal.id ? 'is-selected' : ''}`}>
-                      <span className="nexus-palette-preview flex shrink-0 items-center">
-                        <span className="nexus-palette-white-key" style={{ backgroundColor: pal.white }} />
-                        <span className="nexus-palette-black-key" style={{ backgroundColor: pal.black }} />
+                    <button key={pal.id} type="button" onClick={() => setSelectedPaletteId(pal.id)} className={`nexus-palette-option flex items-center gap-3 p-2 rounded-lg border transition-colors ${selectedPaletteId === pal.id ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
+                      <span className="nexus-palette-preview flex shrink-0 items-center border border-slate-600 rounded overflow-hidden">
+                        <span className="nexus-palette-white-key w-4 h-8" style={{ backgroundColor: pal.white }} />
+                        <span className="nexus-palette-black-key w-3 h-5 -ml-1 z-10" style={{ backgroundColor: pal.black }} />
                       </span>
                       <span className="min-w-0 flex-1 text-left text-xs font-medium sm:text-sm">{pal.name}</span>
-                      {selectedPaletteId === pal.id && <CheckCircle2 size={18} className="nexus-success-icon shrink-0" />}
+                      {selectedPaletteId === pal.id && <CheckCircle2 size={18} className="text-cyan-400 shrink-0" />}
                     </button>
                   ))}
                 </div>
               </section>
-              <p className="nexus-settings-footnote mt-6 pt-4 text-xs">Preferências salvas automaticamente.</p>
             </section>
           </div>
         )}
