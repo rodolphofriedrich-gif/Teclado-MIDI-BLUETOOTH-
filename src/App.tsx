@@ -1,7 +1,3 @@
-/**
- * NexusMIDI Pro - Aplicativo Android / Web MIDI Router Hub
- */
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MidiDestination, MidiLogEntry } from './types/midi';
 import { midiManager, getNoteName } from './services/midiService';
@@ -69,7 +65,6 @@ export default function App() {
   const [isBleOpen, setIsBleOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  // Estados do Teclado Virtual e Sustain
   const [isVirtualKeyboardActive, setIsVirtualKeyboardActive] = useState(true);
   const [isSustainActive, setIsSustainActive] = useState(false);
 
@@ -199,7 +194,6 @@ export default function App() {
 
   const handleNoteOn = useCallback(async (note: number) => {
     if (!isVirtualKeyboardActive) return;
-
     if (!connectedDestination && !isBleServerActive) {
       showMessage('Selecione um destino MIDI ou ative a visibilidade.', 'warn', 2500);
       return;
@@ -238,7 +232,6 @@ export default function App() {
   const handleToggleSustain = useCallback(async () => {
     const nextState = !isSustainActive;
     setIsSustainActive(nextState);
-    
     if (connectedDestination || isBleServerActive) {
       try {
         await midiManager.sendControlChange(channelRef.current, 64, nextState ? 127 : 0);
@@ -277,11 +270,7 @@ export default function App() {
               const selected = activeTab === id;
               const tabColor = TAB_COLORS[id];
               return (
-                <button
-                  key={id} type="button" onClick={() => { setActiveTab(id); closeConnectionMenus(); }} title={label}
-                  className={`nexus-nav-button relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${selected ? 'is-active' : ''}`}
-                  style={selected ? { background: tabColor.bg, borderColor: tabColor.border, boxShadow: tabColor.shadow, color: '#ffffff' } : undefined}
-                >
+                <button key={id} type="button" onClick={() => { setActiveTab(id); closeConnectionMenus(); }} title={label} className={`nexus-nav-button relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${selected ? 'is-active' : ''}`} style={selected ? { background: tabColor.bg, borderColor: tabColor.border, boxShadow: tabColor.shadow, color: '#ffffff' } : undefined}>
                   <Icon size={18} strokeWidth={2.2} aria-hidden="true" />
                   {id === 'router' && <span className="nexus-nav-indicator absolute right-1.5 top-1.5" aria-hidden="true" />}
                 </button>
@@ -292,10 +281,7 @@ export default function App() {
 
         <div className="flex items-center gap-2">
           <div className="relative">
-            <button
-              type="button" onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); void refreshDestinations(); }}
-              className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isUsbConnected ? 'is-connected' : ''}`}
-            >
+            <button type="button" onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); void refreshDestinations(); }} className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isUsbConnected ? 'is-connected' : ''}`}>
               <span className="nexus-connection-icon flex items-center justify-center"><Usb size={18} strokeWidth={1.8} /></span>
               <span className="nexus-connection-copy flex flex-col items-start leading-none text-left">
                 <span className="nexus-connection-title text-[10px] font-bold uppercase">USB</span>
@@ -303,16 +289,13 @@ export default function App() {
               </span>
               {isUsbConnected ? <span className="nexus-pulse-dot ml-1" /> : <ChevronDown size={14} className="ml-1 opacity-50" />}
             </button>
-            
             {isUsbOpen && (
               <div className="nexus-dropdown absolute right-0 top-full z-[110] mt-2 w-[calc(100vw-32px)] max-w-[256px] overflow-hidden rounded-2xl bg-[#0f172a] border border-[#1e293b] shadow-2xl">
                 <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3 border-b border-[#1e293b]">
                   <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONEXÃO USB</p><p className="mt-1 text-sm font-semibold text-white">Portas disponíveis</p></div>
                   <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button hover:bg-slate-800 p-1 rounded text-slate-400"><RefreshCw size={16} /></button>
                 </div>
-                {isUsbConnected && (
-                  <button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar USB</button>
-                )}
+                {isUsbConnected && (<button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar USB</button>)}
                 <div className="nexus-dropdown-list p-1">
                   {usbAndVirtualDestinations.length === 0 ? (
                     <p className="nexus-empty-state text-slate-400 p-3 text-sm text-center">Nenhum dispositivo USB encontrado.</p>
@@ -331,12 +314,8 @@ export default function App() {
               </div>
             )}
           </div>
-
           <div className="relative">
-            <button
-              type="button" onClick={() => { setIsBleOpen(!isBleOpen); setIsUsbOpen(false); void refreshDestinations(); }}
-              className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isBleConnected || isBleServerActive ? 'is-connected' : ''}`}
-            >
+            <button type="button" onClick={() => { setIsBleOpen(!isBleOpen); setIsUsbOpen(false); void refreshDestinations(); }} className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isBleConnected || isBleServerActive ? 'is-connected' : ''}`}>
               <span className="nexus-connection-icon flex items-center justify-center"><Bluetooth size={18} strokeWidth={1.8} /></span>
               <span className="nexus-connection-copy flex flex-col items-start leading-none text-left">
                 <span className="nexus-connection-title text-[10px] font-bold uppercase">Bluetooth</span>
@@ -344,16 +323,13 @@ export default function App() {
               </span>
               {isBleConnected || isBleServerActive ? <span className="nexus-pulse-dot ml-1" /> : <ChevronDown size={14} className="ml-1 opacity-50" />}
             </button>
-            
             {isBleOpen && (
               <div className="nexus-dropdown absolute right-0 top-full z-[110] mt-2 w-[calc(100vw-32px)] max-w-[320px] overflow-hidden rounded-2xl bg-[#0f172a] border border-[#1e293b] shadow-2xl">
                 <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3 border-b border-[#1e293b]">
                   <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONECTIVIDADE</p><p className="mt-1 text-sm font-semibold text-white">Bluetooth MIDI</p></div>
                   <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button hover:bg-slate-800 p-1 rounded text-slate-400"><RefreshCw size={16} /></button>
                 </div>
-                {(connectedDestination || isBleServerActive) && (
-                  <button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar</button>
-                )}
+                {(connectedDestination || isBleServerActive) && (<button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar</button>)}
                 <div className="nexus-dropdown-list max-h-[35vh] overflow-y-auto overscroll-contain custom-scrollbar p-1">
                   {bleDestinations.length === 0 ? (
                     <p className="nexus-empty-state text-slate-400 p-3 text-sm text-center">Nenhum dispositivo BLE MIDI encontrado.</p>
@@ -380,10 +356,7 @@ export default function App() {
               </div>
             )}
           </div>
-
-          <button type="button" onClick={() => setShowExitConfirm(true)} className="nexus-exit-button flex h-10 w-10 items-center justify-center rounded-xl" title="Sair">
-            <LogOut size={19} strokeWidth={1.9} />
-          </button>
+          <button type="button" onClick={() => setShowExitConfirm(true)} className="nexus-exit-button flex h-10 w-10 items-center justify-center rounded-xl" title="Sair"><LogOut size={19} strokeWidth={1.9} /></button>
         </div>
       </header>
 
@@ -416,12 +389,10 @@ export default function App() {
       <main className="nexus-main flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         {activeTab === 'keyboard' ? (
           <div className="nexus-keyboard-page flex min-h-0 w-full flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
-            
             <div className="flex flex-row flex-1 min-h-0 gap-1">
               <div className="py-1">
                 <VuMeter level={vuLevel} />
               </div>
-
               <div className="nexus-keyboard-container flex min-h-0 flex-1 flex-col">
                 <MidiKeyboard
                   isConnected={isConnected}
@@ -443,13 +414,11 @@ export default function App() {
                   onToggleSustain={() => void handleToggleSustain()}
                 />
               </div>
-
               <div className="py-1">
                 <VuMeter level={vuLevel} />
               </div>
             </div>
 
-            {/* Rodapé compacto */}
             <div className="nexus-midi-status flex shrink-0 items-center justify-between gap-3 px-3 py-1 bg-[#0a0f1c] border border-[#1e293b] rounded-lg">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
@@ -462,7 +431,6 @@ export default function App() {
                   {activeNotesCount > 0 ? `${activeNotesCount} nota${activeNotesCount > 1 ? 's' : ''} ativa${activeNotesCount > 1 ? 's' : ''}` : 'Nenhuma nota ativa'}
                 </span>
               </div>
-
               <div className="flex items-center gap-3">
                 <span className={`rounded-full h-2 w-2 ${lastTxCommand ? 'bg-cyan-400' : 'bg-gray-600'}`} />
                 <span className="text-[10px] font-bold text-gray-400 tracking-wider">MIDI TX</span>
@@ -489,51 +457,26 @@ export default function App() {
                 <div className="nexus-settings-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300"><Settings size={24} /></div>
                 <div className="min-w-0"><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">PERSONALIZAÇÃO</p><h2 className="mt-1 text-lg font-bold sm:text-xl text-white">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm text-slate-400">Ajuste a resposta e a aparência.</p></div>
               </div>
-              
               <section className="nexus-settings-section mb-7">
                 <div className="mb-3"><h3 className="text-sm font-semibold text-white">Intensidade das notas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Velocity — força enviada ao tocar.</p></div>
                 <div className="grid grid-cols-2 gap-3">
                   {VELOCITY_OPTIONS.map((vel) => {
                     const selected = selectedVelocity === vel.id;
                     return (
-                      <button 
-                        key={vel.id} 
-                        type="button" 
-                        onClick={() => setSelectedVelocity(vel.id)} 
-                        aria-pressed={selected} 
-                        className={`flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${
-                          selected 
-                            ? 'bg-cyan-950/40 border-cyan-500/60 ring-1 ring-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' 
-                            : 'bg-[#0a0f1c] border-[#1e293b] hover:bg-slate-800'
-                        }`}
-                      >
+                      <button key={vel.id} type="button" onClick={() => setSelectedVelocity(vel.id)} aria-pressed={selected} className={`flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${selected ? 'bg-cyan-950/40 border-cyan-500/60 ring-1 ring-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'bg-[#0a0f1c] border-[#1e293b] hover:bg-slate-800'}`}>
                         <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
-                          <span className={`text-sm font-bold ${selected ? 'text-cyan-300' : 'text-slate-300'}`}>
-                            {vel.name}
-                          </span>
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                            MIDI Velocity
-                          </span>
+                          <span className={`text-sm font-bold ${selected ? 'text-cyan-300' : 'text-slate-300'}`}>{vel.name}</span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">MIDI Velocity</span>
                         </span>
-
                         <div className="flex items-center gap-2">
                           {selected && <CheckCircle2 size={16} className="text-cyan-400" />}
-                          <span 
-                            className={`flex h-8 min-w-[32px] items-center justify-center rounded-lg border text-xs font-bold font-mono transition-colors ${
-                              selected 
-                                ? 'bg-cyan-600 border-cyan-500 text-white shadow-sm' 
-                                : 'bg-[#0f172a] border-[#1e293b] text-slate-500'
-                            }`}
-                          >
-                            {vel.id}
-                          </span>
+                          <span className={`flex h-8 min-w-[32px] items-center justify-center rounded-lg border text-xs font-bold font-mono transition-colors ${selected ? 'bg-cyan-600 border-cyan-500 text-white shadow-sm' : 'bg-[#0f172a] border-[#1e293b] text-slate-500'}`}>{vel.id}</span>
                         </div>
                       </button>
                     );
                   })}
                 </div>
               </section>
-
               <section className="nexus-settings-section">
                 <div className="mb-3"><h3 className="text-sm font-semibold text-white">Aparência das teclas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Combinação de cores do piano.</p></div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
