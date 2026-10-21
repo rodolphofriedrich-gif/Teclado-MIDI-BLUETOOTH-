@@ -1,7 +1,3 @@
-/**
- * NexusMIDI Pro - Aplicativo Android / Web MIDI Router Hub
- */
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MidiDestination, MidiLogEntry } from './types/midi';
 import { midiManager, getNoteName } from './services/midiService';
@@ -9,7 +5,7 @@ import { MidiKeyboard } from './components/MidiKeyboard';
 import { MidiRouterScreen } from './components/MidiRouterScreen';
 import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { MidiControlsScreen } from './components/MidiControlsScreen';
-import { VuMeter } from './components/VuMeter'; // NOVO
+import { VuMeter } from './components/VuMeter';
 import { NativeMidi } from './services/nativeMidi';
 import {
   Music2, GitBranch, Activity, SlidersHorizontal, Settings,
@@ -60,7 +56,7 @@ export default function App() {
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
   const [connectedDestination, setConnectedDestination] = useState<MidiDestination | null>(null);
   const [activeNotesCount, setActiveNotesCount] = useState(0);
-  const [vuLevel, setVuLevel] = useState(0); // NOVO: Estado do VU Meter
+  const [vuLevel, setVuLevel] = useState(0);
   const [isBleServerActive, setIsBleServerActive] = useState(false);
   const [isScanningBle, setIsScanningBle] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'warn' | 'error' | 'success'; } | null>(null);
@@ -68,6 +64,10 @@ export default function App() {
   const [isUsbOpen, setIsUsbOpen] = useState(false);
   const [isBleOpen, setIsBleOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  // NOVOS ESTADOS (Teclado e Sustain)
+  const [isVirtualKeyboardActive, setIsVirtualKeyboardActive] = useState(true);
+  const [isSustainActive, setIsSustainActive] = useState(false);
 
   const [selectedPaletteId, setSelectedPaletteId] = useState<string>(() => localStorage.getItem('midi_palette_id') || 'custom-blue');
   const [selectedVelocity, setSelectedVelocity] = useState<number>(() => {
@@ -84,11 +84,8 @@ export default function App() {
   const velocityRef = useRef<number>(selectedVelocity);
   useEffect(() => { velocityRef.current = selectedVelocity; }, [selectedVelocity]);
 
-  // NOVO: Ouvinte global para o VU Meter
   useEffect(() => {
-    const handleActivity = (velocity: number) => {
-      setVuLevel(velocity);
-    };
+    const handleActivity = (velocity: number) => setVuLevel(velocity);
     midiManager.addActivityListener(handleActivity);
     return () => midiManager.removeActivityListener(handleActivity);
   }, []);
@@ -197,6 +194,9 @@ export default function App() {
   };
 
   const handleNoteOn = useCallback(async (note: number) => {
+    // O teclado virtual só envia notas se estiver ativo
+    if (!isVirtualKeyboardActive) return;
+
     if (!connectedDestination && !isBleServerActive) {
       showMessage('Selecione um destino MIDI ou ative a visibilidade.', 'warn', 2500);
       return;
@@ -213,7 +213,7 @@ export default function App() {
     } catch (err: any) {
       showMessage(`Erro Note On: ${err?.message}`, 'error', 2500);
     }
-  }, [connectedDestination, isBleServerActive, showMessage]);
+  }, [connectedDestination, isBleServerActive, showMessage, isVirtualKeyboardActive]);
 
   const handleNoteOff = useCallback(async (note: number) => {
     if (!connectedDestination && !isBleServerActive) return;
@@ -228,8 +228,27 @@ export default function App() {
     } catch {}
   }, [connectedDestination, isBleServerActive]);
 
-  const handleDisabledPress = useCallback(() => { showMessage('Selecione um destino MIDI primeiro.', 'warn', 2500); }, [showMessage]);
-  
+  const handleDisabledPress = useCallback(() => { 
+    showMessage(isVirtualKeyboardActive ? 'Selecione um destino MIDI primeiro.' : 'O teclado virtual está desativado.', 'warn', 2500); 
+  }, [showMessage, isVirtualKeyboardActive]);
+
+  // NOVO: Alterna o Sustain e envia o MIDI CC64
+  const handleToggleSustain = useCallback(async () => {
+    const nextState = !isSustainActive;
+    setIsSustainActive(nextState);
+    
+    if (connectedDestination || isBleServerActive) {
+      try {
+        await midiManager.sendControlChange(channelRef.current, 64, nextState ? 127 : 0);
+        showMessage(`Sustain ${nextState ? 'Ligado' : 'Desligado'}`, 'info', 1500);
+      } catch (err: any) {
+        showMessage(`Erro ao enviar Sustain: ${err?.message}`, 'error', 2500);
+      }
+    } else {
+      showMessage('Sustain alterado (Desconectado)', 'warn', 1500);
+    }
+  }, [isSustainActive, connectedDestination, isBleServerActive, showMessage]);
+
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
     try { await (NativeMidi as any).fecharApp(); } catch { try { window.close(); } catch {} }
@@ -396,15 +415,11 @@ export default function App() {
         {activeTab === 'keyboard' ? (
           <div className="nexus-keyboard-page flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden p-2 sm:p-3">
             
-            {/* NOVO: Container flex para colocar os VUs ao lado do teclado */}
             <div className="flex flex-row flex-1 min-h-0 gap-2">
-              
-              {/* VU Meter Esquerdo */}
               <div className="py-1">
                 <VuMeter level={vuLevel} />
               </div>
 
-              {/* O Teclado */}
               <div className="nexus-keyboard-container flex min-h-0 flex-1 flex-col">
                 <MidiKeyboard
                   isConnected={isConnected}
@@ -416,15 +431,21 @@ export default function App() {
                   customWhiteKeyColor={activePalette.white}
                   customBlackKeyColor={activePalette.black}
                   onActiveNotesChange={setActiveNotesCount} 
-                  onActivity={(v) => { setVuLevel(v); setTimeout(() => setVuLevel(0), 100); }} // NOVO
+                  onActivity={(v) => { setVuLevel(v); setTimeout(() => setVuLevel(0), 100); }}
+                  // NOVAS PROPS AQUI
+                  isActive={isVirtualKeyboardActive}
+                  onToggleActive={() => {
+                    setIsVirtualKeyboardActive(!isVirtualKeyboardActive);
+                    showMessage(`Teclado Virtual ${!isVirtualKeyboardActive ? 'Ligado' : 'Desligado'}`, 'info', 1500);
+                  }}
+                  isSustainActive={isSustainActive}
+                  onToggleSustain={() => void handleToggleSustain()}
                 />
               </div>
 
-              {/* VU Meter Direito */}
               <div className="py-1">
                 <VuMeter level={vuLevel} />
               </div>
-
             </div>
 
             <div className="nexus-midi-status flex shrink-0 items-center justify-between gap-3 px-3 py-1.5 bg-[#0a0f1c] border border-[#1e293b] rounded-xl">
