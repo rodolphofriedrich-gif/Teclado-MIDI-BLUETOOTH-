@@ -10,7 +10,7 @@ import { NativeMidi } from './services/nativeMidi';
 import {
   Music2, GitBranch, Activity, SlidersHorizontal, Settings,
   Usb, Bluetooth, Radio, RefreshCw, ChevronDown, X, LogOut,
-  CheckCircle2, AlertTriangle, Info, Circle, Power, Check
+  CheckCircle2, AlertTriangle, Info, Circle, Power, Heart
 } from 'lucide-react';
 
 export const KEYBOARD_PALETTES = [
@@ -26,10 +26,10 @@ export const KEYBOARD_PALETTES = [
 ];
 
 export const VELOCITY_OPTIONS = [
-  { id: 30, name: 'Suave (30)' },
-  { id: 64, name: 'Médio / Padrão (64)' },
-  { id: 100, name: 'Forte (100)' },
-  { id: 127, name: 'Máximo (127)' },
+  { id: 30, name: 'Suave', desc: '30' },
+  { id: 64, name: 'Médio', desc: '64' },
+  { id: 100, name: 'Forte', desc: '100' },
+  { id: 127, name: 'Máximo', desc: '127' },
 ];
 
 type AppTab = 'keyboard' | 'router' | 'monitor' | 'controls' | 'settings';
@@ -54,10 +54,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('keyboard');
   const [selectedChannel, setSelectedChannel] = useState<number>(1);
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
-  
-  // NOVO: Múltiplos destinos conectados
   const [connectedDestinations, setConnectedDestinations] = useState<MidiDestination[]>([]);
-  
   const [activeNotesCount, setActiveNotesCount] = useState(0);
   const [vuLevel, setVuLevel] = useState(0);
   const [isBleServerActive, setIsBleServerActive] = useState(false);
@@ -256,7 +253,6 @@ export default function App() {
 
   const usbAndVirtualDestinations = destinations.filter((d) => d.type === 'usb' || d.type === 'virtual' || d.type === 'local');
   const bleDestinations = destinations.filter((d) => d.type === 'ble');
-  
   const isUsbConnected = connectedDestinations.some(d => d.type === 'usb' || d.type === 'virtual' || d.type === 'local');
   const isBleConnected = connectedDestinations.some(d => d.type === 'ble');
   const isConnected = connectedDestinations.length > 0 || isBleServerActive;
@@ -267,6 +263,7 @@ export default function App() {
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
       
       <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
+        {/* ... (Header mantido igual) ... */}
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <button type="button" className="nexus-brand flex min-w-0 items-center gap-2" onClick={() => { setActiveTab('keyboard'); closeConnectionMenus(); }}>
             <span className="nexus-brand-name whitespace-nowrap text-xs font-extrabold tracking-wider sm:text-sm">NEXUSMIDI <span>Pro</span></span>
@@ -367,7 +364,6 @@ export default function App() {
       </header>
 
       {showExitConfirm && (
-        // ... MODAL DE SAÍDA ...
         <div className="nexus-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowExitConfirm(false); }}>
           <section className="nexus-modal w-full max-w-sm rounded-2xl p-5 sm:p-6 bg-[#0f172a] border border-slate-700 shadow-2xl">
             <div className="nexus-modal-icon mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-500"><LogOut size={27} /></div>
@@ -382,7 +378,6 @@ export default function App() {
       )}
 
       {statusMessage && (
-        // ... TOASTS ...
         <div className="nexus-toast-container fixed bottom-5 left-0 right-0 z-[150] flex justify-center px-4 pointer-events-none">
           <div role="status" className={`nexus-toast pointer-events-auto flex max-w-md items-center gap-3 rounded-xl px-4 py-3 shadow-xl ${statusMessage.type === 'success' ? 'bg-emerald-900/90 text-emerald-100 border border-emerald-700' : statusMessage.type === 'warn' ? 'bg-amber-900/90 text-amber-100 border border-amber-700' : statusMessage.type === 'error' ? 'bg-red-900/90 text-red-100 border border-red-700' : 'bg-blue-900/90 text-blue-100 border border-blue-700'}`}>
             <span className="shrink-0">
@@ -418,6 +413,9 @@ export default function App() {
                   }}
                   isSustainActive={isSustainActive}
                   onToggleSustain={() => void handleToggleSustain()}
+                  // NOVAS PROPS DE VELOCITY AQUI
+                  selectedVelocity={selectedVelocity}
+                  onSelectVelocity={setSelectedVelocity}
                 />
               </div>
               <div className="py-1"><VuMeter level={vuLevel} /></div>
@@ -449,46 +447,21 @@ export default function App() {
             </div>
           </div>
         ) : activeTab === 'router' ? (
-          <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden">
-            <MidiRouterScreen 
-              destinations={destinations} 
-              connectedDestinations={connectedDestinations}
-              onRefresh={refreshDestinations} 
-            />
-          </div>
+          <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiRouterScreen destinations={destinations} connectedDestinations={connectedDestinations} onRefresh={refreshDestinations} /></div>
         ) : activeTab === 'controls' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4"><MidiControlsScreen channel={selectedChannel} isConnected={isConnected} onStatus={(message, type = 'info') => showMessage(message, type, 3000)} /></div>
         ) : activeTab === 'monitor' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         ) : (
-          // ... CONFIGURAÇÕES ...
+          /* CONFIGURAÇÕES LIMPA */
           <div className="nexus-settings-page min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
             <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6 bg-[#0f172a] border border-[#1e293b]">
               <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5 border-b border-[#1e293b]">
                 <div className="nexus-settings-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300"><Settings size={24} /></div>
-                <div className="min-w-0"><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">PERSONALIZAÇÃO</p><h2 className="mt-1 text-lg font-bold sm:text-xl text-white">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm text-slate-400">Ajuste a resposta e a aparência.</p></div>
+                <div className="min-w-0"><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">PERSONALIZAÇÃO</p><h2 className="mt-1 text-lg font-bold sm:text-xl text-white">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm text-slate-400">Ajuste a aparência do aplicativo.</p></div>
               </div>
-              <section className="nexus-settings-section mb-7">
-                <div className="mb-3"><h3 className="text-sm font-semibold text-white">Intensidade das notas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Velocity — força enviada ao tocar.</p></div>
-                <div className="grid grid-cols-2 gap-3">
-                  {VELOCITY_OPTIONS.map((vel) => {
-                    const selected = selectedVelocity === vel.id;
-                    return (
-                      <button key={vel.id} type="button" onClick={() => setSelectedVelocity(vel.id)} aria-pressed={selected} className={`flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${selected ? 'bg-cyan-950/40 border-cyan-500/60 ring-1 ring-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]' : 'bg-[#0a0f1c] border-[#1e293b] hover:bg-slate-800'}`}>
-                        <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
-                          <span className={`text-sm font-bold ${selected ? 'text-cyan-300' : 'text-slate-300'}`}>{vel.name}</span>
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">MIDI Velocity</span>
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {selected && <CheckCircle2 size={16} className="text-cyan-400" />}
-                          <span className={`flex h-8 min-w-[32px] items-center justify-center rounded-lg border text-xs font-bold font-mono transition-colors ${selected ? 'bg-cyan-600 border-cyan-500 text-white shadow-sm' : 'bg-[#0f172a] border-[#1e293b] text-slate-500'}`}>{vel.id}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-              <section className="nexus-settings-section">
+              
+              <section className="nexus-settings-section mb-8">
                 <div className="mb-3"><h3 className="text-sm font-semibold text-white">Aparência das teclas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Combinação de cores do piano.</p></div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {KEYBOARD_PALETTES.map((pal) => (
@@ -501,6 +474,14 @@ export default function App() {
                       {selectedPaletteId === pal.id && <CheckCircle2 size={18} className="text-cyan-400 shrink-0" />}
                     </button>
                   ))}
+                </div>
+              </section>
+
+              <section className="nexus-settings-section pt-6 border-t border-[#1e293b]">
+                <div className="flex flex-col items-center justify-center text-center gap-2">
+                  <p className="text-sm font-bold text-slate-200">NexusMIDI Pro <span className="text-cyan-500">v1.0.0</span></p>
+                  <p className="text-xs text-slate-500">Desenvolvido com <Heart size={10} className="inline text-rose-500" /> para músicos.</p>
+                  <p className="text-[10px] text-slate-600 mt-2 max-w-xs">Um controlador MIDI avançado com suporte a USB, BLE e roteamento em tempo real.</p>
                 </div>
               </section>
             </section>
