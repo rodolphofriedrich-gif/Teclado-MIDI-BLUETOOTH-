@@ -93,8 +93,6 @@ export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, on
 
   return (
     <div className="flex flex-col w-full h-full bg-[#0a0f1c] rounded-xl border border-[#1e293b] overflow-hidden">
-      
-      {/* CABEÇALHO DOS PADS (Altura reduzida) */}
       <div className="flex items-center justify-between bg-[#0f172a] border-b border-[#1e293b] px-2 py-0.5 shrink-0">
         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest pl-1">Pads de Bateria</span>
         <div className="flex items-center gap-1">
@@ -104,7 +102,6 @@ export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, on
         </div>
       </div>
 
-      {/* GRID DE 8 PADS (Gaps e paddings reduzidos ao extremo para caber tudo) */}
       <div className="grid grid-cols-4 grid-rows-2 gap-1 sm:gap-1.5 w-full h-full p-1 sm:p-1.5">
         {visiblePads.map((pad) => {
           const isPressed = pressedPads.has(pad.id);
@@ -116,13 +113,9 @@ export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, on
           const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => { releasePad(pad.id, e.pointerId); };
 
           return (
-            <div
-              key={pad.id} role="button" onPointerDown={handlePointerDown} onPointerEnter={handlePointerEnter} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onLostPointerCapture={() => releasePad(pad.id, -1)}
-              className={`relative flex flex-col items-center justify-center rounded-lg border-2 transition-all duration-75 select-none cursor-pointer overflow-hidden ${
-                isPressed ? `border-white/80 ${pad.color} shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-[0.96] z-10` : `border-[#1e293b] bg-[#0f172a] ${pad.border} hover:bg-[#151e2e] shadow-md`
-              } ${!isActive ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
-              style={{ touchAction: 'none' }}
-            >
+            <div key={pad.id} role="button" onPointerDown={handlePointerDown} onPointerEnter={handlePointerEnter} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onLostPointerCapture={() => releasePad(pad.id, -1)}
+              className={`relative flex flex-col items-center justify-center rounded-lg border-2 transition-all duration-75 select-none cursor-pointer overflow-hidden ${isPressed ? `border-white/80 ${pad.color} shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-[0.96] z-10` : `border-[#1e293b] bg-[#0f172a] ${pad.border} hover:bg-[#151e2e] shadow-md`} ${!isActive ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+              style={{ touchAction: 'none' }}>
               <div className={`absolute inset-0 opacity-10 ${pad.color} ${isPressed ? 'opacity-50' : ''} transition-opacity`} />
               <div className="flex flex-col items-center justify-center h-full w-full p-0.5 z-10">
                 <span className={`text-[11px] sm:text-[13px] font-extrabold text-center leading-tight drop-shadow-md truncate w-full px-0.5 ${isPressed ? 'text-white' : 'text-slate-200'}`}>{pad.label}</span>
