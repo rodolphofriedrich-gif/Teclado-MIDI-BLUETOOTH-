@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Power, Pause, LayoutGrid, Piano } from 'lucide-react';
+import { ChevronDown, Power, Pause, LayoutGrid, Piano, SlidersHorizontal, Maximize, MoveHorizontal } from 'lucide-react';
 import { MidiPadGrid } from './MidiPadGrid';
 
 interface MidiKeyboardProps {
@@ -61,7 +61,11 @@ export function MidiKeyboard({
   const [isScrollLocked, setIsScrollLocked] = useState(false);
   const [pressedNotes, setPressedNotes] = useState<Set<number>>(() => new Set());
 
+  // Estados dos Menus
   const [isChannelOpen, setIsChannelOpen] = useState(false);
+  const [isQuickSettingsOpen, setIsQuickSettingsOpen] = useState(false);
+  
+  const settingsRef = useRef<HTMLDivElement>(null);
   const channelDropdownRef = useRef<HTMLDivElement>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,8 +82,12 @@ export function MidiKeyboard({
   useEffect(() => { onNoteOffRef.current = onNoteOff; }, [onNoteOff]);
   useEffect(() => { onDisabledPressRef.current = onDisabledPress; }, [onDisabledPress]);
 
+  // Fecha menus ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setIsQuickSettingsOpen(false);
+      }
       if (channelDropdownRef.current && !channelDropdownRef.current.contains(event.target as Node)) {
         setIsChannelOpen(false);
       }
@@ -229,14 +237,15 @@ export function MidiKeyboard({
       
       <div className="nexus-midi-controls relative z-50 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-2" style={{ background: 'rgba(5,10,22,0.76)', borderColor: 'rgba(148,163,184,0.14)' }}>
         
-        <div className="flex flex-wrap items-center gap-3">
+        {/* LADO ESQUERDO: Essenciais */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           
-          {/* BOTÃO DE ALTERNÂNCIA TECLADO/PADS */}
+          {/* Alternador Teclado/Pads */}
           <div className="flex bg-[#0f172a] rounded-lg p-0.5 border border-[#1e293b]">
             <button
               type="button"
               onClick={() => setViewMode('keyboard')}
-              className={`flex h-7 items-center gap-1.5 px-2 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keyboard' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+              className={`flex h-7 items-center gap-1.5 px-2.5 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keyboard' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
             >
               <Piano size={12} /> PIANO
             </button>
@@ -244,51 +253,51 @@ export function MidiKeyboard({
               type="button"
               onClick={() => {
                 setViewMode('pads');
-                if (selectedChannel !== 10) {
-                  onSelectChannel(10); // Muda automaticamente para o Canal 10
-                }
+                if (selectedChannel !== 10) onSelectChannel(10);
               }}
-              className={`flex h-7 items-center gap-1.5 px-2 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'pads' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+              className={`flex h-7 items-center gap-1.5 px-2.5 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'pads' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
             >
               <LayoutGrid size={12} /> PADS
             </button>
           </div>
 
-          {/* Botão Liga/Desliga */}
-          <button type="button" onClick={onToggleActive} className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-bold transition-all ${isActive ? 'border-cyan-700/50 bg-cyan-900/30 text-cyan-400' : 'border-slate-700 bg-slate-800/50 text-slate-500'}`} title="Ligar/Desligar">
-            <Power size={14} className={isActive ? 'text-cyan-400' : 'text-slate-500'} />
-            {isActive ? 'ON' : 'OFF'}
+          {/* Power */}
+          <button type="button" onClick={onToggleActive} className={`flex h-8 items-center justify-center gap-1.5 rounded-lg border px-3 text-[10px] font-bold transition-all ${isActive ? 'border-cyan-700/50 bg-cyan-900/30 text-cyan-400' : 'border-slate-700 bg-slate-800/50 text-slate-500'}`} title="Ligar/Desligar">
+            <Power size={14} />
+            <span className="hidden sm:inline">{isActive ? 'ON' : 'OFF'}</span>
           </button>
 
-          {/* Botão de Sustain */}
-          <button type="button" onClick={onToggleSustain} className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-bold transition-all ${isSustainActive ? 'border-amber-500/50 bg-amber-900/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700'}`} title="Sustain (CC64)">
-            <Pause size={14} className={isSustainActive ? 'text-amber-400' : 'text-slate-400'} />
-            SUSTAIN
+          {/* Sustain */}
+          <button type="button" onClick={onToggleSustain} className={`flex h-8 items-center justify-center gap-1.5 rounded-lg border px-3 text-[10px] font-bold transition-all ${isSustainActive ? 'border-amber-500/50 bg-amber-900/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700'}`} title="Sustain (CC64)">
+            <Pause size={14} />
+            <span className="hidden sm:inline">SUSTAIN</span>
           </button>
 
-          <div className="h-6 w-px bg-slate-700/50 mx-1 hidden sm:block"></div>
-
-          {/* Oitavas (Só mostra se estiver no modo Teclado) */}
+          {/* Oitavas */}
           {viewMode === 'keyboard' && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Oitavas</span>
+            <div className="flex items-center gap-1.5">
               <div className="flex items-center overflow-hidden rounded-lg border" style={{ background: '#0f172a', borderColor: 'rgba(148,163,184,0.2)' }}>
-                <button type="button" disabled={startOctave <= 1} onClick={() => setStartOctave((v) => Math.max(1, v - 1))} className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35">−</button>
-                <span className="min-w-[48px] text-center font-mono text-xs font-bold text-cyan-300">C{startOctave}</span>
-                <button type="button" disabled={startOctave >= 6} onClick={() => setStartOctave((v) => Math.min(6, v + 1))} className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35">+</button>
+                <button type="button" disabled={startOctave <= 1} onClick={() => setStartOctave((v) => Math.max(1, v - 1))} className="flex h-8 w-7 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:opacity-35">−</button>
+                <span className="min-w-[32px] text-center font-mono text-xs font-bold text-cyan-300" title="Oitava">C{startOctave}</span>
+                <button type="button" disabled={startOctave >= 6} onClick={() => setStartOctave((v) => Math.min(6, v + 1))} className="flex h-8 w-7 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:opacity-35">+</button>
               </div>
             </div>
           )}
 
-          {/* Canal */}
+        </div>
+
+        {/* LADO DIREITO: Canal Rápido + Menu de Configurações */}
+        <div className="flex items-center gap-2" ref={settingsRef}>
+          
+          {/* Seletor de Canal Rápido (Ex: CH10) */}
           <div className="relative" ref={channelDropdownRef}>
-            <button type="button" onClick={() => setIsChannelOpen(!isChannelOpen)} className="flex h-8 items-center gap-2 rounded-lg border px-2.5 transition hover:bg-slate-800" style={{ background: '#0f172a', borderColor: 'rgba(148,163,184,0.2)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Canal</span>
-              <span className="min-w-[20px] text-center font-mono text-xs font-bold text-cyan-300">{String(selectedChannel).padStart(2, '0')}</span>
-              <ChevronDown size={14} className="text-slate-400" />
+            <button type="button" onClick={() => setIsChannelOpen(!isChannelOpen)} className="flex h-8 items-center gap-1.5 rounded-lg border border-[#1e293b] bg-[#0f172a] px-2.5 transition hover:bg-slate-800 text-slate-400">
+              <span className="text-[10px] font-bold uppercase">CH</span>
+              <span className="min-w-[16px] text-center font-mono text-xs font-bold text-cyan-300">{String(selectedChannel).padStart(2, '0')}</span>
+              <ChevronDown size={12} />
             </button>
             {isChannelOpen && (
-              <div className="absolute top-full left-0 z-[150] mt-2 max-h-48 w-24 overflow-y-auto rounded-xl border border-slate-700 bg-[#0f172a] shadow-2xl custom-scrollbar">
+              <div className="absolute top-full right-0 z-[150] mt-2 max-h-48 w-24 overflow-y-auto rounded-xl border border-slate-700 bg-[#0f172a] shadow-2xl custom-scrollbar">
                 <div className="nexus-dropdown-list flex flex-col gap-0.5 p-1">
                   {Array.from({ length: 16 }, (_, i) => {
                     const ch = i + 1;
@@ -303,22 +312,52 @@ export function MidiKeyboard({
               </div>
             )}
           </div>
-        </div>
 
-        {/* Zoom (Só mostra se estiver no modo Teclado) */}
-        {viewMode === 'keyboard' && (
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Zoom</span>
-              <input type="range" min={minKeyWidth} max={MAX_KEY_WIDTH} value={keyWidth} onChange={(e) => setKeyWidth(Number(e.target.value))} className="h-1.5 w-20 cursor-pointer accent-cyan-400" />
-              <span className="min-w-[30px] text-right font-mono text-[10px] text-slate-400">{keyWidth}px</span>
-            </label>
-            <button type="button" onClick={() => setIsScrollLocked((v) => !v)} className="flex h-8 items-center gap-2 rounded-lg border px-3 text-[10px] font-bold transition" style={{ background: isScrollLocked ? 'rgba(245,158,11,0.12)' : 'rgba(51,65,85,0.3)', borderColor: isScrollLocked ? 'rgba(245,158,11,0.45)' : 'rgba(148,163,184,0.2)', color: isScrollLocked ? '#fbbf24' : '#cbd5e1' }}>
-              <span aria-hidden="true">{isScrollLocked ? '🔒' : '↔'}</span>
-              {isScrollLocked ? 'Bloqueado' : 'Rolagem livre'}
-            </button>
-          </div>
-        )}
+          {/* Botão do Menu de Configurações (Engrenagem) */}
+          <button 
+            type="button" 
+            onClick={() => setIsQuickSettingsOpen(!isQuickSettingsOpen)}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${isQuickSettingsOpen ? 'bg-slate-700 border-slate-600 text-white' : 'bg-[#0f172a] border-[#1e293b] text-slate-400 hover:text-slate-200'}`}
+            title="Ajustes do Teclado"
+          >
+            <SlidersHorizontal size={14} />
+          </button>
+
+          {/* Painel Flutuante de Configurações Rápidas */}
+          {isQuickSettingsOpen && viewMode === 'keyboard' && (
+            <div className="absolute top-full right-0 z-[150] mt-2 w-64 rounded-xl border border-slate-700 bg-[#0f172a] p-3 shadow-2xl flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
+              
+              <div>
+                <label className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-400 mb-2">
+                  <span>Zoom do Teclado</span>
+                  <span className="font-mono text-cyan-300">{keyWidth}px</span>
+                </label>
+                <input 
+                  type="range" min={minKeyWidth} max={MAX_KEY_WIDTH} value={keyWidth} 
+                  onChange={(e) => setKeyWidth(Number(e.target.value))} 
+                  className="h-1.5 w-full cursor-pointer accent-cyan-400" 
+                />
+              </div>
+
+              <div className="h-px w-full bg-slate-800" />
+
+              <button 
+                type="button" 
+                onClick={() => setIsScrollLocked(!isScrollLocked)}
+                className={`flex items-center justify-between w-full p-2 rounded-lg border transition-colors ${isScrollLocked ? 'bg-amber-900/20 border-amber-700/50 text-amber-400' : 'bg-[#0a0f1c] border-slate-800 text-slate-400'}`}
+              >
+                <span className="text-xs font-bold flex items-center gap-2">
+                  {isScrollLocked ? <Maximize size={14} /> : <MoveHorizontal size={14} />}
+                  Rolagem Livre
+                </span>
+                <div className={`w-8 h-4 rounded-full transition-colors relative ${isScrollLocked ? 'bg-amber-500' : 'bg-slate-700'}`}>
+                  <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isScrollLocked ? 'left-4' : 'left-0.5'}`} />
+                </div>
+              </button>
+
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ÁREA PRINCIPAL: Alterna entre Teclado e Pads */}
