@@ -61,12 +61,15 @@ export function MidiKeyboard({
   const [isScrollLocked, setIsScrollLocked] = useState(false);
   const [pressedNotes, setPressedNotes] = useState<Set<number>>(() => new Set());
 
+  // NOVO: Guarda o último canal usado no modo Piano
+  const [lastPianoChannel, setLastPianoChannel] = useState(selectedChannel);
+
   const [isChannelOpen, setIsChannelOpen] = useState(false);
   const [isQuickSettingsOpen, setIsQuickSettingsOpen] = useState(false);
   
   const settingsRef = useRef<HTMLDivElement>(null);
   const channelDropdownRef = useRef<HTMLDivElement>(null);
-  const scrollViewportRef = useRef<HTMLDivElement>(null); // Ref para as setas
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const activeNotesRef = useRef<Set<number>>(new Set());
@@ -243,12 +246,37 @@ export function MidiKeyboard({
       
       <div className="nexus-midi-controls relative z-50 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-1.5 sm:px-3" style={{ background: 'rgba(5,10,22,0.76)', borderColor: 'rgba(148,163,184,0.14)' }}>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          
+          {/* Alternador PIANO / PADS com Memória de Canal */}
           <div className="flex bg-[#0f172a] rounded-lg p-0.5 border border-[#1e293b]">
-            <button type="button" onClick={() => setViewMode('keyboard')} className={`flex h-7 items-center gap-1.5 px-2.5 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keyboard' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}><Piano size={12} /> PIANO</button>
-            <button type="button" onClick={() => { setViewMode('pads'); if (selectedChannel !== 10) onSelectChannel(10); }} className={`flex h-7 items-center gap-1.5 px-2.5 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'pads' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}><LayoutGrid size={12} /> PADS</button>
+            <button 
+              type="button" 
+              onClick={() => {
+                setViewMode('keyboard');
+                if (selectedChannel === 10 && lastPianoChannel !== 10) {
+                  onSelectChannel(lastPianoChannel); // Restaura o canal anterior ao voltar para Piano
+                }
+              }} 
+              className={`flex h-7 items-center gap-1.5 px-2.5 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keyboard' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <Piano size={12} /> PIANO
+            </button>
+            <button 
+              type="button" 
+              onClick={() => {
+                if (viewMode === 'keyboard') setLastPianoChannel(selectedChannel); // Salva o canal atual do piano
+                setViewMode('pads'); 
+                if (selectedChannel !== 10) onSelectChannel(10); // Vai para o canal 10
+              }} 
+              className={`flex h-7 items-center gap-1.5 px-2.5 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'pads' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <LayoutGrid size={12} /> PADS
+            </button>
           </div>
+
           <button type="button" onClick={onToggleActive} className={`flex h-8 items-center justify-center gap-1.5 rounded-lg border px-3 text-[10px] font-bold transition-all ${isActive ? 'border-cyan-700/50 bg-cyan-900/30 text-cyan-400' : 'border-slate-700 bg-slate-800/50 text-slate-500'}`}><Power size={14} /><span className="hidden sm:inline">{isActive ? 'ON' : 'OFF'}</span></button>
           <button type="button" onClick={onToggleSustain} className={`flex h-8 items-center justify-center gap-1.5 rounded-lg border px-3 text-[10px] font-bold transition-all ${isSustainActive ? 'border-amber-500/50 bg-amber-900/30 text-amber-400' : 'border-slate-700 bg-slate-800/50 text-slate-400'}`}><Pause size={14} /><span className="hidden sm:inline">SUSTAIN</span></button>
+          
           {viewMode === 'keyboard' && (
             <div className="flex items-center gap-1.5">
               <div className="flex items-center overflow-hidden rounded-lg border" style={{ background: '#0f172a', borderColor: 'rgba(148,163,184,0.2)' }}>
@@ -259,6 +287,8 @@ export function MidiKeyboard({
             </div>
           )}
         </div>
+
+        {/* Seletor de Canal e Menu de Configurações */}
         <div className="flex items-center gap-2" ref={settingsRef}>
           <div className="relative" ref={channelDropdownRef}>
             <button type="button" onClick={() => setIsChannelOpen(!isChannelOpen)} className="flex h-8 items-center gap-1.5 rounded-lg border border-[#1e293b] bg-[#0f172a] px-2.5 transition hover:bg-slate-800 text-slate-400">
@@ -302,12 +332,18 @@ export function MidiKeyboard({
       <div className="flex-1 min-h-0 relative flex flex-col">
         {viewMode === 'keyboard' ? (
           <div className="relative flex-1 flex overflow-hidden rounded-xl border border-[#1e293b]">
-            <button onClick={() => scrollKeyboard('left')} className="absolute left-2 top-1/2 -translate-y-1/2 z-40 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm shadow-xl transition-all active:scale-95">
-              <ChevronLeft size={24} />
-            </button>
-            <button onClick={() => scrollKeyboard('right')} className="absolute right-2 top-1/2 -translate-y-1/2 z-40 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm shadow-xl transition-all active:scale-95">
-              <ChevronRight size={24} />
-            </button>
+            
+            {/* SETAS CONDICIONAIS: Só aparecem se NÃO estiver bloqueado */}
+            {!isScrollLocked && (
+              <>
+                <button onClick={() => scrollKeyboard('left')} className="absolute left-1 top-1/2 -translate-y-1/2 z-40 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm shadow-xl transition-all active:scale-95 border border-white/10">
+                  <ChevronLeft size={24} />
+                </button>
+                <button onClick={() => scrollKeyboard('right')} className="absolute right-1 top-1/2 -translate-y-1/2 z-40 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm shadow-xl transition-all active:scale-95 border border-white/10">
+                  <ChevronRight size={24} />
+                </button>
+              </>
+            )}
 
             <div ref={scrollViewportRef} className={`nexus-midi-viewport relative flex-1 ${isScrollLocked ? 'overflow-hidden' : 'overflow-x-auto overflow-y-hidden'}`} style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(30,41,59,0.72), rgba(2,6,23,0.98) 78%)', touchAction: isScrollLocked ? 'none' : 'pan-x', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
               <div className="relative flex h-full items-stretch p-0.5" style={{ width: `${keyboardWidth}px`, minWidth: `${keyboardWidth}px`, marginInline: isScrollLocked ? 'auto' : undefined }}>
