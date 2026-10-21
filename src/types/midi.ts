@@ -47,30 +47,13 @@ export interface MidiMessage {
   sourceId?: string;
 }
 
-export interface MidiRouteConfig {
+// NOVO: Rota de Roteamento
+export interface MidiRoute {
+  id: string;
   enabled: boolean;
-
-  /** Origem das mensagens encaminhadas pelo roteador. */
-  source: 'virtual' | 'device';
-
-  /** Identificador da entrada física selecionada. */
-  sourceId?: string | null;
-
-  /** Identificador da saída MIDI selecionada. */
-  destinationId: string | null;
-
-  /** Canal de entrada (0 = Omni / Todos). */
-  inputChannel: number;
-  
-  /** Canal de saída (0 = Manter o mesmo da entrada). */
-  outputChannel: number;
-
+  sourceId: string | null; // 'virtual-main' para teclado, null para todos, ou ID do dispositivo
+  destinationId: string;   // ID do dispositivo de saída
+  inputChannel: number;    // 0 = Omni
+  outputChannel: number;   // 0 = Manter
   transpose: number;
-  velocityMin: number;
-  velocityMax: number;
-  
-  allowNotes: boolean;
-  allowControlChange: boolean;
-  allowProgramChange: boolean;
-  allowPitchBend: boolean;
 }
