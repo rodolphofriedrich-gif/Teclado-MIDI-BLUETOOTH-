@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface MidiPadGridProps {
   isActive: boolean;
@@ -8,23 +9,23 @@ interface MidiPadGridProps {
   onActivity?: (velocity: number) => void;
 }
 
-// Mapeamento dos 16 Pads com Notas GM (General MIDI)
-const PADS = [
+// Mapeamento dos 16 Pads
+const ALL_PADS = [
+  // BANCO 1
   { id: 36, label: 'Bumbo', color: 'bg-blue-500', border: 'border-blue-500/30' },
   { id: 38, label: 'Caixa', color: 'bg-red-500', border: 'border-red-500/30' },
   { id: 42, label: 'Chimbal Fech.', color: 'bg-yellow-500', border: 'border-yellow-500/30' },
   { id: 46, label: 'Chimbal Aber.', color: 'bg-yellow-400', border: 'border-yellow-400/30' },
-  
   { id: 41, label: 'Tom Grave', color: 'bg-green-500', border: 'border-green-500/30' },
   { id: 45, label: 'Tom Médio', color: 'bg-green-400', border: 'border-green-400/30' },
   { id: 48, label: 'Tom Agudo', color: 'bg-green-300', border: 'border-green-300/30' },
   { id: 50, label: 'Tom Alto', color: 'bg-teal-500', border: 'border-teal-500/30' },
   
+  // BANCO 2
   { id: 49, label: 'Prato Crash', color: 'bg-cyan-500', border: 'border-cyan-500/30' },
   { id: 51, label: 'Prato Ride', color: 'bg-cyan-400', border: 'border-cyan-400/30' },
   { id: 39, label: 'Palmas', color: 'bg-orange-500', border: 'border-orange-500/30' },
   { id: 56, label: 'Cabaça', color: 'bg-amber-500', border: 'border-amber-500/30' },
-  
   { id: 54, label: 'Pandeiro', color: 'bg-pink-500', border: 'border-pink-500/30' },
   { id: 60, label: 'Bongo Agudo', color: 'bg-purple-500', border: 'border-purple-500/30' },
   { id: 61, label: 'Bongo Grave', color: 'bg-purple-400', border: 'border-purple-400/30' },
@@ -32,6 +33,7 @@ const PADS = [
 ];
 
 export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, onActivity }: MidiPadGridProps) {
+  const [padBank, setPadBank] = useState<0 | 1>(0); // 0 = Banco 1, 1 = Banco 2
   const [pressedPads, setPressedPads] = useState<Set<number>>(() => new Set());
   const activePointersRef = useRef<Map<number, number>>(new Map());
   const activeNotesRef = useRef<Set<number>>(new Set());
@@ -79,17 +81,18 @@ export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, on
     }
   };
 
-  useEffect(() => {
-    const releaseAllNotes = () => {
-      const notes = Array.from(activeNotesRef.current);
-      activeNotesRef.current.clear();
-      activePointersRef.current.clear();
-      setPressedPads(new Set());
-      for (const note of notes) {
-        void onNoteOffRef.current(note);
-      }
-    };
+  // Solta todas as notas (usado ao trocar de banco)
+  const releaseAllNotes = () => {
+    const notes = Array.from(activeNotesRef.current);
+    activeNotesRef.current.clear();
+    activePointersRef.current.clear();
+    setPressedPads(new Set());
+    for (const note of notes) {
+      void onNoteOffRef.current(note);
+    }
+  };
 
+  useEffect(() => {
     const handleGlobalPointerUp = (e: PointerEvent) => {
       const note = activePointersRef.current.get(e.pointerId);
       if (note !== undefined) releasePad(note, e.pointerId);
@@ -107,58 +110,107 @@ export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, on
     };
   }, []);
 
+  const switchBank = (newBank: 0 | 1) => {
+    if (newBank !== padBank) {
+      releaseAllNotes(); // Evita notas presas ao trocar de tela
+      setPadBank(newBank);
+    }
+  };
+
+  // Pega apenas os 8 pads do banco atual
+  const visiblePads = ALL_PADS.slice(padBank * 8, (padBank + 1) * 8);
+
   return (
-    <div className="grid grid-cols-4 gap-2 sm:gap-3 w-full h-full p-2 bg-[#0a0f1c] rounded-xl border border-[#1e293b]">
-      {PADS.map((pad) => {
-        const isPressed = pressedPads.has(pad.id);
-
-        const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-          if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-            e.currentTarget.releasePointerCapture(e.pointerId);
-          }
-          pressPad(pad.id, e.pointerId);
-        };
-
-        const handlePointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
-          if (activePointersRef.current.has(e.pointerId)) {
-            pressPad(pad.id, e.pointerId);
-          }
-        };
-
-        const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-          releasePad(pad.id, e.pointerId);
-        };
-
-        return (
-          <div
-            key={pad.id}
-            role="button"
-            onPointerDown={handlePointerDown}
-            onPointerEnter={handlePointerEnter}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onLostPointerCapture={() => releasePad(pad.id, -1)}
-            className={`relative flex flex-col items-center justify-center rounded-xl border-2 transition-all duration-75 select-none cursor-pointer overflow-hidden ${
-              isPressed
-                ? `border-white/80 ${pad.color} shadow-[0_0_20px_rgba(255,255,255,0.3)] scale-[0.97] z-10`
-                : `border-[#1e293b] bg-[#0f172a] ${pad.border} hover:bg-[#151e2e] shadow-lg`
-            } ${!isActive ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
-            style={{ touchAction: 'none' }}
+    <div className="flex flex-col w-full h-full bg-[#0a0f1c] rounded-xl border border-[#1e293b] overflow-hidden">
+      
+      {/* BARRA SUPERIOR DO PAD GRID (Trocador de Banco) */}
+      <div className="flex items-center justify-between bg-[#0f172a] border-b border-[#1e293b] px-3 py-1.5 shrink-0">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          Pads de Bateria
+        </span>
+        
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => switchBank(0)}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold transition-all ${
+              padBank === 0 
+                ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50' 
+                : 'text-slate-500 hover:bg-slate-800 border border-transparent'
+            }`}
           >
-            {/* Luz de fundo (Brilho) */}
-            <div className={`absolute inset-0 opacity-10 ${pad.color} ${isPressed ? 'opacity-40' : ''} transition-opacity`} />
-            
-            <div className="flex flex-col items-center justify-center h-full w-full p-1 z-10">
-              <span className={`text-[11px] sm:text-xs font-bold text-center leading-tight ${isPressed ? 'text-white' : 'text-slate-200'}`}>
-                {pad.label}
-              </span>
-              <span className={`text-[8px] font-mono mt-1 ${isPressed ? 'text-white/80' : 'text-slate-500'}`}>
-                N{pad.id}
-              </span>
+            <ChevronLeft size={12} /> Banco 1
+          </button>
+          
+          <span className="text-slate-700 text-xs">|</span>
+          
+          <button
+            type="button"
+            onClick={() => switchBank(1)}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold transition-all ${
+              padBank === 1 
+                ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50' 
+                : 'text-slate-500 hover:bg-slate-800 border border-transparent'
+            }`}
+          >
+            Banco 2 <ChevronRight size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* GRID DE 8 PADS (4x2) */}
+      <div className="grid grid-cols-4 grid-rows-2 gap-2 sm:gap-3 w-full h-full p-2 sm:p-3">
+        {visiblePads.map((pad) => {
+          const isPressed = pressedPads.has(pad.id);
+
+          const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+            if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+            }
+            pressPad(pad.id, e.pointerId);
+          };
+
+          const handlePointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
+            if (activePointersRef.current.has(e.pointerId)) {
+              pressPad(pad.id, e.pointerId);
+            }
+          };
+
+          const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+            releasePad(pad.id, e.pointerId);
+          };
+
+          return (
+            <div
+              key={pad.id}
+              role="button"
+              onPointerDown={handlePointerDown}
+              onPointerEnter={handlePointerEnter}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onLostPointerCapture={() => releasePad(pad.id, -1)}
+              className={`relative flex flex-col items-center justify-center rounded-xl border-2 transition-all duration-75 select-none cursor-pointer overflow-hidden ${
+                isPressed
+                  ? `border-white/80 ${pad.color} shadow-[0_0_25px_rgba(255,255,255,0.4)] scale-[0.96] z-10`
+                  : `border-[#1e293b] bg-[#0f172a] ${pad.border} hover:bg-[#151e2e] shadow-lg`
+              } ${!isActive ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+              style={{ touchAction: 'none' }}
+            >
+              {/* Luz de fundo (Brilho) */}
+              <div className={`absolute inset-0 opacity-10 ${pad.color} ${isPressed ? 'opacity-50' : ''} transition-opacity`} />
+              
+              <div className="flex flex-col items-center justify-center h-full w-full p-1 z-10">
+                <span className={`text-sm sm:text-lg font-extrabold text-center leading-tight drop-shadow-md ${isPressed ? 'text-white' : 'text-slate-200'}`}>
+                  {pad.label}
+                </span>
+                <span className={`text-[10px] sm:text-xs font-mono mt-1 font-bold ${isPressed ? 'text-white/80' : 'text-slate-500'}`}>
+                  N{pad.id}
+                </span>
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
