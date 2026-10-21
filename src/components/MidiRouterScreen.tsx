@@ -1,37 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MidiDestination, MidiRouteConfig } from '../types/midi';
-import { midiService } from '../services/midiService';
-import { ChevronDown, CheckCircle2, RefreshCw, ArrowRightLeft, Download, Upload } from 'lucide-react';
+import { MidiDestination, MidiRoute } from '../types/midi';
+import { midiManager } from '../services/midiService';
+import { ChevronDown, CheckCircle2, RefreshCw, ArrowRightLeft, Download, Upload, Trash2, Plus } from 'lucide-react';
 
 interface MidiRouterScreenProps {
   destinations: MidiDestination[];
+  connectedDestinations: MidiDestination[];
   onRefresh: () => Promise<void>;
 }
 
-export function MidiRouterScreen({ destinations, onRefresh }: MidiRouterScreenProps) {
-  const [config, setConfig] = useState<MidiRouteConfig>(midiService.getRouteConfig());
-  const [connectedOut, setConnectedOut] = useState<MidiDestination | null>(midiService.getConnectedDestination());
-  
-  const [openDropdown, setOpenDropdown] = useState<'input' | 'output' | 'channel' | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  
-  // NOVO: Estado de carregamento para o botão Atualizar
+export function MidiRouterScreen({ destinations, connectedDestinations, onRefresh }: MidiRouterScreenProps) {
+  const [routes, setRoutes] = useState<MidiRoute[]>(midiManager.getRoutes());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null); // ID da rota que está com o menu aberto
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Atualiza a lista de rotas quando o componente monta
   useEffect(() => {
-    const currentConfig = midiService.getRouteConfig();
-    setConfig(currentConfig);
-    
-    const currentOut = midiService.getConnectedDestination();
-    setConnectedOut(currentOut);
-
-    // NOVO: Se o aparelho de saída foi desconectado fisicamente, limpa o estado visual
-    if (currentConfig.outputId && !destinations.find(d => d.id === currentConfig.outputId)) {
-      const updated = { ...currentConfig, outputId: null };
-      setConfig(updated);
-      midiService.setRouteConfig(updated);
-    }
-  }, [destinations]);
+    setRoutes(midiManager.getRoutes());
+  }, [connectedDestinations]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -43,257 +30,164 @@ export function MidiRouterScreen({ destinations, onRefresh }: MidiRouterScreenPr
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const updateConfig = (newFields: Partial<MidiRouteConfig>) => {
-    const updated = { ...config, ...newFields };
-    setConfig(updated);
-    midiService.setRouteConfig(updated);
-  };
-
-  const handleInputSelect = async (inputId: string) => {
-    updateConfig({ inputId });
-    await midiService.connectInput(inputId);
-    setOpenDropdown(null);
-  };
-
-  const handleOutputSelect = async (destId: string | null) => {
-    updateConfig({ outputId: destId });
-    if (!destId) {
-      await midiService.disconnectOutput();
-      setConnectedOut(null);
-    } else {
-      const found = destinations.find(d => d.id === destId);
-      if (found) {
-        await midiService.connectOutput(found);
-        setConnectedOut(found);
-      }
-    }
-    setOpenDropdown(null);
-  };
-
-  const handleNumberChange = (field: 'transpose' | 'fixedVelocity', value: string) => {
-    const numValue = value === '' ? 0 : Number(value);
-    updateConfig({ [field]: numValue });
-  };
-
-  // NOVO: Função para envolver o onRefresh com estado de loading
   const handleRefreshClick = async () => {
     setIsRefreshing(true);
-    try {
-      await onRefresh();
-    } finally {
-      setIsRefreshing(false);
-    }
+    try { await onRefresh(); } finally { setIsRefreshing(false); }
   };
 
-  const virtualInput = { id: 'virtual-main', name: 'Teclado Virtual (NexusMIDI Pro)' };
+  const addNewRoute = () => {
+    const newRoute: MidiRoute = {
+      id: Math.random().toString(36).substring(2, 9),
+      enabled: true,
+      sourceId: 'virtual-main',
+      destinationId: connectedDestinations[0]?.id || '',
+      inputChannel: 0,
+      outputChannel: 0,
+      transpose: 0,
+    };
+    midiManager.addRoute(newRoute);
+    setRoutes(midiManager.getRoutes());
+  };
+
+  const updateRoute = (id: string, field: keyof MidiRoute, value: any) => {
+    midiManager.updateRoute(id, { [field]: value });
+    setRoutes(midiManager.getRoutes());
+  };
+
+  const removeRoute = (id: string) => {
+    midiManager.removeRoute(id);
+    setRoutes(midiManager.getRoutes());
+  };
+
+  // Opções de entrada disponíveis (Virtual + Dispositivos Físicos)
   const availableInputs = [
-    { id: 'none', name: 'Nenhuma (Desconectado)' },
-    virtualInput,
+    { id: 'virtual-main', name: 'Teclado Virtual' },
     ...destinations.filter(d => d.type !== 'virtual').map(d => ({ id: d.id, name: `${d.displayName} (${d.type.toUpperCase()})` }))
   ];
-  
-  const currentInputName = availableInputs.find(i => i.id === config.inputId)?.name || availableInputs[0].name;
-  const currentOutputName = config.outputId ? destinations.find(d => d.id === config.outputId)?.displayName : 'Nenhuma (Desconectado)';
 
   return (
     <div className="flex-1 w-full bg-[#0a0f1c] p-3 sm:p-5 flex flex-col gap-4 text-slate-100 overflow-y-auto custom-scrollbar pb-32">
       
-      {/* CABEÇALHO */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
         <div>
           <h2 className="text-base font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
-            <ArrowRightLeft size={18} /> Roteador MIDI Avançado
+            <ArrowRightLeft size={18} /> Roteador MIDI Matriz
           </h2>
-          <p className="text-xs text-slate-400 mt-1">Configure entradas, saídas, canais, transposição e filtros independentes.</p>
+          <p className="text-xs text-slate-400 mt-1">Crie rotas independentes entre entradas e saídas simultâneas.</p>
         </div>
-        <button
-          onClick={handleRefreshClick}
-          disabled={isRefreshing}
-          className="px-3 py-1.5 bg-[#0f172a] hover:bg-slate-800 text-cyan-300 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-2 shrink-0 disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> 
-          {isRefreshing ? 'Atualizando...' : 'Atualizar Dispositivos'}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4" ref={dropdownRef}>
-        
-        {/* ENTRADA (MIDI IN) */}
-        <div className="bg-[#0f172a] border border-[#1e293b] rounded-xl p-4 flex flex-col gap-4 relative z-20">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-400 flex items-center gap-2">
-            <Download size={14} /> Porta de Entrada (MIDI In)
-          </h3>
-          
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOpenDropdown(openDropdown === 'input' ? null : 'input')}
-              className="w-full bg-[#0a0f1c] border border-slate-700 rounded-lg p-2.5 text-xs text-emerald-200 font-semibold flex items-center justify-between hover:border-slate-500 transition"
-            >
-              <span className="truncate">{currentInputName}</span>
-              <ChevronDown size={16} className={`transition-transform text-slate-400 ${openDropdown === 'input' ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {openDropdown === 'input' && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-60 overflow-y-auto custom-scrollbar">
-                {availableInputs.map((input) => (
-                  <button
-                    key={input.id}
-                    onClick={() => handleInputSelect(input.id)}
-                    className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between hover:bg-slate-800 transition border-b border-slate-800/50 last:border-0 ${config.inputId === input.id ? 'text-cyan-400 bg-slate-800/50' : 'text-slate-300'}`}
-                  >
-                    <span className="truncate pr-2">{input.name}</span>
-                    {config.inputId === input.id && <CheckCircle2 size={14} className="text-cyan-400 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          {/* NOVO: Badge de status visual */}
-          <div className="flex">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${config.inputId !== 'none' ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50' : 'bg-slate-800/50 text-slate-500 border-slate-700'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${config.inputId !== 'none' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`}></span>
-              {config.inputId !== 'none' ? 'Ativo e Ouvindo' : 'Inativo'}
-            </span>
-          </div>
-        </div>
-
-        {/* SAÍDA (MIDI OUT) */}
-        <div className="bg-[#0f172a] border border-[#1e293b] rounded-xl p-4 flex flex-col gap-4 relative z-10">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-cyan-400 flex items-center gap-2">
-            <Upload size={14} /> Porta de Saída (MIDI Out)
-          </h3>
-          
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOpenDropdown(openDropdown === 'output' ? null : 'output')}
-              className="w-full bg-[#0a0f1c] border border-slate-700 rounded-lg p-2.5 text-xs text-cyan-200 font-semibold flex items-center justify-between hover:border-slate-500 transition"
-            >
-              <span className="truncate">{currentOutputName}</span>
-              <ChevronDown size={16} className={`transition-transform text-slate-400 ${openDropdown === 'output' ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {openDropdown === 'output' && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-60 overflow-y-auto custom-scrollbar">
-                <button
-                  onClick={() => handleOutputSelect(null)}
-                  className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between hover:bg-slate-800 transition border-b border-slate-800/50 ${!config.outputId ? 'text-cyan-400 bg-slate-800/50' : 'text-slate-300'}`}
-                >
-                  <span className="truncate pr-2">Nenhuma (Desconectado)</span>
-                  {!config.outputId && <CheckCircle2 size={14} className="text-cyan-400 shrink-0" />}
-                </button>
-                {destinations.map((dest) => (
-                  <button
-                    key={dest.id}
-                    onClick={() => handleOutputSelect(dest.id)}
-                    className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between hover:bg-slate-800 transition border-b border-slate-800/50 last:border-0 ${config.outputId === dest.id ? 'text-cyan-400 bg-slate-800/50' : 'text-slate-300'}`}
-                  >
-                    <span className="truncate pr-2">{dest.displayName} <span className="opacity-50 text-[9px]">({dest.type.toUpperCase()})</span></span>
-                    {config.outputId === dest.id && <CheckCircle2 size={14} className="text-cyan-400 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          {/* NOVO: Badge de status visual */}
-          <div className="flex">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${connectedOut ? 'bg-cyan-900/30 text-cyan-400 border-cyan-800/50' : 'bg-slate-800/50 text-slate-500 border-slate-700'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${connectedOut ? 'bg-cyan-400' : 'bg-slate-500'}`}></span>
-              {connectedOut ? `Conectado a ${connectedOut.displayName}` : 'Desconectado'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* FILTROS E PARÂMETROS */}
-      <div className="bg-[#0f172a] border border-[#1e293b] rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-2">
-        
-        {/* Filtro de Canal (Abre para CIMA) */}
-        <div className="flex flex-col gap-2 relative">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Filtro de Canal</label>
+        <div className="flex items-center gap-2">
           <button
-            type="button"
-            onClick={() => setOpenDropdown(openDropdown === 'channel' ? null : 'channel')}
-            className="w-full bg-[#0a0f1c] border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 flex items-center justify-between hover:border-slate-500 transition"
+            onClick={handleRefreshClick}
+            disabled={isRefreshing}
+            className="px-3 py-1.5 bg-[#0f172a] hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-2 shrink-0 disabled:opacity-50"
           >
-            <span>{config.channelFilter === 0 ? 'Omni (Todos)' : `Canal ${config.channelFilter}`}</span>
-            <ChevronDown size={14} className={`text-slate-400 transition-transform ${openDropdown === 'channel' ? 'rotate-180' : ''}`} />
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> 
           </button>
-          
-          {openDropdown === 'channel' && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar">
-              <button
-                onClick={() => { updateConfig({ channelFilter: 0 }); setOpenDropdown(null); }}
-                className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-800 border-b border-slate-800/50 ${config.channelFilter === 0 ? 'text-cyan-400 bg-slate-800/50' : 'text-slate-300'}`}
-              >
-                Omni (Todos)
-              </button>
-              {Array.from({ length: 16 }, (_, i) => {
-                const ch = i + 1;
-                return (
-                  <button
-                    key={ch}
-                    onClick={() => { updateConfig({ channelFilter: ch }); setOpenDropdown(null); }}
-                    className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-800 border-b border-slate-800/50 last:border-0 ${config.channelFilter === ch ? 'text-cyan-400 bg-slate-800/50' : 'text-slate-300'}`}
-                  >
-                    Canal {ch}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Transposição */}
-        <div className="flex flex-col gap-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Transposição (Semitons)</label>
-          <input
-            type="number"
-            min="-24"
-            max="24"
-            value={config.transpose === 0 ? '' : config.transpose}
-            onChange={(e) => handleNumberChange('transpose', e.target.value)}
-            className="bg-[#0a0f1c] border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 transition"
-            placeholder="0"
-          />
-        </div>
-
-        {/* Velocity Fixa */}
-        <div className="flex flex-col gap-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Velocity Fixa</label>
-          <input
-            type="number"
-            min="0"
-            max="127"
-            value={config.fixedVelocity === 0 ? '' : config.fixedVelocity}
-            onChange={(e) => handleNumberChange('fixedVelocity', e.target.value)}
-            className="bg-[#0a0f1c] border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 transition"
-            placeholder="0 = Dinâmica"
-          />
-        </div>
-
-        {/* Filtros (Checkboxes customizados) */}
-        <div className="flex flex-col gap-3 justify-center pt-2 sm:pt-0">
-          <label className="flex items-center gap-3 text-xs font-medium text-slate-300 cursor-pointer group">
-            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${config.filterCC ? 'bg-cyan-600 border-cyan-500' : 'bg-[#0a0f1c] border-slate-600 group-hover:border-slate-400'}`}>
-              {config.filterCC && <CheckCircle2 size={14} className="text-white" />}
-            </div>
-            <input type="checkbox" className="hidden" checked={config.filterCC} onChange={(e) => updateConfig({ filterCC: e.target.checked })} />
-            Bloquear Control Change (CC)
-          </label>
-          
-          <label className="flex items-center gap-3 text-xs font-medium text-slate-300 cursor-pointer group">
-            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${config.filterPitchBend ? 'bg-cyan-600 border-cyan-500' : 'bg-[#0a0f1c] border-slate-600 group-hover:border-slate-400'}`}>
-              {config.filterPitchBend && <CheckCircle2 size={14} className="text-white" />}
-            </div>
-            <input type="checkbox" className="hidden" checked={config.filterPitchBend} onChange={(e) => updateConfig({ filterPitchBend: e.target.checked })} />
-            Bloquear Pitch Bend
-          </label>
+          <button
+            onClick={addNewRoute}
+            className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-cyan-900/50 transition flex items-center gap-1.5"
+          >
+            <Plus size={16} /> Nova Rota
+          </button>
         </div>
       </div>
+
+      {routes.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 py-20 border-2 border-dashed border-slate-800 rounded-2xl">
+          <ArrowRightLeft size={48} className="mb-4 opacity-20" />
+          <p className="text-sm font-medium">Nenhuma rota configurada.</p>
+          <p className="text-xs mt-1">Clique em "+ Nova Rota" para começar a rotear o áudio.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3" ref={dropdownRef}>
+          {routes.map((route, index) => (
+            <div key={route.id} className="bg-[#0f172a] border border-[#1e293b] rounded-xl p-3 sm:p-4 flex flex-col gap-3 shadow-md relative z-20">
+              
+              <div className="flex items-center justify-between border-b border-[#1e293b] pb-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Rota {index + 1}</span>
+                <button onClick={() => removeRoute(route.id)} className="text-slate-500 hover:text-red-400 p-1 transition">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                {/* INPUT */}
+                <div className="flex flex-col gap-1.5 relative">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Entrada (MIDI In)</label>
+                  <button
+                    type="button"
+                    onClick={() => setOpenDropdown(openDropdown === `in-${route.id}` ? null : `in-${route.id}`)}
+                    className="w-full bg-[#0a0f1c] border border-slate-700 rounded-lg p-2 text-xs text-emerald-300 font-semibold flex items-center justify-between hover:border-emerald-500/50 transition"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Download size={14} className="text-emerald-500 shrink-0" />
+                      <span className="truncate">{availableInputs.find(i => i.id === route.sourceId)?.name || 'Selecione...'}</span>
+                    </div>
+                    <ChevronDown size={14} className={`transition-transform ${openDropdown === `in-${route.id}` ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openDropdown === `in-${route.id}` && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar">
+                      {availableInputs.map(input => (
+                        <button key={input.id} onClick={() => { updateRoute(route.id, 'sourceId', input.id); setOpenDropdown(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-slate-300 truncate">{input.name}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* OUTPUT */}
+                <div className="flex flex-col gap-1.5 relative">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Saída (MIDI Out)</label>
+                  {connectedDestinations.length === 0 ? (
+                    <div className="text-xs text-amber-500 bg-amber-900/20 border border-amber-700/50 p-2 rounded-lg text-center">Conecte um dispositivo USB/BLE no topo.</div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setOpenDropdown(openDropdown === `out-${route.id}` ? null : `out-${route.id}`)}
+                      className="w-full bg-[#0a0f1c] border border-slate-700 rounded-lg p-2 text-xs text-cyan-300 font-semibold flex items-center justify-between hover:border-cyan-500/50 transition"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Upload size={14} className="text-cyan-500 shrink-0" />
+                        <span className="truncate">{connectedDestinations.find(d => d.id === route.destinationId)?.displayName || 'Selecione...'}</span>
+                      </div>
+                      <ChevronDown size={14} className={`transition-transform ${openDropdown === `out-${route.id}` ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                  {openDropdown === `out-${route.id}` && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar">
+                      {connectedDestinations.map(dest => (
+                        <button key={dest.id} onClick={() => { updateRoute(route.id, 'destinationId', dest.id); setOpenDropdown(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-slate-300 truncate">{dest.displayName}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* PARÂMETROS DA ROTA */}
+              <div className="grid grid-cols-3 gap-2 bg-[#0a0f1c] p-2 rounded-lg border border-[#1e293b]">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] font-bold text-slate-500 uppercase text-center">Canal In</label>
+                  <select value={route.inputChannel} onChange={(e) => updateRoute(route.id, 'inputChannel', Number(e.target.value))} className="bg-[#0f172a] border border-slate-700 text-xs text-center text-slate-300 rounded p-1.5 outline-none">
+                    <option value={0}>Omni</option>
+                    {Array.from({ length: 16 }, (_, i) => <option key={i+1} value={i+1}>{i+1}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] font-bold text-slate-500 uppercase text-center">Canal Out</label>
+                  <select value={route.outputChannel} onChange={(e) => updateRoute(route.id, 'outputChannel', Number(e.target.value))} className="bg-[#0f172a] border border-slate-700 text-xs text-center text-slate-300 rounded p-1.5 outline-none">
+                    <option value={0}>Manter</option>
+                    {Array.from({ length: 16 }, (_, i) => <option key={i+1} value={i+1}>{i+1}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] font-bold text-slate-500 uppercase text-center">Transp.</label>
+                  <input type="number" min="-24" max="24" value={route.transpose === 0 ? '' : route.transpose} onChange={(e) => updateRoute(route.id, 'transpose', Number(e.target.value))} placeholder="0" className="bg-[#0f172a] border border-slate-700 text-xs text-center text-slate-300 rounded p-1.5 outline-none" />
+                </div>
+              </div>
+
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
