@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Power, Pause } from 'lucide-react';
+import { ChevronDown, Power, Pause, LayoutGrid, Piano } from 'lucide-react';
+import { MidiPadGrid } from './MidiPadGrid';
 
 interface MidiKeyboardProps {
   isConnected: boolean;
@@ -12,7 +13,6 @@ interface MidiKeyboardProps {
   customBlackKeyColor: string;
   onActiveNotesChange?: (count: number) => void;
   onActivity?: (velocity: number) => void;
-  // NOVAS PROPS:
   isActive: boolean;
   onToggleActive: () => void;
   isSustainActive: boolean;
@@ -54,6 +54,7 @@ export function MidiKeyboard({
   isSustainActive,
   onToggleSustain,
 }: MidiKeyboardProps) {
+  const [viewMode, setViewMode] = useState<'keyboard' | 'pads'>('keyboard');
   const [startOctave, setStartOctave] = useState(3);
   const [keyWidth, setKeyWidth] = useState(60);
   const [minKeyWidth, setMinKeyWidth] = useState(MIN_KEY_WIDTH);
@@ -90,7 +91,7 @@ export function MidiKeyboard({
   useEffect(() => {
     const updateMinSize = () => {
       const container = containerRef.current;
-      if (!container) return;
+      if (!container || viewMode === 'pads') return;
       const availableWidth = Math.max(0, container.clientWidth - 12);
       const calculatedMin = Math.max(MIN_KEY_WIDTH, Math.floor(availableWidth / TOTAL_WHITE_KEYS));
       setMinKeyWidth(Math.min(MAX_KEY_WIDTH, calculatedMin));
@@ -107,29 +108,18 @@ export function MidiKeyboard({
       observer?.disconnect();
       window.removeEventListener('resize', updateMinSize);
     };
-  }, []);
+  }, [viewMode]);
 
   const pressNote = (note: number, pointerId: number) => {
-    // Se o teclado virtual estiver desligado, não faz nada
     if (!isActive) return; 
-    
-    if (!isConnected) {
-      onDisabledPressRef.current();
-      return;
-    }
+    if (!isConnected) { onDisabledPressRef.current(); return; }
 
     const previousNote = activePointersRef.current.get(pointerId);
-    if (previousNote !== undefined && previousNote !== note) {
-      releaseNote(previousNote, pointerId);
-    }
+    if (previousNote !== undefined && previousNote !== note) releaseNote(previousNote, pointerId);
 
     if (!activeNotesRef.current.has(note)) {
       activeNotesRef.current.add(note);
-      setPressedNotes((current) => {
-        const next = new Set(current);
-        next.add(note);
-        return next;
-      });
+      setPressedNotes((current) => { const next = new Set(current); next.add(note); return next; });
       if (onActivity) onActivity(100 + Math.random() * 27); 
       void onNoteOn(note);
     }
@@ -138,19 +128,11 @@ export function MidiKeyboard({
 
   const releaseNote = (note: number, pointerId: number) => {
     activePointersRef.current.delete(pointerId);
-    
     let isStillPressed = false;
-    activePointersRef.current.forEach((heldNote) => {
-      if (heldNote === note) isStillPressed = true;
-    });
-
+    activePointersRef.current.forEach((heldNote) => { if (heldNote === note) isStillPressed = true; });
     if (!isStillPressed && activeNotesRef.current.has(note)) {
       activeNotesRef.current.delete(note);
-      setPressedNotes((current) => {
-        const next = new Set(current);
-        next.delete(note);
-        return next;
-      });
+      setPressedNotes((current) => { const next = new Set(current); next.delete(note); return next; });
       void onNoteOffRef.current(note);
     }
   };
@@ -161,9 +143,7 @@ export function MidiKeyboard({
       activeNotesRef.current.clear();
       activePointersRef.current.clear();
       setPressedNotes(new Set());
-      for (const note of notes) {
-        void onNoteOffRef.current(note);
-      }
+      for (const note of notes) void onNoteOffRef.current(note);
     };
 
     const handleGlobalPointerUp = (e: PointerEvent) => {
@@ -171,20 +151,14 @@ export function MidiKeyboard({
       if (note !== undefined) releaseNote(note, e.pointerId);
     };
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState !== 'visible') releaseAllNotes();
-    };
-
     window.addEventListener('blur', releaseAllNotes);
     window.addEventListener('pointerup', handleGlobalPointerUp);
     window.addEventListener('pointercancel', handleGlobalPointerUp);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('blur', releaseAllNotes);
       window.removeEventListener('pointerup', handleGlobalPointerUp);
       window.removeEventListener('pointercancel', handleGlobalPointerUp);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       releaseAllNotes();
     };
   }, []);
@@ -197,7 +171,6 @@ export function MidiKeyboard({
       for (const noteDef of OCTAVE_NOTES) {
         const midiNote = (octave + 1) * 12 + noteDef.semitone;
         if (midiNote > 127) continue;
-
         const isWhite = noteDef.type === 'white';
         const isPressed = pressedNotes.has(midiNote);
         const noteLabel = noteDef.name === 'C' ? `C${octave}` : noteDef.name;
@@ -209,63 +182,38 @@ export function MidiKeyboard({
         const handlePointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
           if (activePointersRef.current.has(e.pointerId)) pressNote(midiNote, e.pointerId);
         };
-        const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-          releaseNote(midiNote, e.pointerId);
-        };
-
-        // Define a opacidade baseada no estado do teclado (Ativo/Inativo)
+        const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => { releaseNote(midiNote, e.pointerId); };
         const keyOpacity = isActive ? 1 : 0.5;
 
         if (isWhite) {
           whiteIndex++;
           keys.push(
-            <div
-              key={midiNote} role="button" aria-label={`Nota ${noteLabel}`} aria-pressed={isPressed}
-              onPointerDown={handlePointerDown} onPointerEnter={handlePointerEnter}
-              onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}
-              onLostPointerCapture={() => releaseNote(midiNote, -1)}
+            <div key={midiNote} role="button" onPointerDown={handlePointerDown} onPointerEnter={handlePointerEnter} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onLostPointerCapture={() => releaseNote(midiNote, -1)}
               className="relative z-10 flex h-full shrink-0 cursor-pointer flex-col items-center justify-end rounded-b-lg border transition-[filter,transform,box-shadow] duration-75 select-none"
               style={{
                 width: `${keyWidth}px`,
                 background: isPressed ? `linear-gradient(180deg, ${customWhiteKeyColor} 0%, #bfdbfe 100%)` : `linear-gradient(180deg, ${customWhiteKeyColor} 0%, ${customWhiteKeyColor} 88%, #cbd5e1 100%)`,
                 borderColor: isPressed ? '#22d3ee' : 'rgba(100,116,139,0.75)',
                 boxShadow: isPressed ? 'inset 0 3px 9px rgba(15,23,42,0.22), 0 0 12px rgba(34,211,238,0.28)' : '0 3px 0 rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.25)',
-                transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
-                touchAction: 'none',
-                opacity: keyOpacity,
-                transitionProperty: 'opacity, transform, box-shadow, background, border-color'
-              }}
-            >
-              <span className="mb-4 rounded px-1 text-[10px] font-bold select-none" style={{ color: isPressed ? '#075985' : '#1e293b', background: isPressed ? 'rgba(255,255,255,0.45)' : 'transparent' }}>
-                {noteLabel}
-              </span>
+                transform: isPressed ? 'translateY(2px)' : 'translateY(0)', touchAction: 'none', opacity: keyOpacity,
+              }}>
+              <span className="mb-4 rounded px-1 text-[10px] font-bold select-none" style={{ color: isPressed ? '#075985' : '#1e293b', background: isPressed ? 'rgba(255,255,255,0.45)' : 'transparent' }}>{noteLabel}</span>
             </div>
           );
         } else {
           const blackWidth = keyWidth * 0.58;
           const left = (whiteIndex - 1) * keyWidth + keyWidth - blackWidth / 2;
-
           keys.push(
-            <div
-              key={midiNote} role="button" aria-label={`Nota ${noteLabel}`} aria-pressed={isPressed}
-              onPointerDown={handlePointerDown} onPointerEnter={handlePointerEnter}
-              onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}
-              onLostPointerCapture={() => releaseNote(midiNote, -1)}
+            <div key={midiNote} role="button" onPointerDown={handlePointerDown} onPointerEnter={handlePointerEnter} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} onLostPointerCapture={() => releaseNote(midiNote, -1)}
               className="absolute top-0 z-30 flex h-[62%] cursor-pointer flex-col items-center justify-end rounded-b-sm border select-none"
               style={{
                 width: `${blackWidth}px`, left: `${left}px`,
                 background: isPressed ? 'linear-gradient(180deg, #38bdf8 0%, #0369a1 100%)' : `linear-gradient(180deg, ${customBlackKeyColor} 0%, ${customBlackKeyColor} 72%, #020617 100%)`,
                 borderColor: isPressed ? '#67e8f9' : '#020617',
                 boxShadow: isPressed ? '0 0 12px rgba(34,211,238,0.55), inset 0 0 5px rgba(255,255,255,0.25)' : '0 3px 4px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.1)',
-                transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
-                touchAction: 'none',
-                opacity: keyOpacity,
-                transitionProperty: 'opacity, transform, box-shadow, background, border-color'
-              }}
-            >
-              <span className="mb-4 text-[9px] font-bold select-none" style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}>
-                {noteDef.name}
-              </span>
+                transform: isPressed ? 'translateY(2px)' : 'translateY(0)', touchAction: 'none', opacity: keyOpacity,
+              }}>
+              <span className="mb-4 text-[9px] font-bold select-none" style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}>{noteDef.name}</span>
             </div>
           );
         }
@@ -277,55 +225,62 @@ export function MidiKeyboard({
   const keyboardWidth = TOTAL_WHITE_KEYS * keyWidth;
 
   return (
-    <section
-      className="nexus-midi-keyboard flex min-h-0 w-full flex-1 flex-col gap-2 rounded-2xl border p-2 sm:gap-3 sm:p-3"
-      style={{ background: 'linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,13,25,0.99))', borderColor: 'rgba(148,163,184,0.16)', boxShadow: '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035)' }}
-    >
+    <section className="nexus-midi-keyboard flex min-h-0 w-full flex-1 flex-col gap-2 rounded-2xl border p-2 sm:gap-3 sm:p-3" style={{ background: 'linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,13,25,0.99))', borderColor: 'rgba(148,163,184,0.16)', boxShadow: '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035)' }}>
+      
       <div className="nexus-midi-controls relative z-50 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-2" style={{ background: 'rgba(5,10,22,0.76)', borderColor: 'rgba(148,163,184,0.14)' }}>
         
         <div className="flex flex-wrap items-center gap-3">
-          {/* Botão Liga/Desliga do Teclado */}
-          <button
-            type="button"
-            onClick={onToggleActive}
-            className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-bold transition-all ${
-              isActive 
-                ? 'border-cyan-700/50 bg-cyan-900/30 text-cyan-400' 
-                : 'border-slate-700 bg-slate-800/50 text-slate-500'
-            }`}
-            title={isActive ? 'Desativar Teclado Virtual' : 'Ativar Teclado Virtual'}
-          >
+          
+          {/* BOTÃO DE ALTERNÂNCIA TECLADO/PADS */}
+          <div className="flex bg-[#0f172a] rounded-lg p-0.5 border border-[#1e293b]">
+            <button
+              type="button"
+              onClick={() => setViewMode('keyboard')}
+              className={`flex h-7 items-center gap-1.5 px-2 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keyboard' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <Piano size={12} /> PIANO
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('pads');
+                if (selectedChannel !== 10) {
+                  onSelectChannel(10); // Muda automaticamente para o Canal 10
+                }
+              }}
+              className={`flex h-7 items-center gap-1.5 px-2 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'pads' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <LayoutGrid size={12} /> PADS
+            </button>
+          </div>
+
+          {/* Botão Liga/Desliga */}
+          <button type="button" onClick={onToggleActive} className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-bold transition-all ${isActive ? 'border-cyan-700/50 bg-cyan-900/30 text-cyan-400' : 'border-slate-700 bg-slate-800/50 text-slate-500'}`} title="Ligar/Desligar">
             <Power size={14} className={isActive ? 'text-cyan-400' : 'text-slate-500'} />
-            {isActive ? 'Teclado ON' : 'Teclado OFF'}
+            {isActive ? 'ON' : 'OFF'}
           </button>
 
           {/* Botão de Sustain */}
-          <button
-            type="button"
-            onClick={onToggleSustain}
-            className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-bold transition-all ${
-              isSustainActive 
-                ? 'border-amber-500/50 bg-amber-900/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]' 
-                : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700'
-            }`}
-            title="Sustain (CC64)"
-          >
+          <button type="button" onClick={onToggleSustain} className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-bold transition-all ${isSustainActive ? 'border-amber-500/50 bg-amber-900/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]' : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700'}`} title="Sustain (CC64)">
             <Pause size={14} className={isSustainActive ? 'text-amber-400' : 'text-slate-400'} />
-            Sustain
+            SUSTAIN
           </button>
 
-          <div className="h-6 w-px bg-slate-700/50 mx-1"></div>
+          <div className="h-6 w-px bg-slate-700/50 mx-1 hidden sm:block"></div>
 
-          {/* Oitavas */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Oitavas</span>
-            <div className="flex items-center overflow-hidden rounded-lg border" style={{ background: '#0f172a', borderColor: 'rgba(148,163,184,0.2)' }}>
-              <button type="button" disabled={startOctave <= 1} onClick={() => setStartOctave((v) => Math.max(1, v - 1))} className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35">−</button>
-              <span className="min-w-[48px] text-center font-mono text-xs font-bold text-cyan-300">C{startOctave}</span>
-              <button type="button" disabled={startOctave >= 6} onClick={() => setStartOctave((v) => Math.min(6, v + 1))} className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35">+</button>
+          {/* Oitavas (Só mostra se estiver no modo Teclado) */}
+          {viewMode === 'keyboard' && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Oitavas</span>
+              <div className="flex items-center overflow-hidden rounded-lg border" style={{ background: '#0f172a', borderColor: 'rgba(148,163,184,0.2)' }}>
+                <button type="button" disabled={startOctave <= 1} onClick={() => setStartOctave((v) => Math.max(1, v - 1))} className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35">−</button>
+                <span className="min-w-[48px] text-center font-mono text-xs font-bold text-cyan-300">C{startOctave}</span>
+                <button type="button" disabled={startOctave >= 6} onClick={() => setStartOctave((v) => Math.min(6, v + 1))} className="flex h-8 w-8 items-center justify-center text-lg font-semibold text-slate-300 transition hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-35">+</button>
+              </div>
             </div>
-          </div>
+          )}
 
+          {/* Canal */}
           <div className="relative" ref={channelDropdownRef}>
             <button type="button" onClick={() => setIsChannelOpen(!isChannelOpen)} className="flex h-8 items-center gap-2 rounded-lg border px-2.5 transition hover:bg-slate-800" style={{ background: '#0f172a', borderColor: 'rgba(148,163,184,0.2)' }}>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Canal</span>
@@ -350,24 +305,41 @@ export function MidiKeyboard({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Zoom</span>
-            <input type="range" min={minKeyWidth} max={MAX_KEY_WIDTH} value={keyWidth} onChange={(e) => setKeyWidth(Number(e.target.value))} className="h-1.5 w-20 cursor-pointer accent-cyan-400" />
-            <span className="min-w-[30px] text-right font-mono text-[10px] text-slate-400">{keyWidth}px</span>
-          </label>
-
-          <button type="button" onClick={() => setIsScrollLocked((v) => !v)} className="flex h-8 items-center gap-2 rounded-lg border px-3 text-[10px] font-bold transition" style={{ background: isScrollLocked ? 'rgba(245,158,11,0.12)' : 'rgba(51,65,85,0.3)', borderColor: isScrollLocked ? 'rgba(245,158,11,0.45)' : 'rgba(148,163,184,0.2)', color: isScrollLocked ? '#fbbf24' : '#cbd5e1' }}>
-            <span aria-hidden="true">{isScrollLocked ? '🔒' : '↔'}</span>
-            {isScrollLocked ? 'Bloqueado' : 'Rolagem livre'}
-          </button>
-        </div>
+        {/* Zoom (Só mostra se estiver no modo Teclado) */}
+        {viewMode === 'keyboard' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Zoom</span>
+              <input type="range" min={minKeyWidth} max={MAX_KEY_WIDTH} value={keyWidth} onChange={(e) => setKeyWidth(Number(e.target.value))} className="h-1.5 w-20 cursor-pointer accent-cyan-400" />
+              <span className="min-w-[30px] text-right font-mono text-[10px] text-slate-400">{keyWidth}px</span>
+            </label>
+            <button type="button" onClick={() => setIsScrollLocked((v) => !v)} className="flex h-8 items-center gap-2 rounded-lg border px-3 text-[10px] font-bold transition" style={{ background: isScrollLocked ? 'rgba(245,158,11,0.12)' : 'rgba(51,65,85,0.3)', borderColor: isScrollLocked ? 'rgba(245,158,11,0.45)' : 'rgba(148,163,184,0.2)', color: isScrollLocked ? '#fbbf24' : '#cbd5e1' }}>
+              <span aria-hidden="true">{isScrollLocked ? '🔒' : '↔'}</span>
+              {isScrollLocked ? 'Bloqueado' : 'Rolagem livre'}
+            </button>
+          </div>
+        )}
       </div>
 
-      <div ref={containerRef} className={`nexus-midi-viewport relative isolate flex-1 rounded-xl border p-1 sm:p-2 ${isScrollLocked ? 'overflow-hidden' : 'overflow-x-auto overflow-y-hidden'}`} style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(30,41,59,0.72), rgba(2,6,23,0.98) 78%)', borderColor: 'rgba(148,163,184,0.14)', touchAction: isScrollLocked ? 'none' : 'pan-x', scrollbarWidth: 'thin', scrollbarColor: '#334155 #0b1120', WebkitOverflowScrolling: 'touch' }}>
-        <div className="relative flex h-full items-stretch" style={{ width: `${keyboardWidth}px`, minWidth: `${keyboardWidth}px`, marginInline: isScrollLocked ? 'auto' : undefined }}>
-          {renderKeys()}
-        </div>
+      {/* ÁREA PRINCIPAL: Alterna entre Teclado e Pads */}
+      <div className="flex-1 min-h-0 relative flex flex-col">
+        {viewMode === 'keyboard' ? (
+          <div ref={containerRef} className={`nexus-midi-viewport relative isolate flex-1 rounded-xl border p-1 sm:p-2 ${isScrollLocked ? 'overflow-hidden' : 'overflow-x-auto overflow-y-hidden'}`} style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(30,41,59,0.72), rgba(2,6,23,0.98) 78%)', borderColor: 'rgba(148,163,184,0.14)', touchAction: isScrollLocked ? 'none' : 'pan-x', scrollbarWidth: 'thin', scrollbarColor: '#334155 #0b1120', WebkitOverflowScrolling: 'touch' }}>
+            <div className="relative flex h-full items-stretch" style={{ width: `${keyboardWidth}px`, minWidth: `${keyboardWidth}px`, marginInline: isScrollLocked ? 'auto' : undefined }}>
+              {renderKeys()}
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 w-full h-full py-1">
+            <MidiPadGrid 
+              isActive={isActive} 
+              onNoteOn={onNoteOn} 
+              onNoteOff={onNoteOff} 
+              onDisabledPress={onDisabledPress} 
+              onActivity={onActivity} 
+            />
+          </div>
+        )}
       </div>
     </section>
   );
