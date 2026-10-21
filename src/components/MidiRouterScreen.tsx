@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MidiDestination, MidiRoute } from '../types/midi';
 import { midiManager } from '../services/midiService';
-import { ChevronDown, CheckCircle2, RefreshCw, ArrowRightLeft, Download, Upload, Trash2, Plus } from 'lucide-react';
+import { ChevronDown, CheckCircle2, RefreshCw, ArrowRightLeft, Download, Upload, Trash2, Plus, Check } from 'lucide-react';
 
 interface MidiRouterScreenProps {
   destinations: MidiDestination[];
@@ -12,10 +12,9 @@ interface MidiRouterScreenProps {
 export function MidiRouterScreen({ destinations, connectedDestinations, onRefresh }: MidiRouterScreenProps) {
   const [routes, setRoutes] = useState<MidiRoute[]>(midiManager.getRoutes());
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null); // ID da rota que está com o menu aberto
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Atualiza a lista de rotas quando o componente monta
   useEffect(() => {
     setRoutes(midiManager.getRoutes());
   }, [connectedDestinations]);
@@ -52,6 +51,7 @@ export function MidiRouterScreen({ destinations, connectedDestinations, onRefres
   const updateRoute = (id: string, field: keyof MidiRoute, value: any) => {
     midiManager.updateRoute(id, { [field]: value });
     setRoutes(midiManager.getRoutes());
+    setOpenDropdown(null); // Fecha o menu após selecionar
   };
 
   const removeRoute = (id: string) => {
@@ -59,7 +59,6 @@ export function MidiRouterScreen({ destinations, connectedDestinations, onRefres
     setRoutes(midiManager.getRoutes());
   };
 
-  // Opções de entrada disponíveis (Virtual + Dispositivos Físicos)
   const availableInputs = [
     { id: 'virtual-main', name: 'Teclado Virtual' },
     ...destinations.filter(d => d.type !== 'virtual').map(d => ({ id: d.id, name: `${d.displayName} (${d.type.toUpperCase()})` }))
@@ -76,17 +75,10 @@ export function MidiRouterScreen({ destinations, connectedDestinations, onRefres
           <p className="text-xs text-slate-400 mt-1">Crie rotas independentes entre entradas e saídas simultâneas.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleRefreshClick}
-            disabled={isRefreshing}
-            className="px-3 py-1.5 bg-[#0f172a] hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-2 shrink-0 disabled:opacity-50"
-          >
+          <button onClick={handleRefreshClick} disabled={isRefreshing} className="px-3 py-1.5 bg-[#0f172a] hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-2 shrink-0 disabled:opacity-50">
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> 
           </button>
-          <button
-            onClick={addNewRoute}
-            className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-cyan-900/50 transition flex items-center gap-1.5"
-          >
+          <button onClick={addNewRoute} className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-cyan-900/50 transition flex items-center gap-1.5">
             <Plus size={16} /> Nova Rota
           </button>
         </div>
@@ -110,7 +102,9 @@ export function MidiRouterScreen({ destinations, connectedDestinations, onRefres
                 </button>
               </div>
 
+              {/* INPUT E OUTPUT */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                
                 {/* INPUT */}
                 <div className="flex flex-col gap-1.5 relative">
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Entrada (MIDI In)</label>
@@ -128,7 +122,9 @@ export function MidiRouterScreen({ destinations, connectedDestinations, onRefres
                   {openDropdown === `in-${route.id}` && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar">
                       {availableInputs.map(input => (
-                        <button key={input.id} onClick={() => { updateRoute(route.id, 'sourceId', input.id); setOpenDropdown(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-slate-300 truncate">{input.name}</button>
+                        <button key={input.id} onClick={() => updateRoute(route.id, 'sourceId', input.id)} className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-800 truncate ${route.sourceId === input.id ? 'text-emerald-400 bg-slate-800/50 font-bold' : 'text-slate-300'}`}>
+                          {input.name}
+                        </button>
                       ))}
                     </div>
                   )}
@@ -155,32 +151,70 @@ export function MidiRouterScreen({ destinations, connectedDestinations, onRefres
                   {openDropdown === `out-${route.id}` && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-48 overflow-y-auto custom-scrollbar">
                       {connectedDestinations.map(dest => (
-                        <button key={dest.id} onClick={() => { updateRoute(route.id, 'destinationId', dest.id); setOpenDropdown(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-slate-300 truncate">{dest.displayName}</button>
+                        <button key={dest.id} onClick={() => updateRoute(route.id, 'destinationId', dest.id)} className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-800 truncate ${route.destinationId === dest.id ? 'text-cyan-400 bg-slate-800/50 font-bold' : 'text-slate-300'}`}>
+                          {dest.displayName}
+                        </button>
                       ))}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* PARÂMETROS DA ROTA */}
+              {/* PARÂMETROS DA ROTA (CANAL IN, OUT E TRANSPOSE) */}
               <div className="grid grid-cols-3 gap-2 bg-[#0a0f1c] p-2 rounded-lg border border-[#1e293b]">
-                <div className="flex flex-col gap-1">
+                
+                {/* CANAL IN CUSTOMIZADO */}
+                <div className="flex flex-col gap-1 relative">
                   <label className="text-[9px] font-bold text-slate-500 uppercase text-center">Canal In</label>
-                  <select value={route.inputChannel} onChange={(e) => updateRoute(route.id, 'inputChannel', Number(e.target.value))} className="bg-[#0f172a] border border-slate-700 text-xs text-center text-slate-300 rounded p-1.5 outline-none">
-                    <option value={0}>Omni</option>
-                    {Array.from({ length: 16 }, (_, i) => <option key={i+1} value={i+1}>{i+1}</option>)}
-                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setOpenDropdown(openDropdown === `chin-${route.id}` ? null : `chin-${route.id}`)}
+                    className="w-full bg-[#0f172a] border border-slate-700 rounded px-2 py-1.5 text-xs text-center text-slate-300 font-mono flex items-center justify-between hover:border-slate-500 transition"
+                  >
+                    <span>{route.inputChannel === 0 ? 'Omni' : String(route.inputChannel).padStart(2, '0')}</span>
+                    <ChevronDown size={12} className={`text-slate-500 transition-transform ${openDropdown === `chin-${route.id}` ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openDropdown === `chin-${route.id}` && (
+                    <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-40 overflow-y-auto custom-scrollbar">
+                      <button onClick={() => updateRoute(route.id, 'inputChannel', 0)} className={`w-full text-center px-2 py-1.5 text-xs font-mono hover:bg-slate-800 ${route.inputChannel === 0 ? 'text-cyan-400 font-bold bg-slate-800/50' : 'text-slate-300'}`}>Omni</button>
+                      {Array.from({ length: 16 }, (_, i) => (
+                        <button key={i+1} onClick={() => updateRoute(route.id, 'inputChannel', i+1)} className={`w-full text-center px-2 py-1.5 text-xs font-mono hover:bg-slate-800 ${route.inputChannel === i+1 ? 'text-cyan-400 font-bold bg-slate-800/50' : 'text-slate-300'}`}>{String(i+1).padStart(2, '0')}</button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col gap-1">
+
+                {/* CANAL OUT CUSTOMIZADO */}
+                <div className="flex flex-col gap-1 relative">
                   <label className="text-[9px] font-bold text-slate-500 uppercase text-center">Canal Out</label>
-                  <select value={route.outputChannel} onChange={(e) => updateRoute(route.id, 'outputChannel', Number(e.target.value))} className="bg-[#0f172a] border border-slate-700 text-xs text-center text-slate-300 rounded p-1.5 outline-none">
-                    <option value={0}>Manter</option>
-                    {Array.from({ length: 16 }, (_, i) => <option key={i+1} value={i+1}>{i+1}</option>)}
-                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setOpenDropdown(openDropdown === `chout-${route.id}` ? null : `chout-${route.id}`)}
+                    className="w-full bg-[#0f172a] border border-slate-700 rounded px-2 py-1.5 text-xs text-center text-slate-300 font-mono flex items-center justify-between hover:border-slate-500 transition"
+                  >
+                    <span>{route.outputChannel === 0 ? 'Manter' : String(route.outputChannel).padStart(2, '0')}</span>
+                    <ChevronDown size={12} className={`text-slate-500 transition-transform ${openDropdown === `chout-${route.id}` ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openDropdown === `chout-${route.id}` && (
+                    <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#0f172a] border border-slate-700 rounded-lg shadow-2xl z-50 max-h-40 overflow-y-auto custom-scrollbar">
+                      <button onClick={() => updateRoute(route.id, 'outputChannel', 0)} className={`w-full text-center px-2 py-1.5 text-xs font-mono hover:bg-slate-800 ${route.outputChannel === 0 ? 'text-cyan-400 font-bold bg-slate-800/50' : 'text-slate-300'}`}>Manter</button>
+                      {Array.from({ length: 16 }, (_, i) => (
+                        <button key={i+1} onClick={() => updateRoute(route.id, 'outputChannel', i+1)} className={`w-full text-center px-2 py-1.5 text-xs font-mono hover:bg-slate-800 ${route.outputChannel === i+1 ? 'text-cyan-400 font-bold bg-slate-800/50' : 'text-slate-300'}`}>{String(i+1).padStart(2, '0')}</button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* TRANSPOSE */}
                 <div className="flex flex-col gap-1">
                   <label className="text-[9px] font-bold text-slate-500 uppercase text-center">Transp.</label>
-                  <input type="number" min="-24" max="24" value={route.transpose === 0 ? '' : route.transpose} onChange={(e) => updateRoute(route.id, 'transpose', Number(e.target.value))} placeholder="0" className="bg-[#0f172a] border border-slate-700 text-xs text-center text-slate-300 rounded p-1.5 outline-none" />
+                  <input 
+                    type="number" min="-24" max="24" 
+                    value={route.transpose === 0 ? '' : route.transpose} 
+                    onChange={(e) => updateRoute(route.id, 'transpose', Number(e.target.value))} 
+                    placeholder="0" 
+                    className="bg-[#0f172a] border border-slate-700 text-xs text-center text-slate-300 rounded px-2 py-1.5 font-mono outline-none focus:border-cyan-500 transition" 
+                  />
                 </div>
               </div>
 
