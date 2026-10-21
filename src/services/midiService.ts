@@ -1,4 +1,4 @@
-import { MidiDestination, MidiRouteConfig } from '../types/midi';
+import { MidiDestination, MidiRoute } from '../types/midi';
 import { NativeMidi } from './nativeMidi';
 
 export interface MidiMessage {
@@ -16,32 +16,22 @@ export const getNoteName = (note: number): string => {
   return `${noteNames[note % 12]}${octave}`;
 };
 
-const DEFAULT_ROUTE_CONFIG: MidiRouteConfig = {
-  enabled: true,
-  source: 'virtual',
-  sourceId: 'virtual-main',
-  destinationId: null,
-  inputChannel: 0,
-  outputChannel: 0,
-  transpose: 0,
-  velocityMin: 1,
-  velocityMax: 127,
-  allowNotes: true,
-  allowControlChange: true,
-  allowProgramChange: true,
-  allowPitchBend: true,
-};
-
 class MidiService {
   private destinations: MidiDestination[] = [];
   private scannedBleDevices: MidiDestination[] = [];
-  private connectedOutput: MidiDestination | null = null;
+  
+  // NOVO: Múltiplos dispositivos conectados
+  private connectedOutputs = new Map<string, MidiDestination>();
   private connectedInputs = new Map<string, boolean>();
+  
+  // NOVO: Lista de Rotas
+  private routes: MidiRoute[] = [];
+  
   private messageListeners: Array<(message: MidiMessage) => void> = [];
-  private activityListeners: Array<(velocity: number) => void> = []; // NOVO: Para o VU Meter
+  private activityListeners: Array<(velocity: number) => void> = [];
   private onRefreshCallback?: (destinations?: MidiDestination[]) => void;
   private onDisconnectCallback?: (destination: MidiDestination) => void;
-  private routeConfig: MidiRouteConfig = { ...DEFAULT_ROUTE_CONFIG };
+  
   private listenerReady: Promise<void>;
 
   constructor() {
@@ -139,15 +129,10 @@ class MidiService {
   }
 
   public getDestinations(): MidiDestination[] { return [...this.destinations]; }
-  public setRouteConfig(config: MidiRouteConfig): void { this.routeConfig = { ...config }; }
-  public getRouteConfig(): MidiRouteConfig { return { ...this.routeConfig }; }
-  public async connect(destination: MidiDestination): Promise<void> { await this.connectOutput(destination); }
 
   public async connectOutput(destination: MidiDestination): Promise<void> {
-    if (this.connectedOutput && this.connectedOutput.id !== destination.id) {
-      await this.disconnectOutput();
-    }
-
+    if (this.connectedOutputs.has(destination.id)) return;
+    
     if (destination.id !== 'virtual-main') {
       if (destination.type === 'ble' && destination.bleAddress) {
         await NativeMidi.connectBleMidi({ address: destination.bleAddress, outputPortIndex: 0, inputPortIndex: 0 });
@@ -155,42 +140,55 @@ class MidiService {
         await NativeMidi.connectOutput({ id: String(destination.id), portIndex: 0 });
       }
     }
-    this.connectedOutput = destination;
+    this.connectedOutputs.set(destination.id, destination);
   }
 
-  public async disconnect(): Promise<void> {
-    const previousDestination = this.connectedOutput;
-    await this.disconnectOutput();
-    if (previousDestination) {
-      this.onDisconnectCallback?.(previousDestination);
-    }
-  }
-
-  public async disconnectOutput(): Promise<void> {
-    await this.allNotesOff();
-    const destination = this.connectedOutput;
-    if (destination && destination.id !== 'virtual-main') {
-      if (destination.type === 'ble' && destination.bleAddress) {
-        await NativeMidi.disconnectOutput({ id: destination.bleAddress });
+  public async disconnectOutput(id: string): Promise<void> {
+    const dest = this.connectedOutputs.get(id);
+    if (!dest) return;
+    
+    await this.allNotesOffForDevice(dest);
+    
+    if (id !== 'virtual-main') {
+      if (dest.type === 'ble' && dest.bleAddress) {
+        await NativeMidi.disconnectOutput({ id: dest.bleAddress });
       } else {
-        await NativeMidi.disconnectOutput({ id: String(destination.id) });
+        await NativeMidi.disconnectOutput({ id: String(dest.id) });
       }
     }
-    this.connectedOutput = null;
+    this.connectedOutputs.delete(id);
+    this.onDisconnectCallback?.(dest);
+  }
+
+  public getConnectedDestinations(): MidiDestination[] {
+    return Array.from(this.connectedOutputs.values());
   }
 
   public async connectInput(inputId: string): Promise<void> {
-    if (inputId === 'virtual-main') return;
-    if (this.connectedInputs.has(inputId)) return;
+    if (inputId === 'virtual-main' || this.connectedInputs.has(inputId)) return;
     await NativeMidi.connectInput({ id: String(inputId), portIndex: 0 });
     this.connectedInputs.set(inputId, true);
   }
 
   public async disconnectInput(inputId: string): Promise<void> {
-    if (inputId === 'virtual-main') return;
-    if (!this.connectedInputs.has(inputId)) return;
+    if (inputId === 'virtual-main' || !this.connectedInputs.has(inputId)) return;
     await NativeMidi.disconnectInput({ id: String(inputId) });
     this.connectedInputs.delete(inputId);
+  }
+
+  // --- GERENCIAMENTO DE ROTAS ---
+  public getRoutes(): MidiRoute[] { return [...this.routes]; }
+  
+  public addRoute(route: MidiRoute): void {
+    this.routes.push(route);
+  }
+  
+  public updateRoute(id: string, updates: Partial<MidiRoute>): void {
+    this.routes = this.routes.map(r => r.id === id ? { ...r, ...updates } : r);
+  }
+  
+  public removeRoute(id: string): void {
+    this.routes = this.routes.filter(r => r.id !== id);
   }
 
   public async isBleServerRunning(): Promise<boolean> {
@@ -203,7 +201,6 @@ class MidiService {
 
   public async stopBleServer(): Promise<void> { await NativeMidi.stopBleServer(); }
 
-  // NOVO: Registra e notifica os ouvintes do VU Meter
   public addActivityListener(listener: (velocity: number) => void): void {
     if (!this.activityListeners.includes(listener)) this.activityListeners.push(listener);
   }
@@ -217,7 +214,9 @@ class MidiService {
     const safeNote = this.clamp(Math.trunc(note), 0, 127);
     const safeVelocity = this.clamp(Math.trunc(velocity), 0, 127);
     const status = isNoteOn && safeVelocity > 0 ? 0x90 + safeChannel - 1 : 0x80 + safeChannel - 1;
-    this.sendRoutedMessage(status, safeNote, safeVelocity);
+    
+    this.routeMessage(status, safeNote, safeVelocity, 'virtual-main');
+    
     return { hex: [status, safeNote, safeVelocity].map((v) => v.toString(16).padStart(2, '0')).join(' ') };
   }
 
@@ -225,93 +224,72 @@ class MidiService {
     const status = 0xB0 + this.clamp(Math.trunc(channel), 1, 16) - 1;
     const cc = this.clamp(Math.trunc(controller), 0, 127);
     const safeValue = this.clamp(Math.trunc(value), 0, 127);
-    this.sendRoutedMessage(status, cc, safeValue);
+    this.routeMessage(status, cc, safeValue, 'virtual-main');
     return { hex: this.toHex([status, cc, safeValue]) };
   }
 
   public async sendProgramChange(channel: number, program: number): Promise<{ hex: string }> {
     const status = 0xC0 + this.clamp(Math.trunc(channel), 1, 16) - 1;
     const safeProgram = this.clamp(Math.trunc(program), 0, 127);
-    if (this.routeConfig.enabled && this.routeConfig.allowProgramChange) {
-      const finalChannel = this.getOutputChannel((status & 0x0F) + 1);
-      await this.transmitBytesNow([0xC0 + finalChannel - 1, safeProgram]);
-    }
+    this.routeMessage(status, safeProgram, 0, 'virtual-main');
     return { hex: this.toHex([status, safeProgram]) };
   }
 
   public async sendPitchBend(channel: number, value: number): Promise<{ hex: string }> {
     const safeChannel = this.clamp(Math.trunc(channel), 1, 16);
     const safeValue = this.clamp(Math.trunc(value), 0, 16383);
-    const status = 0xE0 + safeChannel - 1;
     const lsb = safeValue & 0x7F;
     const msb = (safeValue >> 7) & 0x7F;
-    if (this.routeConfig.enabled && this.routeConfig.allowPitchBend) {
-      const finalChannel = this.getOutputChannel(safeChannel);
-      await this.transmitBytesNow([0xE0 + finalChannel - 1, lsb, msb]);
-    }
-    return { hex: this.toHex([status, lsb, msb]) };
+    this.routeMessage(0xE0 + safeChannel - 1, lsb, msb, 'virtual-main');
+    return { hex: this.toHex([0xE0 + safeChannel - 1, lsb, msb]) };
   }
 
-  public async sendPanic(channels: number[]): Promise<void> {
-    const destination = this.connectedOutput;
-    if (!destination || destination.id === 'virtual-main') return;
-    const targetId = destination.bleAddress || String(destination.id);
-
-    for (const ch of channels) {
-      const safeCh = this.clamp(Math.trunc(ch), 1, 16);
-      const status = 0xB0 + safeCh - 1;
-      await NativeMidi.sendTo({ id: targetId, data: [status, 120, 0] });
-      await NativeMidi.sendTo({ id: targetId, data: [status, 121, 0] });
-      await NativeMidi.sendTo({ id: targetId, data: [status, 123, 0] });
-    }
-  }
-
-  public sendRoutedMessage(status: number, data1: number, data2: number): void {
-    if (!this.routeConfig.enabled) return;
+  // NOVO: O motor de roteamento
+  public routeMessage(status: number, data1: number, data2: number, sourceId?: string): void {
     const command = status & 0xF0;
     const inputChannel = (status & 0x0F) + 1;
-    if (this.routeConfig.inputChannel > 0 && inputChannel !== this.routeConfig.inputChannel) return;
-    if (command === 0x90 || command === 0x80) { if (!this.routeConfig.allowNotes) return; }
-    else if (command === 0xB0 && !this.routeConfig.allowControlChange) return;
-    else if (command === 0xC0 && !this.routeConfig.allowProgramChange) return;
-    else if (command === 0xE0 && !this.routeConfig.allowPitchBend) return;
 
-    const outputChannel = this.getOutputChannel(inputChannel);
-    if (command === 0xC0) { void this.transmitBytesNow([0xC0 + outputChannel - 1, this.clamp(data1, 0, 127)]); return; }
-    if (command === 0xD0) { void this.transmitBytesNow([0xD0 + outputChannel - 1, this.clamp(data1, 0, 127)]); return; }
+    for (const route of this.routes) {
+      if (!route.enabled) continue;
 
-    let finalData1 = this.clamp(data1, 0, 127);
-    let finalData2 = this.clamp(data2, 0, 127);
+      // 1. Filtro de Origem
+      if (route.sourceId && route.sourceId !== sourceId) continue;
 
-    if (command === 0x90 || command === 0x80) {
-      finalData1 = this.clamp(finalData1 + this.routeConfig.transpose, 0, 127);
-      if (command === 0x90 && finalData2 > 0) {
-        finalData2 = this.clamp(finalData2, this.routeConfig.velocityMin, this.routeConfig.velocityMax);
+      // 2. Filtro de Canal de Entrada
+      if (route.inputChannel > 0 && inputChannel !== route.inputChannel) continue;
+
+      // 3. Transformação
+      let finalData1 = this.clamp(data1, 0, 127);
+      let finalData2 = this.clamp(data2, 0, 127);
+
+      if (command === 0x90 || command === 0x80) {
+        finalData1 = this.clamp(finalData1 + route.transpose, 0, 127);
+      }
+
+      // 4. Canal de Saída
+      const outputChannel = route.outputChannel > 0 ? this.clamp(route.outputChannel, 1, 16) : inputChannel;
+
+      // 5. Envia para o destino
+      const dest = this.connectedOutputs.get(route.destinationId);
+      if (dest) {
+        void this.sendToDevice(dest, [command + outputChannel - 1, finalData1, finalData2]);
       }
     }
-    void this.transmitBytesNow([command + outputChannel - 1, finalData1, finalData2]);
   }
 
-  private getOutputChannel(inputChannel: number): number {
-    return this.routeConfig.outputChannel > 0 ? this.clamp(this.routeConfig.outputChannel, 1, 16) : inputChannel;
-  }
-
-  private async transmitBytesNow(bytes: number[], targetDest?: MidiDestination | null): Promise<void> {
-    const destination = targetDest !== undefined ? targetDest : this.connectedOutput;
-    if (!destination || destination.id === 'virtual-main') return;
+  private async sendToDevice(destination: MidiDestination, bytes: number[]): Promise<void> {
+    if (destination.id === 'virtual-main') return;
     try {
       await NativeMidi.sendTo({ id: destination.bleAddress || String(destination.id), data: bytes });
     } catch (error) {
-      console.error('Erro ao transmitir mensagem MIDI:', error);
+      // Silencia erros de envio contínuos
     }
   }
 
-  public async allNotesOff(): Promise<void> {
-    const destination = this.connectedOutput;
-    if (!destination || destination.id === 'virtual-main') return;
+  public async allNotesOffForDevice(destination: MidiDestination): Promise<void> {
+    if (destination.id === 'virtual-main') return;
     for (let channel = 1; channel <= 16; channel++) {
-      const status = 0xB0 + channel - 1;
-      await this.transmitBytesNow([status, 123, 0], destination);
+      await this.sendToDevice(destination, [0xB0 + channel - 1, 123, 0]);
     }
   }
 
@@ -327,23 +305,16 @@ class MidiService {
     const data2 = requiredLength === 3 ? this.clamp(bytes[2], 0, 127) : 0;
     const message: MidiMessage = { status, data1, data2, timestamp: Date.now(), sourceId };
 
-    // NOVO: Se for Note On, dispara o VU Meter
     if (command === 0x90 && data2 > 0) {
-      this.activityListeners.forEach(listener => {
-        try { listener(data2); } catch {}
-      });
+      this.activityListeners.forEach(listener => { try { listener(data2); } catch {} });
     }
 
     this.messageListeners.forEach((listener) => {
-      try { listener(message); } catch (error) { console.error('Erro em listener MIDI:', error); }
+      try { listener(message); } catch (error) { console.error('Erro em listener:', error); }
     });
 
-    if (this.routeConfig.source === 'device') {
-      if (this.routeConfig.sourceId && sourceId !== this.routeConfig.sourceId) return;
-    } else if (sourceId && sourceId !== 'virtual-main') {
-      return;
-    }
-    this.sendRoutedMessage(status, data1, data2);
+    // Envia para o roteador
+    this.routeMessage(status, data1, data2, sourceId);
   }
 
   public addMessageListener(listener: (message: MidiMessage) => void): void {
@@ -353,8 +324,6 @@ class MidiService {
   public removeMessageListener(listener: (message: MidiMessage) => void): void {
     this.messageListeners = this.messageListeners.filter((item) => item !== listener);
   }
-
-  public getConnectedDestination(): MidiDestination | null { return this.connectedOutput; }
 
   private clamp(value: number, minimum: number, maximum: number): number {
     return Math.max(minimum, Math.min(maximum, value));
