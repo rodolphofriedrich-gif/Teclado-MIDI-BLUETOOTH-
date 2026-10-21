@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Power, Pause } from 'lucide-react';
 
 interface MidiKeyboardProps {
   isConnected: boolean;
@@ -12,6 +12,11 @@ interface MidiKeyboardProps {
   customBlackKeyColor: string;
   onActiveNotesChange?: (count: number) => void;
   onActivity?: (velocity: number) => void;
+  // NOVAS PROPS:
+  isActive: boolean;
+  onToggleActive: () => void;
+  isSustainActive: boolean;
+  onToggleSustain: () => void;
 }
 
 const OCTAVE_NOTES = [
@@ -44,6 +49,10 @@ export function MidiKeyboard({
   customBlackKeyColor,
   onActiveNotesChange,
   onActivity,
+  isActive,
+  onToggleActive,
+  isSustainActive,
+  onToggleSustain,
 }: MidiKeyboardProps) {
   const [startOctave, setStartOctave] = useState(3);
   const [keyWidth, setKeyWidth] = useState(60);
@@ -56,8 +65,6 @@ export function MidiKeyboard({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const activeNotesRef = useRef<Set<number>>(new Set());
-  
-  // MAPA DE PONTEIROS: Rastreia qual dedo (pointerId) está em qual nota
   const activePointersRef = useRef<Map<number, number>>(new Map());
 
   const onNoteOffRef = useRef(onNoteOff);
@@ -89,7 +96,6 @@ export function MidiKeyboard({
       setMinKeyWidth(Math.min(MAX_KEY_WIDTH, calculatedMin));
       setKeyWidth((current) => Math.max(Math.min(MAX_KEY_WIDTH, calculatedMin), Math.min(MAX_KEY_WIDTH, current)));
     };
-
     updateMinSize();
     let observer: ResizeObserver | undefined;
     if (containerRef.current && typeof ResizeObserver !== 'undefined') {
@@ -103,21 +109,20 @@ export function MidiKeyboard({
     };
   }, []);
 
-  // PRESSIONA NOTA (Recebe o ID do dedo para saber quem está tocando)
   const pressNote = (note: number, pointerId: number) => {
+    // Se o teclado virtual estiver desligado, não faz nada
+    if (!isActive) return; 
+    
     if (!isConnected) {
       onDisabledPressRef.current();
       return;
     }
 
     const previousNote = activePointersRef.current.get(pointerId);
-
-    // Se este MESMO dedo estava em outra nota, solta a anterior (Glissando)
     if (previousNote !== undefined && previousNote !== note) {
       releaseNote(previousNote, pointerId);
     }
 
-    // Se nenhuma outra tecla/estado está com essa nota, liga o som
     if (!activeNotesRef.current.has(note)) {
       activeNotesRef.current.add(note);
       setPressedNotes((current) => {
@@ -128,23 +133,17 @@ export function MidiKeyboard({
       if (onActivity) onActivity(100 + Math.random() * 27); 
       void onNoteOn(note);
     }
-    
-    // Registra que este dedo está nesta nota
     activePointersRef.current.set(pointerId, note);
   };
 
-  // SOLTA NOTA
   const releaseNote = (note: number, pointerId: number) => {
-    // Remove o dedo do mapa
     activePointersRef.current.delete(pointerId);
     
-    // Verifica se OUTRO dedo ainda está segurando essa mesma nota
     let isStillPressed = false;
     activePointersRef.current.forEach((heldNote) => {
       if (heldNote === note) isStillPressed = true;
     });
 
-    // Só desliga a nota se nenhum outro dedo estiver nela
     if (!isStillPressed && activeNotesRef.current.has(note)) {
       activeNotesRef.current.delete(note);
       setPressedNotes((current) => {
@@ -156,7 +155,6 @@ export function MidiKeyboard({
     }
   };
 
-  // Efeito para limpar notas se o usuário soltar o dedo fora da tela ou trocar de app
   useEffect(() => {
     const releaseAllNotes = () => {
       const notes = Array.from(activeNotesRef.current);
@@ -170,9 +168,7 @@ export function MidiKeyboard({
 
     const handleGlobalPointerUp = (e: PointerEvent) => {
       const note = activePointersRef.current.get(e.pointerId);
-      if (note !== undefined) {
-        releaseNote(note, e.pointerId);
-      }
+      if (note !== undefined) releaseNote(note, e.pointerId);
     };
 
     const handleVisibilityChange = () => {
@@ -191,7 +187,7 @@ export function MidiKeyboard({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       releaseAllNotes();
     };
-  }, []); // Dependências vazias pois as funções usam apenas refs estáveis
+  }, []);
 
   const renderKeys = () => {
     const keys: React.ReactNode[] = [];
@@ -206,37 +202,27 @@ export function MidiKeyboard({
         const isPressed = pressedNotes.has(midiNote);
         const noteLabel = noteDef.name === 'C' ? `C${octave}` : noteDef.name;
 
-        // Handlers para toque, deslize e soltar
         const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-          if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-            e.currentTarget.releasePointerCapture(e.pointerId);
-          }
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
           pressNote(midiNote, e.pointerId);
         };
-
         const handlePointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
-          // Se este dedo já está pressionado em outra tecla, desliza para cá
-          if (activePointersRef.current.has(e.pointerId)) {
-            pressNote(midiNote, e.pointerId);
-          }
+          if (activePointersRef.current.has(e.pointerId)) pressNote(midiNote, e.pointerId);
         };
-
         const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
           releaseNote(midiNote, e.pointerId);
         };
+
+        // Define a opacidade baseada no estado do teclado (Ativo/Inativo)
+        const keyOpacity = isActive ? 1 : 0.5;
 
         if (isWhite) {
           whiteIndex++;
           keys.push(
             <div
-              key={midiNote} 
-              role="button" 
-              aria-label={`Nota ${noteLabel}`} 
-              aria-pressed={isPressed}
-              onPointerDown={handlePointerDown}
-              onPointerEnter={handlePointerEnter}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
+              key={midiNote} role="button" aria-label={`Nota ${noteLabel}`} aria-pressed={isPressed}
+              onPointerDown={handlePointerDown} onPointerEnter={handlePointerEnter}
+              onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}
               onLostPointerCapture={() => releaseNote(midiNote, -1)}
               className="relative z-10 flex h-full shrink-0 cursor-pointer flex-col items-center justify-end rounded-b-lg border transition-[filter,transform,box-shadow] duration-75 select-none"
               style={{
@@ -245,7 +231,9 @@ export function MidiKeyboard({
                 borderColor: isPressed ? '#22d3ee' : 'rgba(100,116,139,0.75)',
                 boxShadow: isPressed ? 'inset 0 3px 9px rgba(15,23,42,0.22), 0 0 12px rgba(34,211,238,0.28)' : '0 3px 0 rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.25)',
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
-                touchAction: 'none', // EVITA SCROLL ACIDENTAL
+                touchAction: 'none',
+                opacity: keyOpacity,
+                transitionProperty: 'opacity, transform, box-shadow, background, border-color'
               }}
             >
               <span className="mb-4 rounded px-1 text-[10px] font-bold select-none" style={{ color: isPressed ? '#075985' : '#1e293b', background: isPressed ? 'rgba(255,255,255,0.45)' : 'transparent' }}>
@@ -259,24 +247,20 @@ export function MidiKeyboard({
 
           keys.push(
             <div
-              key={midiNote} 
-              role="button" 
-              aria-label={`Nota ${noteLabel}`} 
-              aria-pressed={isPressed}
-              onPointerDown={handlePointerDown}
-              onPointerEnter={handlePointerEnter}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
+              key={midiNote} role="button" aria-label={`Nota ${noteLabel}`} aria-pressed={isPressed}
+              onPointerDown={handlePointerDown} onPointerEnter={handlePointerEnter}
+              onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}
               onLostPointerCapture={() => releaseNote(midiNote, -1)}
               className="absolute top-0 z-30 flex h-[62%] cursor-pointer flex-col items-center justify-end rounded-b-sm border select-none"
               style={{
-                width: `${blackWidth}px`,
-                left: `${left}px`,
+                width: `${blackWidth}px`, left: `${left}px`,
                 background: isPressed ? 'linear-gradient(180deg, #38bdf8 0%, #0369a1 100%)' : `linear-gradient(180deg, ${customBlackKeyColor} 0%, ${customBlackKeyColor} 72%, #020617 100%)`,
                 borderColor: isPressed ? '#67e8f9' : '#020617',
                 boxShadow: isPressed ? '0 0 12px rgba(34,211,238,0.55), inset 0 0 5px rgba(255,255,255,0.25)' : '0 3px 4px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.1)',
                 transform: isPressed ? 'translateY(2px)' : 'translateY(0)',
-                touchAction: 'none', // EVITA SCROLL ACIDENTAL
+                touchAction: 'none',
+                opacity: keyOpacity,
+                transitionProperty: 'opacity, transform, box-shadow, background, border-color'
               }}
             >
               <span className="mb-4 text-[9px] font-bold select-none" style={{ color: isPressed ? '#ecfeff' : '#cbd5e1' }}>
@@ -298,7 +282,41 @@ export function MidiKeyboard({
       style={{ background: 'linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,13,25,0.99))', borderColor: 'rgba(148,163,184,0.16)', boxShadow: '0 18px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035)' }}
     >
       <div className="nexus-midi-controls relative z-50 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border px-2 py-2 sm:gap-3 sm:px-3 sm:py-2" style={{ background: 'rgba(5,10,22,0.76)', borderColor: 'rgba(148,163,184,0.14)' }}>
+        
         <div className="flex flex-wrap items-center gap-3">
+          {/* Botão Liga/Desliga do Teclado */}
+          <button
+            type="button"
+            onClick={onToggleActive}
+            className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-bold transition-all ${
+              isActive 
+                ? 'border-cyan-700/50 bg-cyan-900/30 text-cyan-400' 
+                : 'border-slate-700 bg-slate-800/50 text-slate-500'
+            }`}
+            title={isActive ? 'Desativar Teclado Virtual' : 'Ativar Teclado Virtual'}
+          >
+            <Power size={14} className={isActive ? 'text-cyan-400' : 'text-slate-500'} />
+            {isActive ? 'Teclado ON' : 'Teclado OFF'}
+          </button>
+
+          {/* Botão de Sustain */}
+          <button
+            type="button"
+            onClick={onToggleSustain}
+            className={`flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-bold transition-all ${
+              isSustainActive 
+                ? 'border-amber-500/50 bg-amber-900/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.2)]' 
+                : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:bg-slate-700'
+            }`}
+            title="Sustain (CC64)"
+          >
+            <Pause size={14} className={isSustainActive ? 'text-amber-400' : 'text-slate-400'} />
+            Sustain
+          </button>
+
+          <div className="h-6 w-px bg-slate-700/50 mx-1"></div>
+
+          {/* Oitavas */}
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Oitavas</span>
             <div className="flex items-center overflow-hidden rounded-lg border" style={{ background: '#0f172a', borderColor: 'rgba(148,163,184,0.2)' }}>
