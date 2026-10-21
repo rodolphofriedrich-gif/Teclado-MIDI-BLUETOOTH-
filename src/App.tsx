@@ -10,7 +10,7 @@ import { NativeMidi } from './services/nativeMidi';
 import {
   Music2, GitBranch, Activity, SlidersHorizontal, Settings,
   Usb, Bluetooth, Radio, RefreshCw, ChevronDown, X, LogOut,
-  CheckCircle2, AlertTriangle, Info, Circle, Power,
+  CheckCircle2, AlertTriangle, Info, Circle, Power, Check
 } from 'lucide-react';
 
 export const KEYBOARD_PALETTES = [
@@ -54,7 +54,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('keyboard');
   const [selectedChannel, setSelectedChannel] = useState<number>(1);
   const [destinations, setDestinations] = useState<MidiDestination[]>([]);
-  const [connectedDestination, setConnectedDestination] = useState<MidiDestination | null>(null);
+  
+  // NOVO: Múltiplos destinos conectados
+  const [connectedDestinations, setConnectedDestinations] = useState<MidiDestination[]>([]);
+  
   const [activeNotesCount, setActiveNotesCount] = useState(0);
   const [vuLevel, setVuLevel] = useState(0);
   const [isBleServerActive, setIsBleServerActive] = useState(false);
@@ -109,7 +112,7 @@ export default function App() {
       }
     });
     setDestinations(Array.from(uniqueMap.values()));
-    setConnectedDestination(midiManager.getConnectedDestination());
+    setConnectedDestinations(midiManager.getConnectedDestinations());
   }, []);
 
   useEffect(() => {
@@ -118,8 +121,6 @@ export default function App() {
       () => { if (isMounted) void refreshDestinations(); },
       (disconnectedDest) => {
         if (isMounted) {
-          setConnectedDestination(null);
-          setIsBleServerActive(false);
           void refreshDestinations();
           showMessage(`Destino "${disconnectedDest.displayName}" desconectado.`, 'warn', 4000);
         }
@@ -135,25 +136,29 @@ export default function App() {
     return () => { isMounted = false; };
   }, [refreshDestinations, showMessage]);
 
-  const handleConnect = async (dest: MidiDestination) => {
-    try {
-      await midiManager.connect(dest);
-      setConnectedDestination(dest);
-      setIsBleServerActive(false);
-      void refreshDestinations();
-      setIsUsbOpen(false);
-      setIsBleOpen(false);
-      showMessage(`Conectado a: ${dest.displayName}`, 'success', 2500);
-    } catch (err: any) {
-      showMessage(`Erro ao conectar: ${err?.message || 'Erro desconhecido'}`, 'error', 4000);
+  const handleToggleConnect = async (dest: MidiDestination) => {
+    const isConnected = connectedDestinations.some(d => d.id === dest.id);
+    if (isConnected) {
+      await midiManager.disconnectOutput(dest.id);
+      showMessage(`Desconectado: ${dest.displayName}`, 'info', 2500);
+    } else {
+      try {
+        await midiManager.connectOutput(dest);
+        showMessage(`Conectado a: ${dest.displayName}`, 'success', 2500);
+      } catch (err: any) {
+        showMessage(`Erro ao conectar: ${err?.message || 'Erro desconhecido'}`, 'error', 4000);
+      }
     }
+    void refreshDestinations();
   };
 
-  const handleDisconnect = async () => {
+  const handleDisconnectAll = async () => {
     try {
-      if (connectedDestination) { await midiManager.disconnect(); setConnectedDestination(null); }
+      for (const dest of connectedDestinations) {
+        await midiManager.disconnectOutput(dest.id);
+      }
       if (isBleServerActive) { await midiManager.stopBleServer(); setIsBleServerActive(false); }
-      showMessage('Desconectado com sucesso.', 'info', 2500);
+      showMessage('Todos os dispositivos desconectados.', 'info', 2500);
       void refreshDestinations();
     } catch (err: any) {
       showMessage(`Erro ao desconectar: ${err?.message || 'Erro desconhecido'}`, 'error', 3500);
@@ -194,8 +199,8 @@ export default function App() {
 
   const handleNoteOn = useCallback(async (note: number) => {
     if (!isVirtualKeyboardActive) return;
-    if (!connectedDestination && !isBleServerActive) {
-      showMessage('Selecione um destino MIDI ou ative a visibilidade.', 'warn', 2500);
+    if (connectedDestinations.length === 0 && !isBleServerActive) {
+      showMessage('Conecte um destino MIDI ou ative a visibilidade.', 'warn', 2500);
       return;
     }
     try {
@@ -210,10 +215,10 @@ export default function App() {
     } catch (err: any) {
       showMessage(`Erro Note On: ${err?.message}`, 'error', 2500);
     }
-  }, [connectedDestination, isBleServerActive, showMessage, isVirtualKeyboardActive]);
+  }, [connectedDestinations, isBleServerActive, showMessage, isVirtualKeyboardActive]);
 
   const handleNoteOff = useCallback(async (note: number) => {
-    if (!connectedDestination && !isBleServerActive) return;
+    if (connectedDestinations.length === 0 && !isBleServerActive) return;
     try {
       const channel = channelRef.current;
       const res = await midiManager.sendKeyboardNote(channel, note, 0, false);
@@ -223,16 +228,16 @@ export default function App() {
         type: 'Note Off', channel, note, noteName: getNoteName(note), velocity: 0, bytesHex: res.hex,
       });
     } catch {}
-  }, [connectedDestination, isBleServerActive]);
+  }, [connectedDestinations, isBleServerActive]);
 
   const handleDisabledPress = useCallback(() => { 
-    showMessage(isVirtualKeyboardActive ? 'Selecione um destino MIDI primeiro.' : 'O teclado virtual está desativado.', 'warn', 2500); 
+    showMessage(isVirtualKeyboardActive ? 'Conecte um destino MIDI primeiro.' : 'O teclado virtual está desativado.', 'warn', 2500); 
   }, [showMessage, isVirtualKeyboardActive]);
 
   const handleToggleSustain = useCallback(async () => {
     const nextState = !isSustainActive;
     setIsSustainActive(nextState);
-    if (connectedDestination || isBleServerActive) {
+    if (connectedDestinations.length > 0 || isBleServerActive) {
       try {
         await midiManager.sendControlChange(channelRef.current, 64, nextState ? 127 : 0);
         showMessage(`Sustain ${nextState ? 'Ligado' : 'Desligado'}`, 'info', 1500);
@@ -242,7 +247,7 @@ export default function App() {
     } else {
       showMessage('Sustain alterado (Desconectado)', 'warn', 1500);
     }
-  }, [isSustainActive, connectedDestination, isBleServerActive, showMessage]);
+  }, [isSustainActive, connectedDestinations, isBleServerActive, showMessage]);
 
   const handleConfirmExit = async () => {
     setShowExitConfirm(false);
@@ -251,9 +256,10 @@ export default function App() {
 
   const usbAndVirtualDestinations = destinations.filter((d) => d.type === 'usb' || d.type === 'virtual' || d.type === 'local');
   const bleDestinations = destinations.filter((d) => d.type === 'ble');
-  const isUsbConnected = Boolean(connectedDestination && (connectedDestination.type === 'usb' || connectedDestination.type === 'virtual' || connectedDestination.type === 'local'));
-  const isBleConnected = Boolean(connectedDestination && connectedDestination.type === 'ble');
-  const isConnected = !!connectedDestination || isBleServerActive;
+  
+  const isUsbConnected = connectedDestinations.some(d => d.type === 'usb' || d.type === 'virtual' || d.type === 'local');
+  const isBleConnected = connectedDestinations.some(d => d.type === 'ble');
+  const isConnected = connectedDestinations.length > 0 || isBleServerActive;
 
   const closeConnectionMenus = () => { setIsUsbOpen(false); setIsBleOpen(false); };
 
@@ -292,18 +298,18 @@ export default function App() {
             {isUsbOpen && (
               <div className="nexus-dropdown absolute right-0 top-full z-[110] mt-2 w-[calc(100vw-32px)] max-w-[256px] overflow-hidden rounded-2xl bg-[#0f172a] border border-[#1e293b] shadow-2xl">
                 <div className="nexus-dropdown-heading flex items-center justify-between px-4 py-3 border-b border-[#1e293b]">
-                  <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONEXÃO USB</p><p className="mt-1 text-sm font-semibold text-white">Portas disponíveis</p></div>
+                  <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONEXÃO USB</p><p className="mt-1 text-sm font-semibold text-white">Selecione múltiplos</p></div>
                   <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button hover:bg-slate-800 p-1 rounded text-slate-400"><RefreshCw size={16} /></button>
                 </div>
-                {isUsbConnected && (<button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar USB</button>)}
+                {isUsbConnected && (<button type="button" onClick={() => void handleDisconnectAll()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar Todos</button>)}
                 <div className="nexus-dropdown-list p-1">
                   {usbAndVirtualDestinations.length === 0 ? (
                     <p className="nexus-empty-state text-slate-400 p-3 text-sm text-center">Nenhum dispositivo USB encontrado.</p>
                   ) : (
                     usbAndVirtualDestinations.map((dest) => {
-                      const selected = connectedDestination?.id === dest.id;
+                      const selected = connectedDestinations.some(d => d.id === dest.id);
                       return (
-                        <button key={dest.id} type="button" onClick={() => void handleConnect(dest)} className={`nexus-device-option flex items-center justify-between w-full p-2 rounded hover:bg-slate-800 ${selected ? 'bg-slate-800 text-cyan-400' : 'text-slate-300'}`}>
+                        <button key={dest.id} type="button" onClick={() => void handleToggleConnect(dest)} className={`nexus-device-option flex items-center justify-between w-full p-2 rounded hover:bg-slate-800 ${selected ? 'bg-slate-800 text-cyan-400' : 'text-slate-300'}`}>
                           <span className="min-w-0 flex-1 truncate text-sm text-left">{dest.displayName}</span>
                           {selected ? <CheckCircle2 size={17} className="text-cyan-400" /> : <Circle size={15} className="text-slate-600" />}
                         </button>
@@ -329,15 +335,15 @@ export default function App() {
                   <div><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">CONECTIVIDADE</p><p className="mt-1 text-sm font-semibold text-white">Bluetooth MIDI</p></div>
                   <button type="button" onClick={() => void refreshDestinations()} className="nexus-icon-button hover:bg-slate-800 p-1 rounded text-slate-400"><RefreshCw size={16} /></button>
                 </div>
-                {(connectedDestination || isBleServerActive) && (<button type="button" onClick={() => void handleDisconnect()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar</button>)}
+                {(connectedDestinations.length > 0 || isBleServerActive) && (<button type="button" onClick={() => void handleDisconnectAll()} className="nexus-dropdown-action is-danger w-full text-red-400 flex items-center gap-2 px-4 py-2 hover:bg-red-900/20 text-sm border-b border-[#1e293b]"><X size={16} /> Desconectar Todos</button>)}
                 <div className="nexus-dropdown-list max-h-[35vh] overflow-y-auto overscroll-contain custom-scrollbar p-1">
                   {bleDestinations.length === 0 ? (
                     <p className="nexus-empty-state text-slate-400 p-3 text-sm text-center">Nenhum dispositivo BLE MIDI encontrado.</p>
                   ) : (
                     bleDestinations.map((dest) => {
-                      const selected = connectedDestination?.id === dest.id;
+                      const selected = connectedDestinations.some(d => d.id === dest.id);
                       return (
-                        <button key={dest.id} type="button" onClick={() => void handleConnect(dest)} className={`nexus-device-option flex items-center justify-between w-full p-2 rounded hover:bg-slate-800 ${selected ? 'bg-slate-800 text-cyan-400' : 'text-slate-300'}`}>
+                        <button key={dest.id} type="button" onClick={() => void handleToggleConnect(dest)} className={`nexus-device-option flex items-center justify-between w-full p-2 rounded hover:bg-slate-800 ${selected ? 'bg-slate-800 text-cyan-400' : 'text-slate-300'}`}>
                           <span className="min-w-0 flex-1 truncate text-sm text-left">{dest.displayName}</span>
                           {selected ? <CheckCircle2 size={17} className="text-cyan-400" /> : <Circle size={15} className="text-slate-600" />}
                         </button>
@@ -349,7 +355,7 @@ export default function App() {
                   <button type="button" onClick={() => void handleScanBle()} disabled={isScanningBle} className="nexus-action-button bg-blue-600 hover:bg-blue-500 text-white rounded p-2 flex items-center justify-center gap-2 text-sm w-full transition-colors">
                     <Radio size={17} className={isScanningBle ? 'animate-pulse' : ''} /> {isScanningBle ? 'Buscando...' : 'Buscar BLE'}
                   </button>
-                  <button type="button" onClick={() => void (isBleServerActive ? handleDisconnect() : handleStartBleServer())} className={`nexus-action-button w-full rounded p-2 flex items-center justify-center gap-2 text-sm transition-colors ${isBleServerActive ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}>
+                  <button type="button" onClick={() => void (isBleServerActive ? handleDisconnectAll() : handleStartBleServer())} className={`nexus-action-button w-full rounded p-2 flex items-center justify-center gap-2 text-sm transition-colors ${isBleServerActive ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}>
                     {isBleServerActive ? <Power size={17} /> : <Bluetooth size={17} />} {isBleServerActive ? 'Parar Visibilidade' : 'Ficar Visível'}
                   </button>
                 </div>
@@ -361,6 +367,7 @@ export default function App() {
       </header>
 
       {showExitConfirm && (
+        // ... MODAL DE SAÍDA ...
         <div className="nexus-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowExitConfirm(false); }}>
           <section className="nexus-modal w-full max-w-sm rounded-2xl p-5 sm:p-6 bg-[#0f172a] border border-slate-700 shadow-2xl">
             <div className="nexus-modal-icon mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-500"><LogOut size={27} /></div>
@@ -375,6 +382,7 @@ export default function App() {
       )}
 
       {statusMessage && (
+        // ... TOASTS ...
         <div className="nexus-toast-container fixed bottom-5 left-0 right-0 z-[150] flex justify-center px-4 pointer-events-none">
           <div role="status" className={`nexus-toast pointer-events-auto flex max-w-md items-center gap-3 rounded-xl px-4 py-3 shadow-xl ${statusMessage.type === 'success' ? 'bg-emerald-900/90 text-emerald-100 border border-emerald-700' : statusMessage.type === 'warn' ? 'bg-amber-900/90 text-amber-100 border border-amber-700' : statusMessage.type === 'error' ? 'bg-red-900/90 text-red-100 border border-red-700' : 'bg-blue-900/90 text-blue-100 border border-blue-700'}`}>
             <span className="shrink-0">
@@ -390,9 +398,7 @@ export default function App() {
         {activeTab === 'keyboard' ? (
           <div className="nexus-keyboard-page flex min-h-0 w-full flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
             <div className="flex flex-row flex-1 min-h-0 gap-1">
-              <div className="py-1">
-                <VuMeter level={vuLevel} />
-              </div>
+              <div className="py-1"><VuMeter level={vuLevel} /></div>
               <div className="nexus-keyboard-container flex min-h-0 flex-1 flex-col">
                 <MidiKeyboard
                   isConnected={isConnected}
@@ -414,9 +420,7 @@ export default function App() {
                   onToggleSustain={() => void handleToggleSustain()}
                 />
               </div>
-              <div className="py-1">
-                <VuMeter level={vuLevel} />
-              </div>
+              <div className="py-1"><VuMeter level={vuLevel} /></div>
             </div>
 
             <div className="nexus-midi-status flex shrink-0 items-center justify-between gap-3 px-3 py-1 bg-[#0a0f1c] border border-[#1e293b] rounded-lg">
@@ -424,7 +428,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full" style={{ background: isConnected ? '#10b981' : '#f59e0b', boxShadow: isConnected ? '0 0 10px rgba(16,185,129,0.55)' : 'none' }} />
                   <span className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-300">
-                    {isConnected ? 'Pronto' : 'Aguardando'}
+                    {connectedDestinations.length > 0 ? `${connectedDestinations.length} Conectados` : isConnected ? 'Pronto' : 'Aguardando'}
                   </span>
                 </div>
                 <span className="text-[10px] font-mono text-slate-500 border-l border-slate-700 pl-4">
@@ -445,12 +449,19 @@ export default function App() {
             </div>
           </div>
         ) : activeTab === 'router' ? (
-          <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiRouterScreen destinations={destinations} onRefresh={refreshDestinations} /></div>
+          <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden">
+            <MidiRouterScreen 
+              destinations={destinations} 
+              connectedDestinations={connectedDestinations}
+              onRefresh={refreshDestinations} 
+            />
+          </div>
         ) : activeTab === 'controls' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4"><MidiControlsScreen channel={selectedChannel} isConnected={isConnected} onStatus={(message, type = 'info') => showMessage(message, type, 3000)} /></div>
         ) : activeTab === 'monitor' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         ) : (
+          // ... CONFIGURAÇÕES ...
           <div className="nexus-settings-page min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
             <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6 bg-[#0f172a] border border-[#1e293b]">
               <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5 border-b border-[#1e293b]">
