@@ -9,22 +9,22 @@ import { SoundFontScreen } from './components/SoundFontScreen';
 import { VuMeter } from './components/VuMeter';
 import { NativeMidi } from './services/nativeMidi';
 import {
-  Music2, GitBranch, Activity, SlidersHorizontal, Settings,
+  Music2, GitBranch, Activity, SlidersHorizontal,
   Usb, Bluetooth, Radio, RefreshCw, ChevronDown, X, LogOut,
-  CheckCircle2, AlertTriangle, Info, Circle, Power, AudioWaveform, Heart,
+  CheckCircle2, AlertTriangle, Info, Circle, Power, AudioWaveform,
   Menu
 } from 'lucide-react';
 
 export const KEYBOARD_PALETTES = [
-  { id: 'default', name: 'Clássico / Padrão', white: '#ffffff', black: '#1e293b' },
-  { id: 'custom-blue', name: 'Azul Personalizado (#D6E6F7 / #0F3D73)', white: '#D6E6F7', black: '#0F3D73' },
-  { id: 'silver-sapphire', name: 'Prata Gelo + Azul Safira', white: '#D8DDE3', black: '#0F3D73' },
-  { id: 'silver-burgundy-deep', name: 'Prata Escovado + Bordo Profundo', white: '#BFC5CA', black: '#5C0A1D' },
-  { id: 'whitegold-navy', name: 'Ouro Branco + Azul-Marinho', white: '#E5E4E2', black: '#1C2C5B' },
-  { id: 'champagne-burgundy', name: 'Champagne + Bordo Aveludado', white: '#E8D6A7', black: '#6D071A' },
-  { id: 'platinum-amethyst', name: 'Platina + Roxo Ametista', white: '#E5E1DA', black: '#6A0DAD' },
-  { id: 'ivory-emerald', name: 'Marfim Acetinado + Verde Esmeralda', white: '#F4EBD0', black: '#008C69' },
-  { id: 'wood-vintage', name: 'Vintage / Creme', white: '#fef3c7', black: '#451a03' },
+  { id: 'default', name: 'Padrão', white: '#ffffff', black: '#1e293b' },
+  { id: 'custom-blue', name: 'Azul', white: '#D6E6F7', black: '#0F3D73' },
+  { id: 'silver-sapphire', name: 'Prata/Safira', white: '#D8DDE3', black: '#0F3D73' },
+  { id: 'silver-burgundy-deep', name: 'Prata/Bordo', white: '#BFC5CA', black: '#5C0A1D' },
+  { id: 'whitegold-navy', name: 'Ouro/Marinho', white: '#E5E4E2', black: '#1C2C5B' },
+  { id: 'champagne-burgundy', name: 'Champagne', white: '#E8D6A7', black: '#6D071A' },
+  { id: 'platinum-amethyst', name: 'Ametista', white: '#E5E1DA', black: '#6A0DAD' },
+  { id: 'ivory-emerald', name: 'Esmeralda', white: '#F4EBD0', black: '#008C69' },
+  { id: 'wood-vintage', name: 'Vintage', white: '#fef3c7', black: '#451a03' },
 ];
 
 export const VELOCITY_OPTIONS = [
@@ -34,34 +34,34 @@ export const VELOCITY_OPTIONS = [
   { id: 127, name: 'Máximo', desc: '127' },
 ];
 
-type AppTab = 'keyboard' | 'router' | 'monitor' | 'controls' | 'soundfont' | 'settings';
+// 'settings' removido
+type AppTab = 'keyboard' | 'router' | 'monitor' | 'controls' | 'soundfont';
 
+// 'settings' removido
 const NAV_ITEMS = [
   { id: 'keyboard', label: 'Teclado Virtual', Icon: Music2 },
   { id: 'router', label: 'Roteador MIDI', Icon: GitBranch },
   { id: 'controls', label: 'Controles CC', Icon: SlidersHorizontal },
   { id: 'soundfont', label: 'Sintetizador', Icon: AudioWaveform },
   { id: 'monitor', label: 'Monitor MIDI', Icon: Activity },
-  { id: 'settings', label: 'Ajustes', Icon: Settings },
 ] as const;
 
-// NOVO: Mapeamento de títulos para o Header
+// 'settings' removido
 const TAB_TITLES: Record<AppTab, string> = {
   keyboard: 'Modo Teclado / Pads',
   router: 'Roteador MIDI Matrix',
   controls: 'Controles CC',
   soundfont: 'Modo Sintetizador',
   monitor: 'Monitor MIDI',
-  settings: 'Ajustes do App',
 };
 
+// 'settings' removido
 const TAB_COLORS: Record<AppTab, { bg: string; border: string; shadow: string; text: string }> = {
   keyboard: { bg: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)', border: 'rgba(56, 189, 248, 0.5)', shadow: '0 4px 14px rgba(14, 165, 233, 0.4)', text: 'text-blue-400' },
   router: { bg: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)', text: 'text-emerald-400' },
   controls: { bg: 'linear-gradient(135deg, #d97706 0%, #ea580c 100%)', border: 'rgba(251, 191, 36, 0.5)', shadow: '0 4px 14px rgba(245, 158, 11, 0.4)', text: 'text-amber-400' },
   soundfont: { bg: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)', text: 'text-emerald-400' },
   monitor: { bg: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', border: 'rgba(192, 132, 252, 0.5)', shadow: '0 4px 14px rgba(168, 85, 247, 0.4)', text: 'text-purple-400' },
-  settings: { bg: 'linear-gradient(135deg, #e11d48 0%, #c026d3 100%)', border: 'rgba(251, 113, 133, 0.5)', shadow: '0 4px 14px rgba(244, 63, 94, 0.4)', text: 'text-rose-400' },
 };
 
 export default function App() {
@@ -292,7 +292,7 @@ export default function App() {
       
       <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
         
-        {/* ESQUERDA: MENU */}
+        {/* ESQUERDA: MENU E TÍTULO */}
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <div className="relative" ref={navMenuRef}>
             <button 
@@ -307,11 +307,11 @@ export default function App() {
             </button>
 
             {isNavMenuOpen && (
-              <div className="absolute top-full left-0 mt-2 w-56 rounded-xl border border-[#1e293b] bg-[#0f172a] shadow-2xl overflow-hidden z-[150] animate-in fade-in slide-in-from-top-2 duration-150">
-                <div className="px-4 py-2 border-b border-[#1e293b] bg-[#0a0f1c]">
+              <div className="absolute top-full left-0 mt-2 w-56 rounded-xl border border-[#1e293b] bg-[#0f172a] shadow-2xl overflow-hidden z-[150] animate-in fade-in slide-in-from-top-2 duration-150 max-h-[80vh] flex flex-col">
+                <div className="px-4 py-2 border-b border-[#1e293b] bg-[#0a0f1c] shrink-0">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Navegação</p>
                 </div>
-                <div className="p-1 flex flex-col gap-0.5">
+                <div className="p-1 flex flex-col gap-0.5 overflow-y-auto custom-scrollbar">
                   {NAV_ITEMS.map(({ id, label, Icon }) => {
                     const selected = activeTab === id;
                     const tabColor = TAB_COLORS[id];
@@ -342,17 +342,17 @@ export default function App() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* CENTRO: TÍTULO DO MODO ATUAL */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
-          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.2em] text-slate-300 drop-shadow-md">
-            {TAB_TITLES[activeTab]}
-          </span>
+          
+          {/* TÍTULO MOVIDO PARA CÁ */}
+          <div className="flex items-center justify-center pointer-events-none ml-2 sm:ml-4">
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 drop-shadow-md truncate max-w-[120px] sm:max-w-none">
+              {TAB_TITLES[activeTab]}
+            </span>
+          </div>
         </div>
 
         {/* DIREITA: CONEXÕES E SAIR */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="relative">
             <button type="button" onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); setIsNavMenuOpen(false); void refreshDestinations(); }} className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isUsbConnected ? 'is-connected' : ''}`}>
               <span className="nexus-connection-icon flex items-center justify-center"><Usb size={18} strokeWidth={1.8} /></span>
@@ -485,7 +485,6 @@ export default function App() {
                   onToggleSustain={() => void handleToggleSustain()}
                   selectedVelocity={selectedVelocity}
                   onSelectVelocity={setSelectedVelocity}
-                  // NOVO: Passando o controle de paletas para o teclado
                   selectedPaletteId={selectedPaletteId}
                   onSelectPalette={setSelectedPaletteId}
                 />
@@ -526,24 +525,8 @@ export default function App() {
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden">
             <SoundFontScreen onStatus={(message, type = 'info') => showMessage(message, type, 3000)} />
           </div>
-        ) : activeTab === 'monitor' ? (
-          <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         ) : (
-          /* AJUSTES GLOBAIS */
-          <div className="nexus-settings-page min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
-            <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6 bg-[#0f172a] border border-[#1e293b]">
-              <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5 border-b border-[#1e293b]">
-                <div className="nexus-settings-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300"><Settings size={24} /></div>
-                <div className="min-w-0"><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">SISTEMA</p><h2 className="mt-1 text-lg font-bold sm:text-xl text-white">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm text-slate-400">Ajustes globais do aplicativo.</p></div>
-              </div>
-              
-              <div className="flex flex-col items-center justify-center text-center gap-3 py-8">
-                <p className="text-sm font-bold text-slate-200">NexusMIDI Pro <span className="text-cyan-500">v1.0.0</span></p>
-                <p className="text-xs text-slate-500">Desenvolvido com <Heart size={12} className="inline text-rose-500" /> para músicos.</p>
-                <p className="text-[10px] text-slate-600 mt-2 max-w-xs leading-relaxed">Um controlador MIDI avançado com suporte a USB, BLE, roteamento em tempo real e sintetizador SoundFont. As cores do teclado agora podem ser alteradas no menu de configurações rápidas do próprio teclado.</p>
-              </div>
-            </section>
-          </div>
+          <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         )}
       </main>
     </div>
