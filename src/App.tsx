@@ -5,13 +5,14 @@ import { MidiKeyboard } from './components/MidiKeyboard';
 import { MidiRouterScreen } from './components/MidiRouterScreen';
 import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { MidiControlsScreen } from './components/MidiControlsScreen';
-import { SoundFontScreen } from './components/SoundFontScreen'; // NOVO
+import { SoundFontScreen } from './components/SoundFontScreen';
 import { VuMeter } from './components/VuMeter';
 import { NativeMidi } from './services/nativeMidi';
 import {
   Music2, GitBranch, Activity, SlidersHorizontal, Settings,
   Usb, Bluetooth, Radio, RefreshCw, ChevronDown, X, LogOut,
-  CheckCircle2, AlertTriangle, Info, Circle, Power, AudioWaveform, Heart
+  CheckCircle2, AlertTriangle, Info, Circle, Power, AudioWaveform, Heart,
+  Menu
 } from 'lucide-react';
 
 export const KEYBOARD_PALETTES = [
@@ -33,25 +34,24 @@ export const VELOCITY_OPTIONS = [
   { id: 127, name: 'Máximo', desc: '127' },
 ];
 
-// ADICIONADO 'soundfont' AQUI
 type AppTab = 'keyboard' | 'router' | 'monitor' | 'controls' | 'soundfont' | 'settings';
 
 const NAV_ITEMS = [
-  { id: 'keyboard', label: 'Teclado', Icon: Music2 },
-  { id: 'router', label: 'Router MIDI', Icon: GitBranch },
-  { id: 'controls', label: 'Controles', Icon: SlidersHorizontal },
-  { id: 'soundfont', label: 'SoundFont', Icon: AudioWaveform }, // NOVO
-  { id: 'monitor', label: 'Monitor', Icon: Activity },
+  { id: 'keyboard', label: 'Teclado Virtual', Icon: Music2 },
+  { id: 'router', label: 'Roteador MIDI', Icon: GitBranch },
+  { id: 'controls', label: 'Controles CC', Icon: SlidersHorizontal },
+  { id: 'soundfont', label: 'Sintetizador', Icon: AudioWaveform },
+  { id: 'monitor', label: 'Monitor MIDI', Icon: Activity },
   { id: 'settings', label: 'Ajustes', Icon: Settings },
 ] as const;
 
-const TAB_COLORS: Record<AppTab, { bg: string; border: string; shadow: string }> = {
-  keyboard: { bg: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)', border: 'rgba(56, 189, 248, 0.5)', shadow: '0 4px 14px rgba(14, 165, 233, 0.4)' },
-  router: { bg: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)' },
-  controls: { bg: 'linear-gradient(135deg, #d97706 0%, #ea580c 100%)', border: 'rgba(251, 191, 36, 0.5)', shadow: '0 4px 14px rgba(245, 158, 11, 0.4)' },
-  soundfont: { bg: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)' }, // NOVO
-  monitor: { bg: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', border: 'rgba(192, 132, 252, 0.5)', shadow: '0 4px 14px rgba(168, 85, 247, 0.4)' },
-  settings: { bg: 'linear-gradient(135deg, #e11d48 0%, #c026d3 100%)', border: 'rgba(251, 113, 133, 0.5)', shadow: '0 4px 14px rgba(244, 63, 94, 0.4)' },
+const TAB_COLORS: Record<AppTab, { bg: string; border: string; shadow: string; text: string }> = {
+  keyboard: { bg: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)', border: 'rgba(56, 189, 248, 0.5)', shadow: '0 4px 14px rgba(14, 165, 233, 0.4)', text: 'text-blue-400' },
+  router: { bg: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)', text: 'text-emerald-400' },
+  controls: { bg: 'linear-gradient(135deg, #d97706 0%, #ea580c 100%)', border: 'rgba(251, 191, 36, 0.5)', shadow: '0 4px 14px rgba(245, 158, 11, 0.4)', text: 'text-amber-400' },
+  soundfont: { bg: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)', text: 'text-emerald-400' },
+  monitor: { bg: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', border: 'rgba(192, 132, 252, 0.5)', shadow: '0 4px 14px rgba(168, 85, 247, 0.4)', text: 'text-purple-400' },
+  settings: { bg: 'linear-gradient(135deg, #e11d48 0%, #c026d3 100%)', border: 'rgba(251, 113, 133, 0.5)', shadow: '0 4px 14px rgba(244, 63, 94, 0.4)', text: 'text-rose-400' },
 };
 
 export default function App() {
@@ -65,8 +65,13 @@ export default function App() {
   const [isScanningBle, setIsScanningBle] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'warn' | 'error' | 'success'; } | null>(null);
   const [lastTxCommand, setLastTxCommand] = useState<MidiLogEntry | null>(null);
+  
+  // Estados de Menus
+  const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
   const [isUsbOpen, setIsUsbOpen] = useState(false);
   const [isBleOpen, setIsBleOpen] = useState(false);
+  
+  const navMenuRef = useRef<HTMLDivElement>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const [isVirtualKeyboardActive, setIsVirtualKeyboardActive] = useState(true);
@@ -86,6 +91,17 @@ export default function App() {
   useEffect(() => { channelRef.current = selectedChannel; }, [selectedChannel]);
   const velocityRef = useRef<number>(selectedVelocity);
   useEffect(() => { velocityRef.current = selectedVelocity; }, [selectedVelocity]);
+
+  // Fecha o menu de navegação ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (navMenuRef.current && !navMenuRef.current.contains(event.target as Node)) {
+        setIsNavMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const handleActivity = (velocity: number) => setVuLevel(velocity);
@@ -266,30 +282,68 @@ export default function App() {
   return (
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
       
+      {/* HEADER REFORMULADO COM MENU SUSPENSO */}
       <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
+        
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <button type="button" className="nexus-brand flex min-w-0 items-center gap-2" onClick={() => { setActiveTab('keyboard'); closeConnectionMenus(); }}>
-            <span className="nexus-brand-name whitespace-nowrap text-xs font-extrabold tracking-wider sm:text-sm">NEXUSMIDI <span>Pro</span></span>
-          </button>
-          <nav aria-label="Navegação principal" className="nexus-nav flex items-center gap-1">
-            {NAV_ITEMS.map(({ id, label, Icon }) => {
-              const selected = activeTab === id;
-              const tabColor = TAB_COLORS[id];
-              return (
-                <button key={id} type="button" onClick={() => { setActiveTab(id); closeConnectionMenus(); }} title={label} className={`nexus-nav-button relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200 ${selected ? 'is-active' : ''}`} style={selected ? { background: tabColor.bg, borderColor: tabColor.border, boxShadow: tabColor.shadow, color: '#ffffff' } : undefined}>
-                  <Icon size={18} strokeWidth={2.2} aria-hidden="true" />
-                  {id === 'router' && <span className="nexus-nav-indicator absolute right-1.5 top-1.5" aria-hidden="true" />}
-                </button>
-              );
-            })}
-          </nav>
+          {/* BOTÃO DO MENU (Logo + Ícone) */}
+          <div className="relative" ref={navMenuRef}>
+            <button 
+              type="button" 
+              onClick={() => { setIsNavMenuOpen(!isNavMenuOpen); closeConnectionMenus(); }}
+              className="nexus-brand flex min-w-0 items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <Menu size={18} className="text-cyan-400" />
+              <span className="nexus-brand-name whitespace-nowrap text-xs font-extrabold tracking-wider sm:text-sm hidden xs:inline">
+                NEXUSMIDI <span>Pro</span>
+              </span>
+            </button>
+
+            {/* DROPDOWN DE NAVEGAÇÃO */}
+            {isNavMenuOpen && (
+              <div className="absolute top-full left-0 mt-2 w-56 rounded-xl border border-[#1e293b] bg-[#0f172a] shadow-2xl overflow-hidden z-[150] animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="px-4 py-2 border-b border-[#1e293b] bg-[#0a0f1c]">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Navegação</p>
+                </div>
+                <div className="p-1 flex flex-col gap-0.5">
+                  {NAV_ITEMS.map(({ id, label, Icon }) => {
+                    const selected = activeTab === id;
+                    const tabColor = TAB_COLORS[id];
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setActiveTab(id);
+                          setIsNavMenuOpen(false);
+                          closeConnectionMenus();
+                        }}
+                        className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg transition-colors ${
+                          selected 
+                            ? 'bg-slate-800 text-white shadow-sm' 
+                            : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                        }`}
+                      >
+                        <div className={`p-1.5 rounded-md ${selected ? 'bg-slate-700' : 'bg-[#0a0f1c]'}`} style={selected ? { color: tabColor.text } : {}}>
+                          <Icon size={16} className={selected ? tabColor.text : ''} />
+                        </div>
+                        <span className={`text-xs font-semibold ${selected ? 'text-white' : ''}`}>{label}</span>
+                        {selected && <div className={`ml-auto w-1.5 h-1.5 rounded-full ${tabColor.text.replace('text-', 'bg-')}`} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* CONEXÕES E SAIR (Mantidos no canto direito) */}
         <div className="flex items-center gap-2">
           <div className="relative">
-            <button type="button" onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); void refreshDestinations(); }} className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isUsbConnected ? 'is-connected' : ''}`}>
+            <button type="button" onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); setIsNavMenuOpen(false); void refreshDestinations(); }} className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isUsbConnected ? 'is-connected' : ''}`}>
               <span className="nexus-connection-icon flex items-center justify-center"><Usb size={18} strokeWidth={1.8} /></span>
-              <span className="nexus-connection-copy flex flex-col items-start leading-none text-left">
+              <span className="nexus-connection-copy flex flex-col items-start leading-none text-left hidden sm:flex">
                 <span className="nexus-connection-title text-[10px] font-bold uppercase">USB</span>
                 <span className="nexus-connection-state mt-0.5 text-xs">{isUsbConnected ? 'Conectado' : 'Desconectado'}</span>
               </span>
@@ -321,9 +375,9 @@ export default function App() {
             )}
           </div>
           <div className="relative">
-            <button type="button" onClick={() => { setIsBleOpen(!isBleOpen); setIsUsbOpen(false); void refreshDestinations(); }} className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isBleConnected || isBleServerActive ? 'is-connected' : ''}`}>
+            <button type="button" onClick={() => { setIsBleOpen(!isBleOpen); setIsUsbOpen(false); setIsNavMenuOpen(false); void refreshDestinations(); }} className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isBleConnected || isBleServerActive ? 'is-connected' : ''}`}>
               <span className="nexus-connection-icon flex items-center justify-center"><Bluetooth size={18} strokeWidth={1.8} /></span>
-              <span className="nexus-connection-copy flex flex-col items-start leading-none text-left">
+              <span className="nexus-connection-copy flex flex-col items-start leading-none text-left hidden sm:flex">
                 <span className="nexus-connection-title text-[10px] font-bold uppercase">Bluetooth</span>
                 <span className="nexus-connection-state mt-0.5 text-xs">{isBleServerActive ? 'Visível' : isBleConnected ? 'Conectado' : 'Desconectado'}</span>
               </span>
