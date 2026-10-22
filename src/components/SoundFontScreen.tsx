@@ -56,8 +56,8 @@ export function SoundFontScreen({ onStatus }: Props) {
   const [transpose, setTranspose] = useState(0);
   const [typedInput, setTypedInput] = useState('');
   
-  // NOVO: Estado para controlar a visibilidade do teclado numérico
-  const [showKeypad, setShowKeypad] = useState(false);
+  // Estado para alternar entre Lista e Teclado
+  const [viewMode, setViewMode] = useState<'list' | 'keypad'>('list');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,6 +113,7 @@ export function SoundFontScreen({ onStatus }: Props) {
     if (match) selectPreset(match);
     else onStatus('Programa não encontrado.', 'warn');
     setTypedInput('');
+    setViewMode('list'); // Volta para a lista automaticamente após digitar
   };
 
   const handleAudition = () => {
@@ -129,6 +130,7 @@ export function SoundFontScreen({ onStatus }: Props) {
           <Music size={16} className="text-cyan-400" />
           <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Sintetizador SoundFont</span>
         </div>
+        
         <div className="flex items-center gap-2">
           {loadedFile ? (
             <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 truncate max-w-[120px] sm:max-w-[200px]">
@@ -159,39 +161,47 @@ export function SoundFontScreen({ onStatus }: Props) {
           />
           <div className="flex-1 bg-[#0f172a] rounded-xl border border-[#1e293b] p-2 min-h-0 flex flex-col relative">
             
-            {/* BOTÃO DE TOGGLE DO TECLADO (Para mobile) */}
-            <button 
-              onClick={() => setShowKeypad(!showKeypad)} 
-              className={`absolute bottom-4 right-4 z-50 px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 text-xs font-bold transition-all ${showKeypad ? 'bg-rose-600 text-white' : 'bg-cyan-600 text-white'}`}
-            >
-              {showKeypad ? <List size={16} /> : <Keyboard size={16} />}
-              {showKeypad ? 'Ver Lista' : 'Teclado Numérico'}
-            </button>
+            {/* Toggle Lista / Teclado */}
+            <div className="flex bg-[#0a0f1c] rounded-lg p-0.5 border border-[#1e293b] mb-2 shrink-0 self-start">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                <List size={12} /> LISTA
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('keypad')}
+                className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keypad' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                <Keyboard size={12} /> TECLADO
+              </button>
+            </div>
 
-            {/* Exibe a lista OU o teclado baseado no estado (no desktop mostra os dois lado a lado) */}
-            <div className={`h-full ${showKeypad ? 'hidden md:block' : 'block'}`}>
-              <SoundFontList 
-                soundFonts={DEFAULT_PRESETS} 
-                activeSoundFontId={activePreset.id} 
-                onSelectSoundFont={selectPreset} 
-              />
+            <div className="flex-1 min-h-0">
+              {viewMode === 'list' ? (
+                <SoundFontList 
+                  soundFonts={DEFAULT_PRESETS} 
+                  activeSoundFontId={activePreset.id} 
+                  onSelectSoundFont={selectPreset} 
+                />
+              ) : (
+                <div className="h-full w-full max-w-sm mx-auto">
+                  <NumericKeypad 
+                    typedInput={typedInput}
+                    activeProgramNumber={activePreset.programNumber}
+                    activePresetName={activePreset.name}
+                    onDigitPress={(d) => setTypedInput(prev => prev.length < 3 ? prev + d : prev)}
+                    onClearPress={() => setTypedInput('')}
+                    onEnterPress={handleEnter}
+                    onPreviousSound={handlePrevious}
+                    onNextSound={handleNext}
+                  />
+                </div>
+              )}
             </div>
           </div>
-        </div>
-
-        {/* PAINEL DIREITO: Teclado Numérico (Oculto no mobile por padrão) */}
-        <div className={`flex-1 md:w-[35%] min-h-[300px] md:min-h-0 flex-col ${showKeypad ? 'flex' : 'hidden md:flex'}`}>
-          <NumericKeypad 
-            typedInput={typedInput}
-            activeProgramNumber={activePreset.programNumber}
-            activePresetName={activePreset.name}
-            onDigitPress={(d) => setTypedInput(prev => prev.length < 3 ? prev + d : prev)}
-            onClearPress={() => setTypedInput('')}
-            onEnterPress={handleEnter}
-            onPreviousSound={handlePrevious}
-            onNextSound={handleNext}
-            onClose={() => setShowKeypad(false)} // NOVO: Fecha ao clicar em IR
-          />
         </div>
 
       </div>
