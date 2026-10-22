@@ -34,10 +34,8 @@ export const VELOCITY_OPTIONS = [
   { id: 127, name: 'Máximo', desc: '127' },
 ];
 
-// 'settings' removido
 type AppTab = 'keyboard' | 'router' | 'monitor' | 'controls' | 'soundfont';
 
-// 'settings' removido
 const NAV_ITEMS = [
   { id: 'keyboard', label: 'Teclado Virtual', Icon: Music2 },
   { id: 'router', label: 'Roteador MIDI', Icon: GitBranch },
@@ -46,21 +44,19 @@ const NAV_ITEMS = [
   { id: 'monitor', label: 'Monitor MIDI', Icon: Activity },
 ] as const;
 
-// 'settings' removido
 const TAB_TITLES: Record<AppTab, string> = {
   keyboard: 'Modo Teclado / Pads',
   router: 'Roteador MIDI Matrix',
   controls: 'Controles CC',
-  soundfont: 'Modo Sintetizador',
+  soundfont: 'Sintetizador SoundFont',
   monitor: 'Monitor MIDI',
 };
 
-// 'settings' removido
 const TAB_COLORS: Record<AppTab, { bg: string; border: string; shadow: string; text: string }> = {
   keyboard: { bg: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)', border: 'rgba(56, 189, 248, 0.5)', shadow: '0 4px 14px rgba(14, 165, 233, 0.4)', text: 'text-blue-400' },
   router: { bg: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)', text: 'text-emerald-400' },
   controls: { bg: 'linear-gradient(135deg, #d97706 0%, #ea580c 100%)', border: 'rgba(251, 191, 36, 0.5)', shadow: '0 4px 14px rgba(245, 158, 11, 0.4)', text: 'text-amber-400' },
-  soundfont: { bg: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)', text: 'text-emerald-400' },
+  soundfont: { bg: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)', text: 'text-cyan-400' },
   monitor: { bg: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', border: 'rgba(192, 132, 252, 0.5)', shadow: '0 4px 14px rgba(168, 85, 247, 0.4)', text: 'text-purple-400' },
 };
 
@@ -287,12 +283,17 @@ export default function App() {
 
   const closeConnectionMenus = () => { setIsUsbOpen(false); setIsBleOpen(false); };
 
+  // Pega o ícone e a cor da aba ativa dinamicamente
+  const currentNavItem = NAV_ITEMS.find(item => item.id === activeTab);
+  const CurrentIcon = currentNavItem ? currentNavItem.Icon : Music2;
+  const currentColor = TAB_COLORS[activeTab].text;
+
   return (
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
       
       <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
         
-        {/* ESQUERDA: MENU E TÍTULO */}
+        {/* ESQUERDA: MENU E TÍTULO DINÂMICO */}
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <div className="relative" ref={navMenuRef}>
             <button 
@@ -343,11 +344,14 @@ export default function App() {
             )}
           </div>
           
-          {/* TÍTULO MOVIDO PARA CÁ */}
+          {/* TÍTULO DO MODO DINÂMICO (Ícone e Cor correspondentes) */}
           <div className="flex items-center justify-center pointer-events-none ml-2 sm:ml-4">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 drop-shadow-md truncate max-w-[120px] sm:max-w-none">
-              {TAB_TITLES[activeTab]}
-            </span>
+            <div className="flex items-center gap-2">
+              <CurrentIcon size={16} className={currentColor} />
+              <span className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.15em] drop-shadow-md truncate max-w-[150px] sm:max-w-none ${currentColor}`}>
+                {TAB_TITLES[activeTab]}
+              </span>
+            </div>
           </div>
         </div>
 
