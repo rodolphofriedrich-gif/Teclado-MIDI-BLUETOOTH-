@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, CheckCircle2, AlertCircle, Music, Keyboard, List } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle, List, Keyboard } from 'lucide-react';
 import { synthService } from '../services/synthService';
 import { SoundFontPreset } from '../types/soundfont';
 import { ActiveSoundFontCard } from './soundfont/ActiveSoundFontCard';
@@ -56,7 +56,6 @@ export function SoundFontScreen({ onStatus }: Props) {
   const [transpose, setTranspose] = useState(0);
   const [typedInput, setTypedInput] = useState('');
   
-  // Estado para alternar entre Lista e Teclado
   const [viewMode, setViewMode] = useState<'list' | 'keypad'>('list');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -113,7 +112,7 @@ export function SoundFontScreen({ onStatus }: Props) {
     if (match) selectPreset(match);
     else onStatus('Programa não encontrado.', 'warn');
     setTypedInput('');
-    setViewMode('list'); // Volta para a lista automaticamente após digitar
+    setViewMode('list');
   };
 
   const handleAudition = () => {
@@ -123,85 +122,85 @@ export function SoundFontScreen({ onStatus }: Props) {
   };
 
   return (
-    <div className="flex-1 w-full bg-[#0a0f1c] p-2 sm:p-4 flex flex-col gap-3 text-slate-100 overflow-hidden">
+    <div className="flex-1 w-full bg-[#0a0f1c] p-2 sm:p-3 flex flex-col gap-2 text-slate-100 overflow-hidden">
       
-      <header className="flex items-center justify-between border-b border-[#1e293b] pb-2 shrink-0">
-        <div className="flex items-center gap-2">
-          <Music size={16} className="text-cyan-400" />
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Sintetizador SoundFont</span>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {loadedFile ? (
-            <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 truncate max-w-[120px] sm:max-w-[200px]">
-              <CheckCircle2 size={12} /> {loadedFile}
-            </span>
-          ) : (
-            <span className="text-[10px] font-mono text-amber-500 flex items-center gap-1">
-              <AlertCircle size={12} /> Vazio
-            </span>
-          )}
-          <input type="file" accept=".sf2" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-          <button onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-[10px] font-bold shadow transition flex items-center gap-1.5 disabled:opacity-50">
-            <UploadCloud size={12} /> {isLoading ? '...' : 'Importar'}
-          </button>
-        </div>
-      </header>
+      {/* 1. Card do Instrumento Ativo no Topo */}
+      <div className="shrink-0 w-full">
+        <ActiveSoundFontCard 
+          preset={activePreset} 
+          volume={volume} onVolumeChange={setVolume}
+          reverb={reverb} onReverbChange={setReverb}
+          transpose={transpose} onTransposeChange={setTranspose}
+          onAudition={handleAudition}
+        />
+      </div>
 
-      <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-3">
+      {/* 2. Área Principal (Lista ou Teclado) */}
+      <div className="flex-1 bg-[#0f172a] rounded-xl border border-[#1e293b] p-2 min-h-0 flex flex-col relative">
         
-        {/* PAINEL ESQUERDO: Controles + Lista */}
-        <div className="flex-1 flex flex-col gap-2 min-h-0 md:w-[65%]">
-          <ActiveSoundFontCard 
-            preset={activePreset} 
-            volume={volume} onVolumeChange={setVolume}
-            reverb={reverb} onReverbChange={setReverb}
-            transpose={transpose} onTransposeChange={setTranspose}
-            onAudition={handleAudition}
-          />
-          <div className="flex-1 bg-[#0f172a] rounded-xl border border-[#1e293b] p-2 min-h-0 flex flex-col relative">
-            
-            {/* Toggle Lista / Teclado */}
-            <div className="flex bg-[#0a0f1c] rounded-lg p-0.5 border border-[#1e293b] mb-2 shrink-0 self-start">
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <List size={12} /> LISTA
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('keypad')}
-                className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keypad' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Keyboard size={12} /> TECLADO
-              </button>
-            </div>
-
-            <div className="flex-1 min-h-0">
-              {viewMode === 'list' ? (
-                <SoundFontList 
-                  soundFonts={DEFAULT_PRESETS} 
-                  activeSoundFontId={activePreset.id} 
-                  onSelectSoundFont={selectPreset} 
-                />
-              ) : (
-                <div className="h-full w-full max-w-sm mx-auto">
-                  <NumericKeypad 
-                    typedInput={typedInput}
-                    activeProgramNumber={activePreset.programNumber}
-                    activePresetName={activePreset.name}
-                    onDigitPress={(d) => setTypedInput(prev => prev.length < 3 ? prev + d : prev)}
-                    onClearPress={() => setTypedInput('')}
-                    onEnterPress={handleEnter}
-                    onPreviousSound={handlePrevious}
-                    onNextSound={handleNext}
-                  />
-                </div>
-              )}
-            </div>
+        {/* Barra de Ferramentas Unificada */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-2 shrink-0">
+          
+          {/* Toggle Lista / Teclado */}
+          <div className="flex bg-[#0a0f1c] rounded-lg p-0.5 border border-[#1e293b]">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <List size={12} /> LISTA
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('keypad')}
+              className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keypad' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              <Keyboard size={12} /> TECLADO
+            </button>
           </div>
+
+          {/* Status do Arquivo e Botão Importar */}
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+            {loadedFile ? (
+              <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 truncate max-w-[120px] sm:max-w-[200px]">
+                <CheckCircle2 size={12} /> {loadedFile}
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono text-amber-500 flex items-center gap-1">
+                <AlertCircle size={12} /> Vazio
+              </span>
+            )}
+            <input type="file" accept=".sf2" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+            <button onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-[10px] font-bold shadow transition flex items-center gap-1.5 disabled:opacity-50 shrink-0">
+              <UploadCloud size={12} /> {isLoading ? 'Carregando...' : 'Importar SF2'}
+            </button>
+          </div>
+        </div>
+
+        {/* Conteúdo (Lista ou Teclado) */}
+        <div className="flex-1 min-h-0 w-full flex flex-col items-center">
+          {viewMode === 'list' ? (
+            <div className="w-full h-full">
+              <SoundFontList 
+                soundFonts={DEFAULT_PRESETS} 
+                activeSoundFontId={activePreset.id} 
+                onSelectSoundFont={selectPreset} 
+              />
+            </div>
+          ) : (
+            <div className="w-full max-w-md h-full flex flex-col py-1">
+              <NumericKeypad 
+                typedInput={typedInput}
+                activeProgramNumber={activePreset.programNumber}
+                activePresetName={activePreset.name}
+                onDigitPress={(d) => setTypedInput(prev => prev.length < 3 ? prev + d : prev)}
+                onClearPress={() => setTypedInput('')}
+                onEnterPress={handleEnter}
+                onPreviousSound={handlePrevious}
+                onNextSound={handleNext}
+              />
+            </div>
+          )}
         </div>
 
       </div>
