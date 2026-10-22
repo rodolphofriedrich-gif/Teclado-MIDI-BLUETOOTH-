@@ -1,5 +1,6 @@
 import { MidiDestination, MidiRoute } from '../types/midi';
 import { NativeMidi } from './nativeMidi';
+import { synthService } from './synthService'; // NOVO: Importação do Sintetizador
 
 export interface MidiMessage {
   status: number;
@@ -19,12 +20,8 @@ export const getNoteName = (note: number): string => {
 class MidiService {
   private destinations: MidiDestination[] = [];
   private scannedBleDevices: MidiDestination[] = [];
-  
-  // NOVO: Múltiplos dispositivos conectados
   private connectedOutputs = new Map<string, MidiDestination>();
   private connectedInputs = new Map<string, boolean>();
-  
-  // NOVO: Lista de Rotas
   private routes: MidiRoute[] = [];
   
   private messageListeners: Array<(message: MidiMessage) => void> = [];
@@ -132,7 +129,6 @@ class MidiService {
 
   public async connectOutput(destination: MidiDestination): Promise<void> {
     if (this.connectedOutputs.has(destination.id)) return;
-    
     if (destination.id !== 'virtual-main') {
       if (destination.type === 'ble' && destination.bleAddress) {
         await NativeMidi.connectBleMidi({ address: destination.bleAddress, outputPortIndex: 0, inputPortIndex: 0 });
@@ -146,9 +142,7 @@ class MidiService {
   public async disconnectOutput(id: string): Promise<void> {
     const dest = this.connectedOutputs.get(id);
     if (!dest) return;
-    
     await this.allNotesOffForDevice(dest);
-    
     if (id !== 'virtual-main') {
       if (dest.type === 'ble' && dest.bleAddress) {
         await NativeMidi.disconnectOutput({ id: dest.bleAddress });
@@ -176,17 +170,11 @@ class MidiService {
     this.connectedInputs.delete(inputId);
   }
 
-  // --- GERENCIAMENTO DE ROTAS ---
   public getRoutes(): MidiRoute[] { return [...this.routes]; }
-  
-  public addRoute(route: MidiRoute): void {
-    this.routes.push(route);
-  }
-  
+  public addRoute(route: MidiRoute): void { this.routes.push(route); }
   public updateRoute(id: string, updates: Partial<MidiRoute>): void {
     this.routes = this.routes.map(r => r.id === id ? { ...r, ...updates } : r);
   }
-  
   public removeRoute(id: string): void {
     this.routes = this.routes.filter(r => r.id !== id);
   }
@@ -244,21 +232,27 @@ class MidiService {
     return { hex: this.toHex([0xE0 + safeChannel - 1, lsb, msb]) };
   }
 
-  // NOVO: O motor de roteamento
   public routeMessage(status: number, data1: number, data2: number, sourceId?: string): void {
     const command = status & 0xF0;
     const inputChannel = (status & 0x0F) + 1;
 
+    // NOVO: Toca no sintetizador SoundFont local (se estiver carregado)
+    if (synthService.getIsReady()) {
+      if (command === 0x90 && data2 > 0) {
+        synthService.noteOn(data1, data2, inputChannel);
+      } else if (command === 0x80 || (command === 0x90 && data2 === 0)) {
+        synthService.noteOff(data1, inputChannel);
+      } else if (command === 0xB0) {
+        synthService.controlChange(data1, data2, inputChannel);
+      }
+    }
+
+    // Roteamento externo (USB/BLE)
     for (const route of this.routes) {
       if (!route.enabled) continue;
-
-      // 1. Filtro de Origem
       if (route.sourceId && route.sourceId !== sourceId) continue;
-
-      // 2. Filtro de Canal de Entrada
       if (route.inputChannel > 0 && inputChannel !== route.inputChannel) continue;
 
-      // 3. Transformação
       let finalData1 = this.clamp(data1, 0, 127);
       let finalData2 = this.clamp(data2, 0, 127);
 
@@ -266,10 +260,7 @@ class MidiService {
         finalData1 = this.clamp(finalData1 + route.transpose, 0, 127);
       }
 
-      // 4. Canal de Saída
       const outputChannel = route.outputChannel > 0 ? this.clamp(route.outputChannel, 1, 16) : inputChannel;
-
-      // 5. Envia para o destino
       const dest = this.connectedOutputs.get(route.destinationId);
       if (dest) {
         void this.sendToDevice(dest, [command + outputChannel - 1, finalData1, finalData2]);
@@ -282,7 +273,7 @@ class MidiService {
     try {
       await NativeMidi.sendTo({ id: destination.bleAddress || String(destination.id), data: bytes });
     } catch (error) {
-      // Silencia erros de envio contínuos
+      // Silencia erros de envio
     }
   }
 
@@ -313,7 +304,6 @@ class MidiService {
       try { listener(message); } catch (error) { console.error('Erro em listener:', error); }
     });
 
-    // Envia para o roteador
     this.routeMessage(status, data1, data2, sourceId);
   }
 
