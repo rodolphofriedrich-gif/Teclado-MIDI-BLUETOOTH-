@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Power, Pause, LayoutGrid, Piano, SlidersHorizontal, Maximize, MoveHorizontal, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import { MidiPadGrid } from './MidiPadGrid';
+import { KEYBOARD_PALETTES } from '../App'; // Importando as paletas
 
 interface MidiKeyboardProps {
   isConnected: boolean;
@@ -19,6 +20,9 @@ interface MidiKeyboardProps {
   onToggleSustain: () => void;
   selectedVelocity: number;
   onSelectVelocity: (v: number) => void;
+  // NOVAS PROPS: Paletas
+  selectedPaletteId: string;
+  onSelectPalette: (id: string) => void;
 }
 
 const OCTAVE_NOTES = [
@@ -41,22 +45,10 @@ const MIN_KEY_WIDTH = 35;
 const MAX_KEY_WIDTH = 95;
 
 export function MidiKeyboard({
-  isConnected,
-  selectedChannel,
-  onSelectChannel,
-  onNoteOn,
-  onNoteOff,
-  onDisabledPress,
-  customWhiteKeyColor,
-  customBlackKeyColor,
-  onActiveNotesChange,
-  onActivity,
-  isActive,
-  onToggleActive,
-  isSustainActive,
-  onToggleSustain,
-  selectedVelocity,
-  onSelectVelocity,
+  isConnected, selectedChannel, onSelectChannel, onNoteOn, onNoteOff, onDisabledPress,
+  customWhiteKeyColor, customBlackKeyColor, onActiveNotesChange, onActivity,
+  isActive, onToggleActive, isSustainActive, onToggleSustain,
+  selectedVelocity, onSelectVelocity, selectedPaletteId, onSelectPalette
 }: MidiKeyboardProps) {
   const [viewMode, setViewMode] = useState<'keyboard' | 'pads'>('keyboard');
   const [startOctave, setStartOctave] = useState(3);
@@ -291,11 +283,10 @@ export function MidiKeyboard({
             <SlidersHorizontal size={14} />
           </button>
 
-          {/* CONFIGURAÇÕES RÁPIDAS: Agora aparece em PIANO e PADS */}
+          {/* MENU DE CONFIGURAÇÕES RÁPIDAS (Com Paletas) */}
           {isQuickSettingsOpen && (
             <div className="absolute top-full right-0 z-[150] mt-2 w-72 rounded-xl border border-slate-700 bg-[#0f172a] p-3 shadow-2xl flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
               
-              {/* INTENSIDADE (VELOCITY) - Sempre visível */}
               <div>
                 <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-2">
                   <Activity size={12} /> Intensidade (Velocity)
@@ -307,15 +298,7 @@ export function MidiKeyboard({
                     { id: 100, label: 'Forte' },
                     { id: 127, label: 'Max' }
                   ].map((v) => (
-                    <button
-                      key={v.id}
-                      onClick={() => onSelectVelocity(v.id)}
-                      className={`flex flex-col items-center justify-center py-1.5 rounded-lg border transition-all ${
-                        selectedVelocity === v.id 
-                          ? 'bg-cyan-900/40 border-cyan-600/50 text-cyan-300 font-bold shadow-[0_0_10px_rgba(8,145,178,0.2)]' 
-                          : 'bg-[#0a0f1c] border-slate-800 text-slate-500 hover:bg-slate-800'
-                      }`}
-                    >
+                    <button key={v.id} onClick={() => onSelectVelocity(v.id)} className={`flex flex-col items-center justify-center py-1.5 rounded-lg border transition-all ${selectedVelocity === v.id ? 'bg-cyan-900/40 border-cyan-600/50 text-cyan-300 font-bold shadow-[0_0_10px_rgba(8,145,178,0.2)]' : 'bg-[#0a0f1c] border-slate-800 text-slate-500 hover:bg-slate-800'}`}>
                       <span className="text-[10px] font-semibold">{v.label}</span>
                       <span className="text-[9px] font-mono opacity-80">{v.id}</span>
                     </button>
@@ -323,7 +306,23 @@ export function MidiKeyboard({
                 </div>
               </div>
 
-              {/* ZOOM E ROLAGEM: Só aparecem no modo PIANO */}
+              {/* NOVO: PALETAS DE CORES NO QUICK SETTINGS */}
+              <div className="h-px w-full bg-slate-800" />
+              <div>
+                <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-2">Cores do Teclado</label>
+                <div className="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto custom-scrollbar pr-1">
+                  {KEYBOARD_PALETTES.map((pal) => (
+                    <button key={pal.id} onClick={() => onSelectPalette(pal.id)} className={`flex items-center gap-2 p-1.5 rounded-lg border transition-colors ${selectedPaletteId === pal.id ? 'bg-cyan-900/30 border-cyan-600/50' : 'bg-[#0a0f1c] border-slate-800 hover:bg-slate-800'}`}>
+                      <div className="flex shrink-0 rounded overflow-hidden border border-slate-600">
+                        <div className="w-3 h-6" style={{ backgroundColor: pal.white }} />
+                        <div className="w-2 h-4 mt-0" style={{ backgroundColor: pal.black }} />
+                      </div>
+                      <span className={`text-[9px] text-left leading-tight ${selectedPaletteId === pal.id ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}>{pal.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {viewMode === 'keyboard' && (
                 <>
                   <div className="h-px w-full bg-slate-800" />
@@ -331,7 +330,6 @@ export function MidiKeyboard({
                     <label className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-400 mb-2"><span>Zoom do Teclado</span><span className="font-mono text-cyan-300">{keyWidth}px</span></label>
                     <input type="range" min={minKeyWidth} max={MAX_KEY_WIDTH} value={keyWidth} onChange={(e) => setKeyWidth(Number(e.target.value))} className="h-1.5 w-full cursor-pointer accent-cyan-400" />
                   </div>
-
                   <div className="h-px w-full bg-slate-800" />
                   <button type="button" onClick={() => setIsScrollLocked(!isScrollLocked)} className={`flex items-center justify-between w-full p-2 rounded-lg border transition-colors ${isScrollLocked ? 'bg-amber-900/20 border-amber-700/50 text-amber-400' : 'bg-[#0a0f1c] border-slate-800 text-slate-400'}`}>
                     <span className="text-xs font-bold flex items-center gap-2">{isScrollLocked ? <Maximize size={14} /> : <MoveHorizontal size={14} />} Rolagem Livre</span>
