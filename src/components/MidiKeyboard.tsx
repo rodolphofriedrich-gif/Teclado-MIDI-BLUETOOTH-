@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Power, Pause, LayoutGrid, Piano, SlidersHorizontal, Maximize, MoveHorizontal, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import { MidiPadGrid } from './MidiPadGrid';
-import { KEYBOARD_PALETTES } from '../App'; // Importando as paletas
+import { KEYBOARD_PALETTES } from '../App';
 
 interface MidiKeyboardProps {
   isConnected: boolean;
@@ -20,7 +20,6 @@ interface MidiKeyboardProps {
   onToggleSustain: () => void;
   selectedVelocity: number;
   onSelectVelocity: (v: number) => void;
-  // NOVAS PROPS: Paletas
   selectedPaletteId: string;
   onSelectPalette: (id: string) => void;
 }
@@ -283,15 +282,15 @@ export function MidiKeyboard({
             <SlidersHorizontal size={14} />
           </button>
 
-          {/* MENU DE CONFIGURAÇÕES RÁPIDAS (Com Paletas) */}
+          {/* MENU DE CONFIGURAÇÕES RÁPIDAS OTIMIZADO */}
           {isQuickSettingsOpen && (
-            <div className="absolute top-full right-0 z-[150] mt-2 w-72 rounded-xl border border-slate-700 bg-[#0f172a] p-3 shadow-2xl flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute top-full right-0 z-[150] mt-2 w-80 rounded-xl border border-slate-700 bg-[#0f172a] p-3 shadow-2xl flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-150">
               
               <div>
-                <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-2">
+                <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-1.5">
                   <Activity size={12} /> Intensidade (Velocity)
                 </label>
-                <div className="grid grid-cols-4 gap-1">
+                <div className="grid grid-cols-4 gap-1.5">
                   {[
                     { id: 30, label: 'Suave' },
                     { id: 64, label: 'Médio' },
@@ -306,18 +305,23 @@ export function MidiKeyboard({
                 </div>
               </div>
 
-              {/* NOVO: PALETAS DE CORES NO QUICK SETTINGS */}
               <div className="h-px w-full bg-slate-800" />
+              
+              {/* PALETAS DE CORES OTIMIZADAS (Apenas quadrados) */}
               <div>
-                <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-2">Cores do Teclado</label>
-                <div className="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto custom-scrollbar pr-1">
+                <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-1.5">Cores do Teclado</label>
+                <div className="grid grid-cols-6 gap-1.5">
                   {KEYBOARD_PALETTES.map((pal) => (
-                    <button key={pal.id} onClick={() => onSelectPalette(pal.id)} className={`flex items-center gap-2 p-1.5 rounded-lg border transition-colors ${selectedPaletteId === pal.id ? 'bg-cyan-900/30 border-cyan-600/50' : 'bg-[#0a0f1c] border-slate-800 hover:bg-slate-800'}`}>
-                      <div className="flex shrink-0 rounded overflow-hidden border border-slate-600">
-                        <div className="w-3 h-6" style={{ backgroundColor: pal.white }} />
-                        <div className="w-2 h-4 mt-0" style={{ backgroundColor: pal.black }} />
+                    <button 
+                      key={pal.id} 
+                      onClick={() => onSelectPalette(pal.id)} 
+                      title={pal.name}
+                      className={`relative h-7 w-full rounded-lg overflow-hidden border-2 transition-all ${selectedPaletteId === pal.id ? 'border-cyan-400 scale-105 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'border-[#1e293b] hover:border-slate-500 hover:scale-105'}`}
+                    >
+                      <div className="absolute inset-0 flex">
+                        <div className="w-2/3 h-full" style={{ backgroundColor: pal.white }} />
+                        <div className="w-1/3 h-full" style={{ backgroundColor: pal.black }} />
                       </div>
-                      <span className={`text-[9px] text-left leading-tight ${selectedPaletteId === pal.id ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}>{pal.name}</span>
                     </button>
                   ))}
                 </div>
@@ -327,11 +331,11 @@ export function MidiKeyboard({
                 <>
                   <div className="h-px w-full bg-slate-800" />
                   <div>
-                    <label className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-400 mb-2"><span>Zoom do Teclado</span><span className="font-mono text-cyan-300">{keyWidth}px</span></label>
+                    <label className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-400 mb-1.5"><span>Zoom do Teclado</span><span className="font-mono text-cyan-300">{keyWidth}px</span></label>
                     <input type="range" min={minKeyWidth} max={MAX_KEY_WIDTH} value={keyWidth} onChange={(e) => setKeyWidth(Number(e.target.value))} className="h-1.5 w-full cursor-pointer accent-cyan-400" />
                   </div>
                   <div className="h-px w-full bg-slate-800" />
-                  <button type="button" onClick={() => setIsScrollLocked(!isScrollLocked)} className={`flex items-center justify-between w-full p-2 rounded-lg border transition-colors ${isScrollLocked ? 'bg-amber-900/20 border-amber-700/50 text-amber-400' : 'bg-[#0a0f1c] border-slate-800 text-slate-400'}`}>
+                  <button type="button" onClick={() => setIsScrollLocked(!isScrollLocked)} className={`flex items-center justify-between w-full p-1.5 rounded-lg border transition-colors ${isScrollLocked ? 'bg-amber-900/20 border-amber-700/50 text-amber-400' : 'bg-[#0a0f1c] border-slate-800 text-slate-400'}`}>
                     <span className="text-xs font-bold flex items-center gap-2">{isScrollLocked ? <Maximize size={14} /> : <MoveHorizontal size={14} />} Rolagem Livre</span>
                     <div className={`w-8 h-4 rounded-full transition-colors relative ${isScrollLocked ? 'bg-amber-500' : 'bg-slate-700'}`}><div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isScrollLocked ? 'left-4' : 'left-0.5'}`} /></div>
                   </button>
