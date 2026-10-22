@@ -5,12 +5,13 @@ import { MidiKeyboard } from './components/MidiKeyboard';
 import { MidiRouterScreen } from './components/MidiRouterScreen';
 import { MidiMonitorScreen } from './components/MidiMonitorScreen';
 import { MidiControlsScreen } from './components/MidiControlsScreen';
+import { SoundFontScreen } from './components/SoundFontScreen'; // NOVO
 import { VuMeter } from './components/VuMeter';
 import { NativeMidi } from './services/nativeMidi';
 import {
   Music2, GitBranch, Activity, SlidersHorizontal, Settings,
   Usb, Bluetooth, Radio, RefreshCw, ChevronDown, X, LogOut,
-  CheckCircle2, AlertTriangle, Info, Circle, Power, Heart
+  CheckCircle2, AlertTriangle, Info, Circle, Power, AudioWaveform, Heart
 } from 'lucide-react';
 
 export const KEYBOARD_PALETTES = [
@@ -32,12 +33,14 @@ export const VELOCITY_OPTIONS = [
   { id: 127, name: 'Máximo', desc: '127' },
 ];
 
-type AppTab = 'keyboard' | 'router' | 'monitor' | 'controls' | 'settings';
+// ADICIONADO 'soundfont' AQUI
+type AppTab = 'keyboard' | 'router' | 'monitor' | 'controls' | 'soundfont' | 'settings';
 
 const NAV_ITEMS = [
   { id: 'keyboard', label: 'Teclado', Icon: Music2 },
   { id: 'router', label: 'Router MIDI', Icon: GitBranch },
   { id: 'controls', label: 'Controles', Icon: SlidersHorizontal },
+  { id: 'soundfont', label: 'SoundFont', Icon: AudioWaveform }, // NOVO
   { id: 'monitor', label: 'Monitor', Icon: Activity },
   { id: 'settings', label: 'Ajustes', Icon: Settings },
 ] as const;
@@ -46,6 +49,7 @@ const TAB_COLORS: Record<AppTab, { bg: string; border: string; shadow: string }>
   keyboard: { bg: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)', border: 'rgba(56, 189, 248, 0.5)', shadow: '0 4px 14px rgba(14, 165, 233, 0.4)' },
   router: { bg: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)' },
   controls: { bg: 'linear-gradient(135deg, #d97706 0%, #ea580c 100%)', border: 'rgba(251, 191, 36, 0.5)', shadow: '0 4px 14px rgba(245, 158, 11, 0.4)' },
+  soundfont: { bg: 'linear-gradient(135deg, #10b981 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)' }, // NOVO
   monitor: { bg: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', border: 'rgba(192, 132, 252, 0.5)', shadow: '0 4px 14px rgba(168, 85, 247, 0.4)' },
   settings: { bg: 'linear-gradient(135deg, #e11d48 0%, #c026d3 100%)', border: 'rgba(251, 113, 133, 0.5)', shadow: '0 4px 14px rgba(244, 63, 94, 0.4)' },
 };
@@ -263,7 +267,6 @@ export default function App() {
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
       
       <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
-        {/* ... (Header mantido igual) ... */}
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <button type="button" className="nexus-brand flex min-w-0 items-center gap-2" onClick={() => { setActiveTab('keyboard'); closeConnectionMenus(); }}>
             <span className="nexus-brand-name whitespace-nowrap text-xs font-extrabold tracking-wider sm:text-sm">NEXUSMIDI <span>Pro</span></span>
@@ -413,7 +416,6 @@ export default function App() {
                   }}
                   isSustainActive={isSustainActive}
                   onToggleSustain={() => void handleToggleSustain()}
-                  // NOVAS PROPS DE VELOCITY AQUI
                   selectedVelocity={selectedVelocity}
                   onSelectVelocity={setSelectedVelocity}
                 />
@@ -450,10 +452,13 @@ export default function App() {
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiRouterScreen destinations={destinations} connectedDestinations={connectedDestinations} onRefresh={refreshDestinations} /></div>
         ) : activeTab === 'controls' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4"><MidiControlsScreen channel={selectedChannel} isConnected={isConnected} onStatus={(message, type = 'info') => showMessage(message, type, 3000)} /></div>
+        ) : activeTab === 'soundfont' ? (
+          <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden">
+            <SoundFontScreen onStatus={(message, type = 'info') => showMessage(message, type, 3000)} />
+          </div>
         ) : activeTab === 'monitor' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         ) : (
-          /* CONFIGURAÇÕES LIMPA */
           <div className="nexus-settings-page min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
             <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6 bg-[#0f172a] border border-[#1e293b]">
               <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5 border-b border-[#1e293b]">
@@ -481,7 +486,7 @@ export default function App() {
                 <div className="flex flex-col items-center justify-center text-center gap-2">
                   <p className="text-sm font-bold text-slate-200">NexusMIDI Pro <span className="text-cyan-500">v1.0.0</span></p>
                   <p className="text-xs text-slate-500">Desenvolvido com <Heart size={10} className="inline text-rose-500" /> para músicos.</p>
-                  <p className="text-[10px] text-slate-600 mt-2 max-w-xs">Um controlador MIDI avançado com suporte a USB, BLE e roteamento em tempo real.</p>
+                  <p className="text-[10px] text-slate-600 mt-2 max-w-xs">Um controlador MIDI avançado com suporte a USB, BLE, roteamento em tempo real e sintetizador SoundFont.</p>
                 </div>
               </section>
             </section>
