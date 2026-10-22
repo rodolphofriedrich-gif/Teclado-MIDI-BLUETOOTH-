@@ -8,6 +8,9 @@ class SynthService {
   private isReady: boolean = false;
   private currentFileName: string | null = null;
   private workletLoaded: boolean = false;
+  
+  // NOVO: Armazena a transposição atual
+  private transpose: number = 0;
 
   public async init(): Promise<void> {
     if (this.audioContext) return;
@@ -67,22 +70,52 @@ class SynthService {
     return this.currentFileName;
   }
 
+  // NOVO: Aplica a transposição e envia a nota
   public noteOn(note: number, velocity: number, channel: number = 1): void {
     if (!this.isReady || !this.synth || !this.audioContext) return;
     const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    this.synth.noteOn(safeChannel, note, velocity);
+    const transposedNote = Math.max(0, Math.min(127, note + this.transpose));
+    this.synth.noteOn(safeChannel, transposedNote, velocity);
   }
 
+  // NOVO: Aplica a transposição para garantir que o Note Off atinja a nota correta
   public noteOff(note: number, channel: number = 1): void {
     if (!this.isReady || !this.synth || !this.audioContext) return;
     const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    this.synth.noteOff(safeChannel, note);
+    const transposedNote = Math.max(0, Math.min(127, note + this.transpose));
+    this.synth.noteOff(safeChannel, transposedNote);
   }
 
   public controlChange(controller: number, value: number, channel: number = 1): void {
     if (!this.isReady || !this.synth || !this.audioContext) return;
     const safeChannel = Math.max(0, Math.min(15, channel - 1));
     this.synth.controllerChange(safeChannel, controller, value);
+  }
+
+  // NOVO: Troca o instrumento (Preset) do SoundFont
+  public programChange(program: number, channel: number = 1): void {
+    if (!this.isReady || !this.synth || !this.audioContext) return;
+    const safeChannel = Math.max(0, Math.min(15, channel - 1));
+    this.synth.programChange(safeChannel, program);
+  }
+
+  // NOVO: Controla o Volume Master via Control Change 7
+  public setMasterVolume(volume: number): void {
+    // Converte a escala 0-100 da interface para 0-127 do MIDI
+    const midiVolume = Math.round(Math.max(0, Math.min(100, volume)) * 1.27);
+    this.controlChange(7, midiVolume);
+  }
+
+  // NOVO: Controla o Reverb via Control Change 91
+  public setReverb(amount: number): void {
+    // Converte a escala 0-100 da interface para 0-127 do MIDI
+    const midiReverb = Math.round(Math.max(0, Math.min(100, amount)) * 1.27);
+    this.controlChange(91, midiReverb);
+  }
+
+  // NOVO: Define o valor da transposição
+  public setTranspose(semitones: number): void {
+    this.transpose = Math.max(-24, Math.min(24, semitones));
   }
 }
 
