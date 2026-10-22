@@ -45,6 +45,16 @@ const NAV_ITEMS = [
   { id: 'settings', label: 'Ajustes', Icon: Settings },
 ] as const;
 
+// NOVO: Mapeamento de títulos para o Header
+const TAB_TITLES: Record<AppTab, string> = {
+  keyboard: 'Modo Teclado / Pads',
+  router: 'Roteador MIDI Matrix',
+  controls: 'Controles CC',
+  soundfont: 'Modo Sintetizador',
+  monitor: 'Monitor MIDI',
+  settings: 'Ajustes do App',
+};
+
 const TAB_COLORS: Record<AppTab, { bg: string; border: string; shadow: string; text: string }> = {
   keyboard: { bg: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)', border: 'rgba(56, 189, 248, 0.5)', shadow: '0 4px 14px rgba(14, 165, 233, 0.4)', text: 'text-blue-400' },
   router: { bg: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', border: 'rgba(52, 211, 153, 0.5)', shadow: '0 4px 14px rgba(16, 185, 129, 0.4)', text: 'text-emerald-400' },
@@ -66,7 +76,6 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'warn' | 'error' | 'success'; } | null>(null);
   const [lastTxCommand, setLastTxCommand] = useState<MidiLogEntry | null>(null);
   
-  // Estados de Menus
   const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
   const [isUsbOpen, setIsUsbOpen] = useState(false);
   const [isBleOpen, setIsBleOpen] = useState(false);
@@ -92,7 +101,6 @@ export default function App() {
   const velocityRef = useRef<number>(selectedVelocity);
   useEffect(() => { velocityRef.current = selectedVelocity; }, [selectedVelocity]);
 
-  // Fecha o menu de navegação ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (navMenuRef.current && !navMenuRef.current.contains(event.target as Node)) {
@@ -282,11 +290,10 @@ export default function App() {
   return (
     <div className="nexus-app fixed inset-0 flex h-screen w-full flex-col overflow-hidden font-sans antialiased select-none">
       
-      {/* HEADER REFORMULADO COM MENU SUSPENSO */}
       <header className="nexus-header relative z-[100] flex h-14 w-full shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
         
+        {/* ESQUERDA: MENU */}
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          {/* BOTÃO DO MENU (Logo + Ícone) */}
           <div className="relative" ref={navMenuRef}>
             <button 
               type="button" 
@@ -299,7 +306,6 @@ export default function App() {
               </span>
             </button>
 
-            {/* DROPDOWN DE NAVEGAÇÃO */}
             {isNavMenuOpen && (
               <div className="absolute top-full left-0 mt-2 w-56 rounded-xl border border-[#1e293b] bg-[#0f172a] shadow-2xl overflow-hidden z-[150] animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="px-4 py-2 border-b border-[#1e293b] bg-[#0a0f1c]">
@@ -338,7 +344,14 @@ export default function App() {
           </div>
         </div>
 
-        {/* CONEXÕES E SAIR (Mantidos no canto direito) */}
+        {/* CENTRO: TÍTULO DO MODO ATUAL */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
+          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.2em] text-slate-300 drop-shadow-md">
+            {TAB_TITLES[activeTab]}
+          </span>
+        </div>
+
+        {/* DIREITA: CONEXÕES E SAIR */}
         <div className="flex items-center gap-2">
           <div className="relative">
             <button type="button" onClick={() => { setIsUsbOpen(!isUsbOpen); setIsBleOpen(false); setIsNavMenuOpen(false); void refreshDestinations(); }} className={`nexus-connection-button flex h-10 items-center gap-2 rounded-full px-3 transition-colors ${isUsbConnected ? 'is-connected' : ''}`}>
@@ -472,6 +485,9 @@ export default function App() {
                   onToggleSustain={() => void handleToggleSustain()}
                   selectedVelocity={selectedVelocity}
                   onSelectVelocity={setSelectedVelocity}
+                  // NOVO: Passando o controle de paletas para o teclado
+                  selectedPaletteId={selectedPaletteId}
+                  onSelectPalette={setSelectedPaletteId}
                 />
               </div>
               <div className="py-1"><VuMeter level={vuLevel} /></div>
@@ -513,36 +529,19 @@ export default function App() {
         ) : activeTab === 'monitor' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
         ) : (
+          /* AJUSTES GLOBAIS */
           <div className="nexus-settings-page min-h-0 flex-1 overflow-y-auto p-3 sm:p-5 custom-scrollbar">
             <section className="nexus-settings-card mx-auto w-full max-w-2xl rounded-2xl p-4 sm:p-6 bg-[#0f172a] border border-[#1e293b]">
               <div className="nexus-settings-heading mb-6 flex items-center gap-3 pb-5 border-b border-[#1e293b]">
                 <div className="nexus-settings-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-300"><Settings size={24} /></div>
-                <div className="min-w-0"><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">PERSONALIZAÇÃO</p><h2 className="mt-1 text-lg font-bold sm:text-xl text-white">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm text-slate-400">Ajuste a aparência do aplicativo.</p></div>
+                <div className="min-w-0"><p className="nexus-eyebrow text-cyan-500 text-[10px] font-bold">SISTEMA</p><h2 className="mt-1 text-lg font-bold sm:text-xl text-white">Configurações</h2><p className="nexus-secondary-text mt-1 text-sm text-slate-400">Ajustes globais do aplicativo.</p></div>
               </div>
               
-              <section className="nexus-settings-section mb-8">
-                <div className="mb-3"><h3 className="text-sm font-semibold text-white">Aparência das teclas</h3><p className="nexus-secondary-text mt-1 text-xs text-slate-400">Combinação de cores do piano.</p></div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {KEYBOARD_PALETTES.map((pal) => (
-                    <button key={pal.id} type="button" onClick={() => setSelectedPaletteId(pal.id)} className={`nexus-palette-option flex items-center gap-3 p-2 rounded-lg border transition-colors ${selectedPaletteId === pal.id ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' : 'bg-[#0a0f1c] border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
-                      <span className="nexus-palette-preview flex shrink-0 items-center border border-slate-600 rounded overflow-hidden">
-                        <span className="nexus-palette-white-key w-4 h-8" style={{ backgroundColor: pal.white }} />
-                        <span className="nexus-palette-black-key w-3 h-5 -ml-1 z-10" style={{ backgroundColor: pal.black }} />
-                      </span>
-                      <span className="min-w-0 flex-1 text-left text-xs font-medium sm:text-sm">{pal.name}</span>
-                      {selectedPaletteId === pal.id && <CheckCircle2 size={18} className="text-cyan-400 shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="nexus-settings-section pt-6 border-t border-[#1e293b]">
-                <div className="flex flex-col items-center justify-center text-center gap-2">
-                  <p className="text-sm font-bold text-slate-200">NexusMIDI Pro <span className="text-cyan-500">v1.0.0</span></p>
-                  <p className="text-xs text-slate-500">Desenvolvido com <Heart size={10} className="inline text-rose-500" /> para músicos.</p>
-                  <p className="text-[10px] text-slate-600 mt-2 max-w-xs">Um controlador MIDI avançado com suporte a USB, BLE, roteamento em tempo real e sintetizador SoundFont.</p>
-                </div>
-              </section>
+              <div className="flex flex-col items-center justify-center text-center gap-3 py-8">
+                <p className="text-sm font-bold text-slate-200">NexusMIDI Pro <span className="text-cyan-500">v1.0.0</span></p>
+                <p className="text-xs text-slate-500">Desenvolvido com <Heart size={12} className="inline text-rose-500" /> para músicos.</p>
+                <p className="text-[10px] text-slate-600 mt-2 max-w-xs leading-relaxed">Um controlador MIDI avançado com suporte a USB, BLE, roteamento em tempo real e sintetizador SoundFont. As cores do teclado agora podem ser alteradas no menu de configurações rápidas do próprio teclado.</p>
+              </div>
             </section>
           </div>
         )}
