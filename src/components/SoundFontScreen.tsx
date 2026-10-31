@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, CheckCircle2, AlertCircle, List, Keyboard } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle, List, SlidersHorizontal } from 'lucide-react';
 import { synthService } from '../services/synthService';
+import { storageService } from '../services/storageService';
 import { SoundFontPreset } from '../types/soundfont';
 import { ActiveSoundFontCard } from './soundfont/ActiveSoundFontCard';
 import { SoundFontList } from './soundfont/SoundFontList';
-import { NumericKeypad } from './soundfont/NumericKeypad';
 
 interface Props {
   onStatus: (message: string, type?: 'info' | 'warn' | 'error' | 'success') => void;
@@ -38,35 +38,76 @@ const DEFAULT_PRESETS: SoundFontPreset[] = GM_INSTRUMENTS.map((name, index) => {
   else if (index >= 40 && index <= 47) category = 'Cordas';
   else if (index >= 56 && index <= 63) category = 'Metais';
   else if (index >= 80) category = 'Synth';
-
-  return {
-    id: `gm-${index}`, programNumber: index, bankNumber: 0, name,
-    category, format: 'sf2', fileSizeMb: 0, authorOrOrigin: 'General MIDI',
-    velocityLayers: 1, attack: 0.01, decay: 1, sustain: 0.5, release: 0.5, filterCutoff: 5000, waveformType: 'sine'
-  };
+  return { id: `gm-${index}`, programNumber: index, bankNumber: 0, name, category, format: 'sf2', fileSizeMb: 0, authorOrOrigin: 'General MIDI', velocityLayers: 1, attack: 0.01, decay: 1, sustain: 0.5, release: 0.5, filterCutoff: 5000, waveformType: 'sine' };
 });
 
 export function SoundFontScreen({ onStatus }: Props) {
   const [isLoading, setIsLoading] = useState(false);
-  const [loadedFile, setLoadedFile] = useState<string | null>(synthService.getCurrentFileName());
+  const [loadedFile, setLoadedFile] = useState<string | null>(null);
   
-  const [activePreset, setActivePreset] = useState<SoundFontPreset>(DEFAULT_PRESETS[0]);
+  // Estado de visualização: 'presets' ou 'config'
+  const [viewMode, setViewMode] = useState<'presets' | 'config'>('presets');
+  
+  // Estado do canal ativo (1-16)
+  const [activeChannel, setActiveChannel] = useState<number>(1);
+  
+  // Mapeamento: Canal -> ProgramNumber (Salvo no localStorage)
+  const [channelAssignments, setChannelAssignments] = useState<Record<number, number>>(() => {
+    const saved = localStorage.getItem('nexus_sf_channels');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Configurações Globais de Efeitos
   const [volume, setVolume] = useState(85);
   const [reverb, setReverb] = useState(35);
+  const [chorus, setChorus] = useState(0);
   const [transpose, setTranspose] = useState(0);
-  const [typedInput, setTypedInput] = useState('');
-  
-  const [viewMode, setViewMode] = useState<'list' | 'keypad'>('list');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Carrega o arquivo salvo no IndexedDB ao abrir a tela
+  useEffect(() => {
+    const loadSavedFile = async () => {
+      try {
+        const saved = await storageService.getSoundFont();
+        if (saved) {
+          setIsLoading(true);
+          const success = await synthService.loadSoundFontBuffer(saved.data, saved.name);
+          if (success) {
+            setLoadedFile(saved.name);
+            onStatus('SoundFont restaurado da memória.', 'info');
+            // Reaplica as configurações de canais salvos
+            Object.entries(channelAssignments).forEach(([ch, prog]) => {
+              synthService.programChange(prog, Number(ch));
+            });
+          }
+          setIsLoading(false);
+        }
+      } catch (e) {
+        console.error("Erro ao restaurar SF2", e);
+      }
+    };
+    loadSavedFile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Salva as atribuições de canais sempre que mudarem
+  useEffect(() => {
+    localStorage.setItem('nexus_sf_channels', JSON.stringify(channelAssignments));
+  }, [channelAssignments]);
+
+  // Atualiza efeitos no sintetizador
   useEffect(() => {
     if (synthService.getIsReady()) {
-      synthService.setMasterVolume(volume);
-      synthService.setReverb(reverb);
       synthService.setTranspose(transpose);
+      // Aplica os efeitos em todos os canais alocados
+      Object.keys(channelAssignments).forEach(ch => {
+        synthService.setMasterVolume(volume, Number(ch));
+        synthService.setReverb(reverb, Number(ch));
+        synthService.setChorus(chorus, Number(ch));
+      });
     }
-  }, [volume, reverb, transpose]);
+  }, [volume, reverb, chorus, transpose, channelAssignments]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -75,59 +116,51 @@ export function SoundFontScreen({ onStatus }: Props) {
       onStatus('Por favor, selecione um arquivo .sf2 válido.', 'error'); return;
     }
     setIsLoading(true);
-    onStatus('Carregando SoundFont...', 'info');
-    const success = await synthService.loadSoundFont(file);
+    onStatus('Carregando e salvando SoundFont...', 'info');
+    
+    try {
+      await storageService.saveSoundFont(file);
+      const success = await synthService.loadSoundFont(file);
+      
+      if (success) {
+        setLoadedFile(file.name);
+        setChannelAssignments({}); // Reseta alocações
+        onStatus(`SoundFont "${file.name}" carregado!`, 'success');
+      } else {
+        onStatus('Falha ao carregar o SoundFont.', 'error');
+      }
+    } catch (err) {
+      onStatus('Erro ao salvar o arquivo na memória.', 'error');
+    }
     setIsLoading(false);
-    if (success) {
-      setLoadedFile(file.name);
-      onStatus(`SoundFont "${file.name}" carregado!`, 'success');
-      selectPreset(DEFAULT_PRESETS[0]);
-    } else {
-      onStatus('Falha ao carregar o SoundFont.', 'error');
-    }
   };
 
-  const selectPreset = (preset: SoundFontPreset) => {
-    setActivePreset(preset);
-    setTypedInput('');
+  const handleAssignProgram = (preset: SoundFontPreset) => {
     if (synthService.getIsReady()) {
-      synthService.programChange(preset.programNumber);
+      synthService.programChange(preset.programNumber, activeChannel);
+      setChannelAssignments(prev => ({ ...prev, [activeChannel]: preset.programNumber }));
+    } else {
+      onStatus('Importe um arquivo SF2 primeiro.', 'warn');
     }
   };
 
-  const handlePrevious = () => {
-    const idx = DEFAULT_PRESETS.findIndex(p => p.id === activePreset.id);
-    selectPreset(DEFAULT_PRESETS[idx > 0 ? idx - 1 : DEFAULT_PRESETS.length - 1]);
-  };
-
-  const handleNext = () => {
-    const idx = DEFAULT_PRESETS.findIndex(p => p.id === activePreset.id);
-    selectPreset(DEFAULT_PRESETS[idx < DEFAULT_PRESETS.length - 1 ? idx + 1 : 0]);
-  };
-
-  const handleEnter = () => {
-    if (!typedInput) return;
-    const num = parseInt(typedInput, 10);
-    const match = DEFAULT_PRESETS.find(p => p.programNumber === num);
-    if (match) selectPreset(match);
-    else onStatus('Programa não encontrado.', 'warn');
-    setTypedInput('');
-    setViewMode('list');
+  const getActivePreset = (): SoundFontPreset => {
+    const prog = channelAssignments[activeChannel];
+    return DEFAULT_PRESETS.find(p => p.programNumber === prog) || DEFAULT_PRESETS[0];
   };
 
   const handleAudition = () => {
     if (!synthService.getIsReady()) { onStatus('Carregue um arquivo .sf2 primeiro.', 'warn'); return; }
-    [60, 64, 67, 72].forEach(note => synthService.noteOn(note, 100));
-    setTimeout(() => [60, 64, 67, 72].forEach(note => synthService.noteOff(note)), 1000);
+    [60, 64, 67, 72].forEach(note => synthService.noteOn(note, 100, activeChannel));
+    setTimeout(() => [60, 64, 67, 72].forEach(note => synthService.noteOff(note, activeChannel)), 1000);
   };
 
   return (
     <div className="flex-1 w-full bg-[#0a0f1c] p-2 sm:p-3 flex flex-col gap-2 text-slate-100 overflow-hidden">
       
-      {/* 1. Card do Instrumento Ativo no Topo */}
       <div className="shrink-0 w-full">
         <ActiveSoundFontCard 
-          preset={activePreset} 
+          preset={getActivePreset()} 
           volume={volume} onVolumeChange={setVolume}
           reverb={reverb} onReverbChange={setReverb}
           transpose={transpose} onTransposeChange={setTranspose}
@@ -135,31 +168,20 @@ export function SoundFontScreen({ onStatus }: Props) {
         />
       </div>
 
-      {/* 2. Área Principal (Lista ou Teclado) */}
       <div className="flex-1 bg-[#0f172a] rounded-xl border border-[#1e293b] p-2 min-h-0 flex flex-col relative">
         
-        {/* Barra de Ferramentas Unificada */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-2 shrink-0">
           
-          {/* Toggle Lista / Teclado */}
+          {/* Toggle Presets / Configurações */}
           <div className="flex bg-[#0a0f1c] rounded-lg p-0.5 border border-[#1e293b]">
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              <List size={12} /> LISTA
+            <button type="button" onClick={() => setViewMode('presets')} className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'presets' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>
+              <List size={12} /> PRESETS
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('keypad')}
-              className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'keypad' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              <Keyboard size={12} /> TECLADO
+            <button type="button" onClick={() => setViewMode('config')} className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'config' ? 'bg-cyan-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>
+              <SlidersHorizontal size={12} /> CONFIG
             </button>
           </div>
 
-          {/* Status do Arquivo e Botão Importar */}
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
             {loadedFile ? (
               <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 truncate max-w-[120px] sm:max-w-[200px]">
@@ -177,28 +199,45 @@ export function SoundFontScreen({ onStatus }: Props) {
           </div>
         </div>
 
-        {/* Conteúdo (Lista ou Teclado) */}
+        {/* CONTEÚDO PRINCIPAL */}
         <div className="flex-1 min-h-0 w-full flex flex-col items-center">
-          {viewMode === 'list' ? (
+          {viewMode === 'presets' ? (
             <div className="w-full h-full">
               <SoundFontList 
                 soundFonts={DEFAULT_PRESETS} 
-                activeSoundFontId={activePreset.id} 
-                onSelectSoundFont={selectPreset} 
+                activeChannel={activeChannel}
+                onSelectChannel={setActiveChannel}
+                channelAssignments={channelAssignments}
+                onAssignProgram={handleAssignProgram}
               />
             </div>
           ) : (
-            <div className="w-full max-w-md h-full flex flex-col py-1">
-              <NumericKeypad 
-                typedInput={typedInput}
-                activeProgramNumber={activePreset.programNumber}
-                activePresetName={activePreset.name}
-                onDigitPress={(d) => setTypedInput(prev => prev.length < 3 ? prev + d : prev)}
-                onClearPress={() => setTypedInput('')}
-                onEnterPress={handleEnter}
-                onPreviousSound={handlePrevious}
-                onNextSound={handleNext}
-              />
+            /* PAINEL DE CONFIGURAÇÕES DE ÁUDIO */
+            <div className="w-full max-w-lg h-full flex flex-col py-2 px-4 overflow-y-auto custom-scrollbar gap-6">
+              
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center justify-between text-xs font-bold text-slate-300">
+                  <span>Reverb (Reverberação)</span>
+                  <span className="text-cyan-400 font-mono">{reverb}%</span>
+                </label>
+                <input type="range" min="0" max="100" value={reverb} onChange={(e) => setReverb(Number(e.target.value))} className="h-2 w-full cursor-pointer accent-cyan-500" />
+                <p className="text-[10px] text-slate-500">Simula a acústica de um ambiente, como uma igreja ou estúdio.</p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center justify-between text-xs font-bold text-slate-300">
+                  <span>Chorus (Coro)</span>
+                  <span className="text-cyan-400 font-mono">{chorus}%</span>
+                </label>
+                <input type="range" min="0" max="100" value={chorus} onChange={(e) => setChorus(Number(e.target.value))} className="h-2 w-full cursor-pointer accent-cyan-500" />
+                <p className="text-[10px] text-slate-500">Engrossa o som duplicando e desafinando levemente a nota.</p>
+              </div>
+
+              <div className="mt-4 p-3 bg-[#0a0f1c] border border-[#1e293b] rounded-lg">
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  <strong className="text-cyan-400">Dica Pro:</strong> As configurações de efeitos são aplicadas apenas aos canais que têm um som atribuído na aba PRESETS. Para um som mais "cru", diminua o Reverb e o Chorus.
+                </p>
+              </div>
             </div>
           )}
         </div>
