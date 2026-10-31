@@ -4,11 +4,15 @@ import { SoundFontPreset } from '../../types/soundfont';
 
 interface SoundFontListProps {
   soundFonts: SoundFontPreset[];
-  activeSoundFontId: string;
-  onSelectSoundFont: (preset: SoundFontPreset) => void;
+  activeChannel: number; // 0 = Omni, 1-16
+  onSelectChannel: (ch: number) => void;
+  channelAssignments: Record<number, number>; // Mapeia canal -> programNumber
+  onAssignProgram: (preset: SoundFontPreset) => void; // Atribui ao activeChannel
 }
 
-export const SoundFontList: React.FC<SoundFontListProps> = ({ soundFonts, activeSoundFontId, onSelectSoundFont }) => {
+export const SoundFontList: React.FC<SoundFontListProps> = ({ 
+  soundFonts, activeChannel, onSelectChannel, channelAssignments, onAssignProgram 
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
 
@@ -20,13 +24,38 @@ export const SoundFontList: React.FC<SoundFontListProps> = ({ soundFonts, active
     return matchesSearch && matchesCategory;
   });
 
+  // Verifica se um preset está ativo no canal selecionado
+  const isPresetActive = (progNum: number) => {
+    if (activeChannel === 0) return false; // Omni não recebe atribuição direta
+    return channelAssignments[activeChannel] === progNum;
+  };
+
+  // Verifica em quais OUTROS canais o preset está tocando
+  const getPresetChannels = (progNum: number) => {
+    const channels: number[] = [];
+    Object.entries(channelAssignments).forEach(([ch, prog]) => {
+      if (prog === progNum) channels.push(Number(ch));
+    });
+    return channels;
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 h-full w-full overflow-hidden">
-      <div className="flex flex-col gap-1.5 pb-2 shrink-0">
+      {/* SELETOR DE CANAL */}
+      <div className="flex items-center gap-1 pb-2 shrink-0 overflow-x-auto no-scrollbar">
+        <span className="text-[10px] font-bold text-slate-500 uppercase mr-1 shrink-0">Canal Ativo:</span>
+        {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16].map(ch => (
+          <button key={ch} onClick={() => onSelectChannel(ch)} className={`w-7 h-7 shrink-0 rounded-md font-mono text-xs font-bold transition-colors ${activeChannel === ch ? 'bg-cyan-600 text-white shadow-md' : 'bg-[#0a0f1c] text-slate-400 hover:bg-slate-800'}`}>
+            {ch}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-1.5 pb-2 shrink-0 border-t border-[#1e293b] pt-2">
         <div className="flex items-center justify-between gap-2">
           <div className="relative flex-1 min-w-0">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input type="text" placeholder="Buscar preset por nome ou número (#001)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-8 pr-3 py-1 rounded-lg text-xs bg-[#0a0f1c] border border-[#1e293b] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 h-7 sm:h-8" />
+            <input type="text" placeholder="Buscar preset..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-8 pr-3 py-1 rounded-lg text-xs bg-[#0a0f1c] border border-[#1e293b] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 h-7 sm:h-8" />
           </div>
           <div className="text-[10px] text-slate-400 font-medium whitespace-nowrap shrink-0">
             <span className="font-semibold text-slate-300">{filteredPresets.length}</span> sons
@@ -49,13 +78,15 @@ export const SoundFontList: React.FC<SoundFontListProps> = ({ soundFonts, active
           </div>
         ) : (
           filteredPresets.map((preset) => {
-            const isActive = preset.id === activeSoundFontId;
+            const isActive = isPresetActive(preset.programNumber);
+            const activeChannels = getPresetChannels(preset.programNumber);
+            
             return (
-              <div key={preset.id} onClick={() => onSelectSoundFont(preset)} className={`group flex items-center justify-between py-2 px-2.5 rounded-xl border cursor-pointer transition-all ${isActive ? 'border-cyan-500 bg-cyan-900/20 text-cyan-300 ring-1 ring-cyan-500/30' : 'border-[#1e293b] bg-[#0f172a] hover:border-slate-600 text-slate-300 hover:bg-slate-800'}`}>
+              <div key={preset.id} onClick={() => onAssignProgram(preset)} className={`group flex items-center justify-between py-2 px-2.5 rounded-xl border cursor-pointer transition-all ${isActive ? 'border-cyan-500 bg-cyan-900/20 ring-1 ring-cyan-500/30' : 'border-[#1e293b] bg-[#0f172a] hover:border-slate-600 hover:bg-slate-800'}`}>
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center font-mono shrink-0 transition-colors ${isActive ? 'bg-cyan-600 text-white shadow-xs' : 'bg-[#0a0f1c] text-slate-400 group-hover:bg-slate-800'}`}>
-                    <span className="text-[7px] uppercase leading-none opacity-80">PRG</span>
-                    <span className="text-[11px] font-bold leading-tight">{String(preset.programNumber).padStart(3, '0')}</span>
+                  <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center font-mono shrink-0 transition-colors ${isActive ? 'bg-cyan-600 text-white shadow-xs' : 'bg-[#0a0f1c] text-slate-400'}`}>
+                    <span className="text-[7px] uppercase opacity-80">PRG</span>
+                    <span className="text-[11px] font-bold">{String(preset.programNumber).padStart(3, '0')}</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -63,11 +94,16 @@ export const SoundFontList: React.FC<SoundFontListProps> = ({ soundFonts, active
                     </div>
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-500 truncate mt-0.5">
                       <span className="font-medium text-slate-400">{preset.category}</span>
+                      {activeChannels.length > 0 && (
+                        <span className="text-cyan-500/80 font-mono ml-1">
+                          (Ativo: CH {activeChannels.join(', ')})
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
                 <span className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${isActive ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-500 group-hover:text-cyan-400'}`}>
-                  {isActive ? 'ATIVO' : 'CARREGAR'}
+                  {isActive ? 'ATIVO' : 'ALOCAR'}
                 </span>
               </div>
             );
