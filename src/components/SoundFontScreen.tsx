@@ -1,14 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, CheckCircle2, AlertCircle, List, SlidersHorizontal } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertCircle, List, SlidersHorizontal, Save } from 'lucide-react';
 import { synthService } from '../services/synthService';
 import { storageService } from '../services/storageService';
 import { SoundFontPreset } from '../types/soundfont';
 import { ActiveSoundFontCard } from './soundfont/ActiveSoundFontCard';
 import { SoundFontList } from './soundfont/SoundFontList';
+import { SynthSettingsPanel } from './soundfont/SynthSettingsPanel';
 
 interface Props {
   onStatus: (message: string, type?: 'info' | 'warn' | 'error' | 'success') => void;
 }
+
+const DEFAULT_SETTINGS = {
+  delayTime: 300, delayFeedback: 30, delayMix: 0,
+  eqLow: 0, eqMid: 0, eqHigh: 0, compThreshold: -24,
+  attack: 64, release: 64, cutoff: 127, resonance: 64, vibrato: 0,
+  fineTune: 0, pitchBendRange: 2, maxPolyphony: 64,
+  reverb: 35, chorus: 0, volume: 85, transpose: 0
+};
 
 const GM_INSTRUMENTS = [
   'Acoustic Grand Piano', 'Bright Acoustic Piano', 'Electric Grand Piano', 'Honky-tonk Piano', 'Electric Piano 1', 'Electric Piano 2', 'Harpsichord', 'Clavinet',
@@ -44,28 +53,72 @@ const DEFAULT_PRESETS: SoundFontPreset[] = GM_INSTRUMENTS.map((name, index) => {
 export function SoundFontScreen({ onStatus }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [loadedFile, setLoadedFile] = useState<string | null>(null);
-  
-  // Estado de visualização: 'presets' ou 'config'
   const [viewMode, setViewMode] = useState<'presets' | 'config'>('presets');
-  
-  // Estado do canal ativo (1-16)
   const [activeChannel, setActiveChannel] = useState<number>(1);
   
-  // Mapeamento: Canal -> ProgramNumber (Salvo no localStorage)
+  // Mixer
+  const [mutedChannels, setMutedChannels] = useState<Record<number, boolean>>({});
+  const [soloedChannel, setSoloedChannel] = useState<number | null>(null);
   const [channelAssignments, setChannelAssignments] = useState<Record<number, number>>(() => {
     const saved = localStorage.getItem('nexus_sf_channels');
     return saved ? JSON.parse(saved) : {};
   });
 
-  // Configurações Globais de Efeitos
-  const [volume, setVolume] = useState(85);
-  const [reverb, setReverb] = useState(35);
-  const [chorus, setChorus] = useState(0);
-  const [transpose, setTranspose] = useState(0);
+  // Motor de Áudio
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem('nexus_synth_settings');
+    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Carrega o arquivo salvo no IndexedDB ao abrir a tela
+  // Salva configurações e aplica no motor
+  useEffect(() => {
+    localStorage.setItem('nexus_synth_settings', JSON.stringify(settings));
+    
+    if (synthService.getIsReady()) {
+      synthService.setTranspose(settings.transpose);
+      synthService.setMaxPolyphony(settings.maxPolyphony);
+      synthService.setDelay(settings.delayTime, settings.delayFeedback, settings.delayMix);
+      synthService.setEQ(settings.eqLow, settings.eqMid, settings.eqHigh);
+      synthService.setCompressor(settings.compThreshold, 4);
+      
+      // Aplica os controles MIDI em todos os canais
+      for (let ch = 1; ch <= 16; ch++) {
+        synthService.setReverb(settings.reverb, ch);
+        synthService.setChorus(settings.chorus, ch);
+        synthService.setAttack(settings.attack, ch);
+        synthService.setRelease(settings.release, ch);
+        synthService.setFilterCutoff(settings.cutoff, ch);
+        synthService.setFilterResonance(settings.resonance, ch);
+        synthService.setVibratoDepth(settings.vibrato, ch);
+        synthService.setFineTuning(settings.fineTune, ch);
+        synthService.setPitchBendRange(settings.pitchBendRange, ch);
+      }
+    }
+  }, [settings]);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_sf_channels', JSON.stringify(channelAssignments));
+    // Restaura os mutes e solos se salvos
+    const savedMutes = localStorage.getItem('nexus_sf_mutes');
+    if (savedMutes) setMutedChannels(JSON.parse(savedMutes));
+  }, [channelAssignments]);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_sf_mutes', JSON.stringify(mutedChannels));
+    if (!synthService.getIsReady()) return;
+    
+    for (let ch = 1; ch <= 16; ch++) {
+      const isMuted = mutedChannels[ch];
+      const isSoloed = soloedChannel === ch;
+      const hasOtherSolo = soloedChannel !== null && soloedChannel !== ch;
+      
+      if (isMuted || hasOtherSolo) synthService.setMasterVolume(0, ch);
+      else synthService.setMasterVolume(settings.volume, ch);
+    }
+  }, [mutedChannels, soloedChannel, settings.volume]);
+
   useEffect(() => {
     const loadSavedFile = async () => {
       try {
@@ -76,38 +129,17 @@ export function SoundFontScreen({ onStatus }: Props) {
           if (success) {
             setLoadedFile(saved.name);
             onStatus('SoundFont restaurado da memória.', 'info');
-            // Reaplica as configurações de canais salvos
             Object.entries(channelAssignments).forEach(([ch, prog]) => {
               synthService.programChange(prog, Number(ch));
             });
           }
           setIsLoading(false);
         }
-      } catch (e) {
-        console.error("Erro ao restaurar SF2", e);
-      }
+      } catch (e) { console.error("Erro ao restaurar SF2", e); }
     };
     loadSavedFile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Salva as atribuições de canais sempre que mudarem
-  useEffect(() => {
-    localStorage.setItem('nexus_sf_channels', JSON.stringify(channelAssignments));
-  }, [channelAssignments]);
-
-  // Atualiza efeitos no sintetizador
-  useEffect(() => {
-    if (synthService.getIsReady()) {
-      synthService.setTranspose(transpose);
-      // Aplica os efeitos em todos os canais alocados
-      Object.keys(channelAssignments).forEach(ch => {
-        synthService.setMasterVolume(volume, Number(ch));
-        synthService.setReverb(reverb, Number(ch));
-        synthService.setChorus(chorus, Number(ch));
-      });
-    }
-  }, [volume, reverb, chorus, transpose, channelAssignments]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -121,10 +153,11 @@ export function SoundFontScreen({ onStatus }: Props) {
     try {
       await storageService.saveSoundFont(file);
       const success = await synthService.loadSoundFont(file);
-      
       if (success) {
         setLoadedFile(file.name);
-        setChannelAssignments({}); // Reseta alocações
+        setChannelAssignments({});
+        setMutedChannels({});
+        setSoloedChannel(null);
         onStatus(`SoundFont "${file.name}" carregado!`, 'success');
       } else {
         onStatus('Falha ao carregar o SoundFont.', 'error');
@@ -144,6 +177,23 @@ export function SoundFontScreen({ onStatus }: Props) {
     }
   };
 
+  const updateSetting = (key: string, value: any) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleReset = () => {
+    setSettings(DEFAULT_SETTINGS);
+    onStatus('Configurações restauradas para o padrão.', 'info');
+  };
+
+  const handleSavePreset = () => {
+    localStorage.setItem('nexus_synth_settings', JSON.stringify(settings));
+    onStatus('Preset de configurações salvo!', 'success');
+  };
+
+  const toggleMute = (ch: number) => setMutedChannels(prev => ({ ...prev, [ch]: !prev[ch] }));
+  const toggleSolo = (ch: number) => setSoloedChannel(prev => prev === ch ? null : ch);
+
   const getActivePreset = (): SoundFontPreset => {
     const prog = channelAssignments[activeChannel];
     return DEFAULT_PRESETS.find(p => p.programNumber === prog) || DEFAULT_PRESETS[0];
@@ -161,9 +211,9 @@ export function SoundFontScreen({ onStatus }: Props) {
       <div className="shrink-0 w-full">
         <ActiveSoundFontCard 
           preset={getActivePreset()} 
-          volume={volume} onVolumeChange={setVolume}
-          reverb={reverb} onReverbChange={setReverb}
-          transpose={transpose} onTransposeChange={setTranspose}
+          volume={settings.volume} onVolumeChange={(v) => updateSetting('volume', v)}
+          reverb={settings.reverb} onReverbChange={(v) => updateSetting('reverb', v)}
+          transpose={settings.transpose} onTransposeChange={(v) => updateSetting('transpose', v)}
           onAudition={handleAudition}
         />
       </div>
@@ -172,7 +222,6 @@ export function SoundFontScreen({ onStatus }: Props) {
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-2 shrink-0">
           
-          {/* Toggle Presets / Configurações */}
           <div className="flex bg-[#0a0f1c] rounded-lg p-0.5 border border-[#1e293b]">
             <button type="button" onClick={() => setViewMode('presets')} className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === 'presets' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>
               <List size={12} /> PRESETS
@@ -183,15 +232,23 @@ export function SoundFontScreen({ onStatus }: Props) {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+            
+            {viewMode === 'config' && (
+              <button onClick={handleSavePreset} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-[10px] font-bold shadow transition shrink-0">
+                <Save size={12} /> Salvar Preset
+              </button>
+            )}
+
             {loadedFile ? (
-              <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 truncate max-w-[120px] sm:max-w-[200px]">
+              <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 truncate max-w-[120px] sm:max-w-[200px] hidden sm:flex">
                 <CheckCircle2 size={12} /> {loadedFile}
               </span>
             ) : (
-              <span className="text-[10px] font-mono text-amber-500 flex items-center gap-1">
+              <span className="text-[10px] font-mono text-amber-500 flex items-center gap-1 hidden sm:flex">
                 <AlertCircle size={12} /> Vazio
               </span>
             )}
+            
             <input type="file" accept=".sf2" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
             <button onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md text-[10px] font-bold shadow transition flex items-center gap-1.5 disabled:opacity-50 shrink-0">
               <UploadCloud size={12} /> {isLoading ? 'Carregando...' : 'Importar SF2'}
@@ -199,7 +256,6 @@ export function SoundFontScreen({ onStatus }: Props) {
           </div>
         </div>
 
-        {/* CONTEÚDO PRINCIPAL */}
         <div className="flex-1 min-h-0 w-full flex flex-col items-center">
           {viewMode === 'presets' ? (
             <div className="w-full h-full">
@@ -209,35 +265,20 @@ export function SoundFontScreen({ onStatus }: Props) {
                 onSelectChannel={setActiveChannel}
                 channelAssignments={channelAssignments}
                 onAssignProgram={handleAssignProgram}
+                mutedChannels={mutedChannels}
+                soloedChannel={soloedChannel}
+                onToggleMute={toggleMute}
+                onToggleSolo={toggleSolo}
               />
             </div>
           ) : (
-            /* PAINEL DE CONFIGURAÇÕES DE ÁUDIO */
-            <div className="w-full max-w-lg h-full flex flex-col py-2 px-4 overflow-y-auto custom-scrollbar gap-6">
-              
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center justify-between text-xs font-bold text-slate-300">
-                  <span>Reverb (Reverberação)</span>
-                  <span className="text-cyan-400 font-mono">{reverb}%</span>
-                </label>
-                <input type="range" min="0" max="100" value={reverb} onChange={(e) => setReverb(Number(e.target.value))} className="h-2 w-full cursor-pointer accent-cyan-500" />
-                <p className="text-[10px] text-slate-500">Simula a acústica de um ambiente, como uma igreja ou estúdio.</p>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center justify-between text-xs font-bold text-slate-300">
-                  <span>Chorus (Coro)</span>
-                  <span className="text-cyan-400 font-mono">{chorus}%</span>
-                </label>
-                <input type="range" min="0" max="100" value={chorus} onChange={(e) => setChorus(Number(e.target.value))} className="h-2 w-full cursor-pointer accent-cyan-500" />
-                <p className="text-[10px] text-slate-500">Engrossa o som duplicando e desafinando levemente a nota.</p>
-              </div>
-
-              <div className="mt-4 p-3 bg-[#0a0f1c] border border-[#1e293b] rounded-lg">
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  <strong className="text-cyan-400">Dica Pro:</strong> As configurações de efeitos são aplicadas apenas aos canais que têm um som atribuído na aba PRESETS. Para um som mais "cru", diminua o Reverb e o Chorus.
-                </p>
-              </div>
+            <div className="w-full h-full">
+              <SynthSettingsPanel 
+                settings={settings} 
+                onUpdateSetting={updateSetting} 
+                onReset={handleReset} 
+                activeChannel={activeChannel} 
+              />
             </div>
           )}
         </div>
@@ -245,4 +286,4 @@ export function SoundFontScreen({ onStatus }: Props) {
       </div>
     </div>
   );
-}
+        }
