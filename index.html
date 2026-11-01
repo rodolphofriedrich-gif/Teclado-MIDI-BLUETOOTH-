@@ -1,32 +1,17 @@
+```html
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    
-    <!-- CORRIGIDO: Nome do app padronizado para NexusMIDI Pro -->
-    <title>NexusMIDI Pro</title>
-    <meta name="description" content="Controlador e roteador MIDI avançado para Android, USB e BLE." />
-    
-    <meta property="og:title" content="NexusMIDI Pro" />
-    <meta property="og:description" content="Controlador e roteador MIDI avançado para Android, USB e BLE." />
-    <meta property="og:type" content="website" />
-    
-    <!-- Tema escuro combinando com o topo do app -->
-    <meta name="theme-color" content="#0a0e1a" />
-    
-    <!-- PWA e iOS -->
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="NexusMIDI Pro" />
-    
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>NexusMIDI Pro</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
-  <!-- CORRIGIDO: Removidas as classes do Tailwind do body. O arquivo index.css já cuida do fundo e das cores. -->
-  <body>
+  <body class="bg-slate-950 text-slate-100 overflow-hidden select-none">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+```
