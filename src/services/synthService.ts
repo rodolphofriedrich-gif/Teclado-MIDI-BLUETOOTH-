@@ -1,85 +1,108 @@
-import { BasicAudioBackend, SoundFont2 } from 'spessasynth_lib';
+import workletUrl from 'spessasynth_lib/dist/spessasynth_processor.min.js?url';
+import { WorkletSynthesizer } from 'spessasynth_lib';
 
 class SynthService {
-  private backend: BasicAudioBackend | null = null;
-  private audioCtx: AudioContext | null = null;
-  private activeNotes: Set<number> = new Set();
-  private maxPolyphony: number = 64;
+  private audioContext: AudioContext | null = null;
+  private synth: WorkletSynthesizer | null = null;
+  private isReady: boolean = false;
+  private currentFileName: string | null = null;
+  private workletLoaded: boolean = false;
+  private transpose: number = 0;
 
   public async init(): Promise<void> {
-    if (this.audioCtx && this.backend) return;
-
-    try {
-      // Usa sampleRate nativo do dispositivo e latência otimizada para interatividade
-      this.audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)({
-        latencyHint: 'interactive',
-      });
-
-      if (this.audioCtx.state === 'suspended') {
-        await this.audioCtx.resume();
-      }
-
-      this.backend = new BasicAudioBackend(this.audioCtx);
-      console.log('SynthService inicializado com sucesso.');
-    } catch (error) {
-      console.error('Erro ao inicializar AudioContext:', error);
-    }
+    if (this.audioContext) return;
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    this.audioContext = new AudioCtx({ sampleRate: 44100 });
+    if (this.audioContext.state === 'suspended') await this.audioContext.resume();
   }
 
-  public async loadSoundFont(arrayBuffer: ArrayBuffer): Promise<void> {
-    await this.init();
-    if (!this.backend) return;
-
+  private async ensureWorkletLoaded(): Promise<void> {
+    if (this.workletLoaded || !this.audioContext) return;
     try {
-      const sf = new SoundFont2(arrayBuffer);
-      await this.backend.soundfontManager.loadNewSoundfont(sf);
-      console.log('SoundFont carregado com sucesso.');
+      await this.audioContext.audioWorklet.addModule(workletUrl);
+      this.workletLoaded = true;
     } catch (error) {
-      console.error('Erro ao carregar SoundFont:', error);
+      console.error('Erro ao carregar o worklet:', error);
       throw error;
     }
   }
 
-  public noteOn(channel: number, midiNote: number, velocity: number): void {
-    if (!this.backend) return;
+  public async loadSoundFontBuffer(buffer: ArrayBuffer, fileName: string): Promise<boolean> {
+    try {
+      await this.init();
+      if (!this.audioContext) throw new Error('AudioContext indisponível');
+      await this.ensureWorkletLoaded();
 
-    // Gerenciamento simples de polifonia e voice stealing
-    if (this.activeNotes.size >= this.maxPolyphony) {
-      const firstNote = this.activeNotes.values().next().value;
-      if (firstNote !== undefined) {
-        this.backend.midiMessage(channel, 0x80, firstNote, 0);
-        this.activeNotes.delete(firstNote);
-      }
+      this.synth = new WorkletSynthesizer(this.audioContext);
+      this.synth.soundBankManager.addSoundBank(buffer, fileName);
+      this.synth.connect(this.audioContext.destination);
+
+      this.isReady = true;
+      this.currentFileName = fileName;
+      return true;
+    } catch (error) {
+      console.error('Erro ao carregar SoundFont:', error);
+      this.isReady = false;
+      return false;
     }
-
-    this.activeNotes.add(midiNote);
-    this.backend.midiMessage(channel, 0x90, midiNote, velocity);
   }
 
-  public noteOff(channel: number, midiNote: number): void {
-    if (!this.backend) return;
-    this.activeNotes.delete(midiNote);
-    this.backend.midiMessage(channel, 0x80, midiNote, 0);
+  public async loadSoundFont(file: File): Promise<boolean> {
+    const buffer = await file.arrayBuffer();
+    return this.loadSoundFontBuffer(buffer, file.name);
   }
 
-  public sendControlChange(channel: number, controller: number, value: number): void {
-    if (!this.backend) return;
-    this.backend.midiMessage(channel, 0xB0, controller, value);
+  public getIsReady(): boolean { return this.isReady; }
+  public getCurrentFileName(): string | null { return this.currentFileName; }
+
+  public noteOn(note: number, velocity: number, channel: number = 1): void {
+    if (!this.isReady || !this.synth) return;
+    const safeChannel = Math.max(0, Math.min(15, channel - 1));
+    const transposedNote = Math.max(0, Math.min(127, note + this.transpose));
+    this.synth.noteOn(safeChannel, transposedNote, velocity);
   }
 
-  public sendPitchBend(channel: number, lsb: number, msb: number): void {
-    if (!this.backend) return;
-    // Pitch Bend message: 0xE0 + channel
-    const status = 0xE0 | (channel & 0x0F);
-    this.backend.rawMidiMessage(new Uint8Array([status, lsb, msb]));
+  public noteOff(note: number, channel: number = 1): void {
+    if (!this.isReady || !this.synth) return;
+    const safeChannel = Math.max(0, Math.min(15, channel - 1));
+    const transposedNote = Math.max(0, Math.min(127, note + this.transpose));
+    this.synth.noteOff(safeChannel, transposedNote);
   }
 
-  public allNotesOff(): void {
-    if (!this.backend) return;
-    this.activeNotes.clear();
-    for (let ch = 0; ch < 16; ch++) {
-      this.backend.midiMessage(ch, 0xB0, 120, 0); // All Sound Off / CC 120
-    }
+  public controlChange(controller: number, value: number, channel: number = 1): void {
+    if (!this.isReady || !this.synth) return;
+    const safeChannel = Math.max(0, Math.min(15, channel - 1));
+    this.synth.controllerChange(safeChannel, controller, value);
+  }
+
+  public programChange(program: number, channel: number = 1): void {
+    if (!this.isReady || !this.synth) return;
+    const safeChannel = Math.max(0, Math.min(15, channel - 1));
+    this.synth.programChange(safeChannel, program);
+  }
+
+  public setMasterVolume(volume: number, channel: number = 1): void {
+    this.controlChange(7, Math.round(Math.max(0, Math.min(100, volume)) * 1.27), channel);
+  }
+  
+  public setReverb(amount: number, channel: number = 1): void {
+    this.controlChange(91, Math.round(Math.max(0, Math.min(100, amount)) * 1.27), channel);
+  }
+
+  public setChorus(amount: number, channel: number = 1): void {
+    this.controlChange(93, Math.round(Math.max(0, Math.min(100, amount)) * 1.27), channel);
+  }
+
+  public setFilterCutoff(amount: number, channel: number = 1): void {
+    this.controlChange(74, Math.round(Math.max(0, Math.min(100, amount)) * 1.27), channel);
+  }
+
+  public setFilterResonance(amount: number, channel: number = 1): void {
+    this.controlChange(71, Math.round(Math.max(0, Math.min(100, amount)) * 1.27), channel);
+  }
+
+  public setTranspose(semitones: number): void {
+    this.transpose = Math.max(-24, Math.min(24, semitones));
   }
 }
 
