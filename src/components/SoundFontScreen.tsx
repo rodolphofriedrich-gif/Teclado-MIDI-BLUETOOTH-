@@ -1,128 +1,177 @@
-import React, { useState } from 'react';
-import { Sliders, Volume2, Disc, Settings2, ShieldCheck, Zap } from 'lucide-react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
+import { AlertCircle, CheckCircle2, Library, List, SlidersHorizontal, UploadCloud } from 'lucide-react';
+import { GM_PRESETS } from '../constants/gm';
+import { useStore } from '../hooks/useStore';
+import type { ToastType } from '../hooks/useToast';
+import { tr } from '../i18n';
+import { soundFontLibrary } from '../services/soundFontLibrary';
+import { channelsStore, prefsStore, synthSettingsStore } from '../services/stores';
+import type { SynthSettings } from '../services/synthTypes';
 import { synthService } from '../services/synthService';
+import type { SoundFontPreset } from '../types/soundfont';
+import { ActiveSoundFontCard } from './soundfont/ActiveSoundFontCard';
+import { SoundFontLibraryPanel } from './soundfont/SoundFontLibraryPanel';
+import { SoundFontList } from './soundfont/SoundFontList';
+import { SynthSettingsPanel } from './soundfont/SynthSettingsPanel';
 
 interface Props {
-  onStatus: (message: string, type?: 'info' | 'warn' | 'error' | 'success') => void;
+  onStatus: (message: string, type?: ToastType) => void;
 }
 
-export const SoundFontScreen: React.FC<Props> = ({ onStatus }) => {
-  const [activePreset, setActivePreset] = useState<string>('Grand Piano - Init');
-  const [cutoff, setCutoff] = useState<number>(100);
-  const [resonance, setResonance] = useState<number>(20);
-  const [reverb, setReverb] = useState<number>(40);
-  const [chorus, setChorus] = useState<number>(15);
+type ViewMode = 'presets' | 'config' | 'library';
 
-  const handleCutoffChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    setCutoff(val);
-    synthService.setFilterCutoff((val / 127) * 100, 1);
+export function SoundFontScreen({ onStatus }: Props) {
+  const settings = useStore(synthSettingsStore);
+  const channels = useStore(channelsStore);
+  const synth = useSyncExternalStore(synthService.subscribe, synthService.getSnapshot, synthService.getSnapshot);
+  const library = useSyncExternalStore(soundFontLibrary.subscribe, soundFontLibrary.getSnapshot, soundFontLibrary.getSnapshot);
+
+  const [viewMode, setViewMode] = useState<ViewMode>('presets');
+  const [activeChannel, setActiveChannel] = useState(() => prefsStore.get().channel);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const busy = library.busy || synth.loading;
+
+  // Erros da biblioteca (arquivo inválido, falha de leitura) viram aviso na tela.
+  useEffect(() => {
+    if (library.error) onStatus(library.error, 'error');
+  }, [library.error, onStatus]);
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite importar o mesmo arquivo de novo
+    if (!file) return;
+    onStatus(tr('Carregando e salvando SoundFont...'), 'info');
+    if (await soundFontLibrary.importFile(file)) {
+      channelsStore.set({ assignments: {}, muted: {}, solo: null });
+      onStatus(tr('SoundFont "{name}" carregado!', { name: file.name }), 'success');
+    }
   };
 
-  const handleResonanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    setResonance(val);
-    synthService.setFilterResonance((val / 127) * 100, 1);
+  const handleActivate = async (id: string) => {
+    if (await soundFontLibrary.activate(id)) onStatus(tr('SoundFont carregado!'), 'success');
   };
 
-  const handleReverbChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    setReverb(val);
-    synthService.setReverb((val / 127) * 100, 1);
+  const handleRemove = async (id: string) => {
+    await soundFontLibrary.remove(id);
+    onStatus(tr('SoundFont removido da biblioteca.'), 'info');
   };
 
-  const handleChorusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    setChorus(val);
-    synthService.setChorus((val / 127) * 100, 1);
+  const handleAssignProgram = (preset: SoundFontPreset) => {
+    if (!synth.ready) {
+      onStatus(tr('Importe um arquivo SF2 primeiro.'), 'warn');
+      return;
+    }
+    synthService.programChange(preset.programNumber, activeChannel);
+    channelsStore.set((s) => ({ ...s, assignments: { ...s.assignments, [activeChannel]: preset.programNumber } }));
   };
+
+  const updateSetting = (key: keyof SynthSettings, value: number) => synthSettingsStore.set({ [key]: value });
+
+  const handleReset = () => {
+    synthSettingsStore.reset();
+    onStatus(tr('Configurações restauradas para o padrão.'), 'info');
+  };
+
+  const toggleMute = (ch: number) =>
+    channelsStore.set((s) => ({ ...s, muted: { ...s.muted, [ch]: !s.muted[ch] } }));
+  const toggleSolo = (ch: number) => channelsStore.set((s) => ({ ...s, solo: s.solo === ch ? null : ch }));
+
+  const activePreset = (): SoundFontPreset =>
+    GM_PRESETS.find((p) => p.programNumber === channels.assignments[activeChannel]) ?? GM_PRESETS[0];
+
+  const handleAudition = () => {
+    if (!synth.ready) {
+      onStatus(tr('Carregue um arquivo .sf2 primeiro.'), 'warn');
+      return;
+    }
+    const chord = [60, 64, 67, 72];
+    chord.forEach((note) => synthService.noteOn(note, 100, activeChannel));
+    setTimeout(() => chord.forEach((note) => synthService.noteOff(note, activeChannel)), 1000);
+  };
+
+  const tabClass = (mode: ViewMode, active: string) =>
+    `flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${viewMode === mode ? active : 'text-slate-500 hover:text-slate-300'}`;
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-200 p-4 select-none">
-      <div className="flex items-center justify-between bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-3 mb-4 shadow-lg backdrop-blur-md">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-cyan-400">
-            <Sliders className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold tracking-wider text-slate-100 uppercase">SoundFont Studio Rack</h2>
-            <p className="text-xs text-cyan-400 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 inline" /> Multitimbral Engine Ready
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center bg-slate-950/60 border border-slate-800 px-4 py-1.5 rounded-lg">
-          <Disc className="w-4 h-4 text-cyan-400 animate-spin mr-2" />
-          <span className="text-xs font-mono font-medium text-slate-300">Set: {activePreset}</span>
-        </div>
+    <div className="flex w-full flex-1 flex-col gap-2 overflow-hidden bg-[#0a0f1c] p-2 text-slate-100 sm:p-3">
+      <div className="w-full shrink-0">
+        <ActiveSoundFontCard
+          preset={activePreset()}
+          volume={settings.volume}
+          onVolumeChange={(v) => updateSetting('volume', v)}
+          reverb={settings.reverb}
+          onReverbChange={(v) => updateSetting('reverb', v)}
+          transpose={settings.transpose}
+          onTransposeChange={(v) => updateSetting('transpose', v)}
+          onAudition={handleAudition}
+        />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between shadow-inner">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-            <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase">Filtros & Res</span>
-            <Settings2 className="w-4 h-4 text-slate-500" />
+      <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-[#1e293b] bg-[#0f172a] p-2">
+        <div className="mb-2 flex shrink-0 flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+          <div className="flex rounded-lg border border-[#1e293b] bg-[#0a0f1c] p-0.5">
+            <button type="button" onClick={() => setViewMode('presets')} className={tabClass('presets', 'bg-slate-700 text-white shadow-sm')}>
+              <List size={12} /> {tr('PRESETS')}
+            </button>
+            <button type="button" onClick={() => setViewMode('config')} className={tabClass('config', 'bg-cyan-700 text-white shadow-sm')}>
+              <SlidersHorizontal size={12} /> {tr('CONFIG')}
+            </button>
+            <button type="button" onClick={() => setViewMode('library')} className={tabClass('library', 'bg-emerald-700 text-white shadow-sm')}>
+              <Library size={12} /> {tr('BIBLIOTECA')}
+              {library.items.length > 0 && <span className="rounded bg-black/30 px-1 font-mono">{library.items.length}</span>}
+            </button>
           </div>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs text-slate-400 mb-1">
-                <span>Cutoff</span><span className="font-mono text-cyan-400">{cutoff}%</span>
-              </div>
-              <input type="range" min="0" max="127" value={cutoff} onChange={handleCutoffChange} className="w-full accent-cyan-500 bg-slate-800 rounded-lg h-1.5 cursor-pointer" />
-            </div>
-            <div>
-              <div className="flex justify-between text-xs text-slate-400 mb-1">
-                <span>Resonance</span><span className="font-mono text-cyan-400">{resonance}%</span>
-              </div>
-              <input type="range" min="0" max="127" value={resonance} onChange={handleResonanceChange} className="w-full accent-cyan-500 bg-slate-800 rounded-lg h-1.5 cursor-pointer" />
-            </div>
+
+          <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+            {synth.fileName ? (
+              <span className="hidden max-w-[120px] items-center gap-1 truncate font-mono text-[10px] text-emerald-400 sm:flex sm:max-w-[200px]">
+                <CheckCircle2 size={12} /> {synth.fileName}
+              </span>
+            ) : (
+              <span className="hidden items-center gap-1 font-mono text-[10px] text-amber-500 sm:flex">
+                <AlertCircle size={12} /> {tr('Vazio')}
+              </span>
+            )}
+            <input type="file" accept=".sf2" ref={fileInputRef} onChange={(e) => void handleFileChange(e)} className="hidden" />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+              className="flex shrink-0 items-center gap-1.5 rounded-md bg-cyan-600 px-3 py-1.5 text-[10px] font-bold text-white shadow transition hover:bg-cyan-500 disabled:opacity-50"
+            >
+              <UploadCloud size={12} /> {busy ? tr('Carregando...') : tr('Importar SF2')}
+            </button>
           </div>
         </div>
 
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between shadow-inner">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-            <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase">Sends & Effects</span>
-            <Zap className="w-4 h-4 text-slate-500" />
-          </div>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs text-slate-400 mb-1">
-                <span>Reverb</span><span className="font-mono text-cyan-400">{reverb}%</span>
-              </div>
-              <input type="range" min="0" max="127" value={reverb} onChange={handleReverbChange} className="w-full accent-cyan-500 bg-slate-800 rounded-lg h-1.5 cursor-pointer" />
-            </div>
-            <div>
-              <div className="flex justify-between text-xs text-slate-400 mb-1">
-                <span>Chorus</span><span className="font-mono text-cyan-400">{chorus}%</span>
-              </div>
-              <input type="range" min="0" max="127" value={chorus} onChange={handleChorusChange} className="w-full accent-cyan-500 bg-slate-800 rounded-lg h-1.5 cursor-pointer" />
-            </div>
-          </div>
-        </div>
-
-        <div className="md:col-span-2 bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between shadow-inner">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-            <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase">Quick Bank Presets</span>
-            <Volume2 className="w-4 h-4 text-slate-500" />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {['Grand Piano', 'Strings Pad', 'Warm Synth', 'Electric Bass', 'Brass Ensemble', 'FX Ambient'].map((preset) => (
-              <button
-                key={preset}
-                onClick={() => setActivePreset(preset)}
-                className={`px-3 py-2 text-xs font-medium rounded-xl border transition-all text-left truncate ${
-                  activePreset.includes(preset)
-                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-sm shadow-cyan-500/20'
-                    : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                }`}
-              >
-                {preset}
-              </button>
-            ))}
+        <div className="flex min-h-0 w-full flex-1 flex-col items-center">
+          <div className="h-full w-full">
+            {viewMode === 'presets' && (
+              <SoundFontList
+                soundFonts={GM_PRESETS}
+                activeChannel={activeChannel}
+                onSelectChannel={setActiveChannel}
+                channelAssignments={channels.assignments}
+                onAssignProgram={handleAssignProgram}
+                mutedChannels={channels.muted}
+                soloedChannel={channels.solo}
+                onToggleMute={toggleMute}
+                onToggleSolo={toggleSolo}
+              />
+            )}
+            {viewMode === 'config' && (
+              <SynthSettingsPanel settings={settings} onUpdateSetting={updateSetting} onReset={handleReset} />
+            )}
+            {viewMode === 'library' && (
+              <SoundFontLibraryPanel
+                library={library}
+                onActivate={(id) => void handleActivate(id)}
+                onRemove={(id) => void handleRemove(id)}
+              />
+            )}
           </div>
         </div>
       </div>
     </div>
   );
-};
+}

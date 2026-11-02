@@ -19,3 +19,14 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# ---------------------------------------------------------------------------
+# NexusMIDI Pro
+# ---------------------------------------------------------------------------
+# Plugins do Capacitor são descobertos por reflexão: não podem ser renomeados/removidos pelo R8.
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+-keep class com.midi.controller.keyboard.plugins.** { *; }
+-keep @com.getcapacitor.annotation.CapacitorPlugin public class * {
+    @com.getcapacitor.annotation.PermissionCallback <methods>;
+    @com.getcapacitor.PluginMethod public <methods>;
+}

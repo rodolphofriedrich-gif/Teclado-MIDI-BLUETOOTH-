@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface StudioFaderProps {
   label: string;
   sublabel?: string;

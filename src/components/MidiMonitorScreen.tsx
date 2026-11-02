@@ -1,223 +1,133 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { MidiLogEntry } from '../types/midi';
-import { midiManager, getNoteName } from '../services/midiService';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { ChevronDown, Pause, Play, Trash2 } from 'lucide-react';
+import { tr } from '../i18n';
+import { midiManager } from '../services/midiService';
+import type { MidiLogEntry } from '../types/midi';
 
-interface Props {
-  maxEntries?: number;
-}
+type Filter = 'all' | 'RX' | 'TX';
 
-export function MidiMonitorScreen({ maxEntries = 150 }: Props) {
-  const [entries, setEntries] = useState<MidiLogEntry[]>([]);
+const TYPE_COLORS: Partial<Record<MidiLogEntry['type'], string>> = {
+  'Note On': 'text-emerald-400',
+  'Note Off': 'text-slate-400',
+  'Control Change': 'text-amber-400',
+  'Program Change': 'text-cyan-400',
+  'Pitch Bend': 'text-fuchsia-400',
+  'Channel Pressure': 'text-rose-400',
+  'Poly Aftertouch': 'text-rose-400',
+  System: 'text-purple-400',
+};
+
+export function MidiMonitorScreen({ maxVisible = 150 }: { maxVisible?: number }) {
+  // O histórico vive no serviço: não se perde ao trocar de aba.
+  const log = useSyncExternalStore(midiManager.subscribeLog, midiManager.getLog, midiManager.getLog);
   const [paused, setPaused] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'RX' | 'TX'>('all');
-  
+  const [frozen, setFrozen] = useState<MidiLogEntry[]>([]);
+  const [filter, setFilter] = useState<Filter>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
-  
-  // Ref para evitar recriar o listener a cada pausa
-  const pausedRef = useRef(paused);
 
-  useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
+  const source = paused ? frozen : log;
+  const visible = useMemo(
+    () => (filter === 'all' ? source : source.filter((e) => e.direction === filter)).slice(0, maxVisible),
+    [source, filter, maxVisible],
+  );
 
-  // Fecha o menu customizado ao clicar fora
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setIsFilterOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const togglePause = () => {
+    if (!paused) setFrozen(log);
+    setPaused(!paused);
+  };
 
-  useEffect(() => {
-    const listener = (message: {
-      status: number;
-      data1: number;
-      data2: number;
-      timestamp: number;
-      sourceId?: string;
-    }) => {
-      // CORREÇÃO DE PERFORMANCE: Usa a ref em vez do estado direto, evitando recriar o listener
-      if (pausedRef.current) return;
-
-      const status = message.status & 0xff;
-      const command = status & 0xf0;
-      const channel = command >= 0xf0 ? 0 : (status & 0x0f) + 1;
-
-      let type: MidiLogEntry['type'] = 'Unknown';
-
-      switch (command) {
-        case 0x80: type = 'Note Off'; break;
-        case 0x90: type = message.data2 === 0 ? 'Note Off' : 'Note On'; break;
-        case 0xa0: type = 'Poly Aftertouch'; break;
-        case 0xb0: type = 'Control Change'; break;
-        case 0xc0: type = 'Program Change'; break;
-        case 0xd0: type = 'Channel Pressure'; break;
-        case 0xe0: type = 'Pitch Bend'; break;
-        default: type = 'System';
-      }
-
-      const bytes = [status, message.data1, message.data2];
-      const bytesHex = bytes
-        .map((value) => (value & 0xff).toString(16).padStart(2, '0'))
-        .join(' ');
-
-      const entry: MidiLogEntry = {
-        id: `${message.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
-        timestamp: new Date(message.timestamp).toLocaleTimeString(),
-        type,
-        channel,
-        note: message.data1,
-        noteName: getNoteName(message.data1),
-        velocity: message.data2,
-        bytesHex,
-        direction: 'RX', // Nota: Se o midiManager enviar TX por aqui também, isso precisaria ser dinâmico
-        source: message.sourceId,
-      };
-
-      setEntries((current) => [entry, ...current].slice(0, maxEntries));
-    };
-
-    midiManager.addMessageListener(listener);
-
-    return () => {
-      midiManager.removeMessageListener(listener);
-    };
-  }, [maxEntries]); // Removido 'paused' das dependências
-
-  const visible =
-    filter === 'all'
-      ? entries
-      : entries.filter((entry) => entry.direction === filter);
+  const filterLabel = (f: Filter) => (f === 'all' ? tr('Todos') : f === 'RX' ? tr('Recebidos (RX)') : tr('Enviados (TX)'));
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#0a0f1c] text-slate-100 rounded-xl border border-slate-800 overflow-hidden">
-      
-      {/* CABEÇALHO */}
-      <div className="px-4 py-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-800 bg-[#0a0f1c] text-slate-100">
+      <div className="flex shrink-0 flex-col justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-fuchsia-400">
-            MIDI Monitor
-          </h2>
-          <p className="text-[10px] text-slate-500">
-            Mensagens MIDI recebidas pelo NexusMIDI.
-          </p>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-fuchsia-400">{tr('MIDI Monitor')}</h2>
+          <p className="text-[10px] text-slate-500">{tr('Mensagens MIDI enviadas e recebidas pelo NexusMIDI.')}</p>
         </div>
 
         <div className="flex items-center gap-2">
-          
-          {/* FILTRO CUSTOMIZADO */}
-          <div className="relative" ref={filterRef}>
+          <div className="relative">
             <button
               type="button"
               onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className="flex h-[30px] min-w-[110px] items-center justify-between rounded-md border border-slate-700 bg-[#0f172a] px-2.5 text-xs text-slate-200 outline-none hover:border-slate-600 transition"
+              className="flex h-8 items-center gap-2 rounded-lg border border-slate-700 bg-[#0f172a] px-3 text-xs text-slate-300 hover:bg-slate-800"
             >
-              <span>
-                {filter === 'all' ? 'Todas' : filter === 'RX' ? 'Somente RX' : 'Somente TX'}
-              </span>
-              <ChevronDown size={14} className={`transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
+              {filterLabel(filter)} <ChevronDown size={12} />
             </button>
-
             {isFilterOpen && (
-              <div className="absolute right-0 top-full mt-1 w-32 z-50 rounded-lg border border-slate-700 bg-[#0f172a] shadow-2xl overflow-hidden">
-                {[
-                  { id: 'all', label: 'Todas' },
-                  { id: 'RX', label: 'Somente RX' },
-                  { id: 'TX', label: 'Somente TX' },
-                ].map((item) => (
+              <div className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-lg border border-slate-700 bg-[#0f172a] shadow-2xl">
+                {(['all', 'RX', 'TX'] as const).map((f) => (
                   <button
-                    key={item.id}
-                    onClick={() => { setFilter(item.id as typeof filter); setIsFilterOpen(false); }}
-                    className={`w-full text-left px-3 py-2 text-xs transition hover:bg-slate-800 ${
-                      filter === item.id ? 'bg-slate-800/50 text-cyan-400 font-bold' : 'text-slate-300'
-                    }`}
+                    type="button"
+                    key={f}
+                    onClick={() => {
+                      setFilter(f);
+                      setIsFilterOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-800 ${filter === f ? 'font-bold text-fuchsia-400' : 'text-slate-300'}`}
                   >
-                    {item.label}
+                    {filterLabel(f)}
                   </button>
                 ))}
               </div>
             )}
           </div>
-
-          {/* BOTÃO PAUSAR */}
           <button
             type="button"
-            onClick={() => setPaused((value) => !value)}
-            className={`flex h-[30px] items-center gap-1.5 px-2.5 rounded-md text-xs border transition-colors ${
-              paused 
-                ? 'border-amber-600/50 bg-amber-900/30 text-amber-400' 
-                : 'border-slate-700 bg-[#0f172a] text-slate-300 hover:bg-slate-800'
-            }`}
+            aria-label={paused ? tr('Continuar') : tr('Pausar')}
+            onClick={togglePause}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${paused ? 'border-amber-600/60 bg-amber-900/30 text-amber-400' : 'border-slate-700 bg-[#0f172a] text-slate-300 hover:bg-slate-800'}`}
           >
-            {paused ? <Play size={12} /> : <Pause size={12} />}
-            {paused ? 'Continuar' : 'Pausar'}
+            {paused ? <Play size={14} /> : <Pause size={14} />}
           </button>
-
-          {/* BOTÃO LIMPAR */}
           <button
             type="button"
-            onClick={() => setEntries([])}
-            className="flex h-[30px] items-center gap-1.5 px-2.5 rounded-md text-xs border border-slate-700 bg-[#0f172a] text-slate-300 hover:bg-red-900/30 hover:text-red-400 hover:border-red-800/50 transition-colors"
+            aria-label={tr('Limpar')}
+            onClick={() => {
+              midiManager.clearLog();
+              setFrozen([]);
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 bg-[#0f172a] text-slate-300 transition hover:bg-red-950/50 hover:text-red-400"
           >
-            <Trash2 size={12} />
-            Limpar
+            <Trash2 size={14} />
           </button>
         </div>
       </div>
 
-      {/* ÁREA DA LISTA COM ROLAGEM HORIZONTAL (Protege o layout no celular) */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto custom-scrollbar">
-          <div className="min-w-[580px] flex flex-col h-full">
-            
-            {/* CABEÇALHO DA TABELA */}
-            <div className="grid grid-cols-[70px_40px_110px_1fr_40px_90px] gap-2 px-3 py-2 text-[9px] uppercase tracking-wide text-slate-500 border-b border-slate-800 shrink-0 bg-[#0a0f1c] sticky top-0 z-10">
-              <span>Hora</span>
-              <span>Dir</span>
-              <span>Tipo</span>
-              <span>Detalhes</span>
-              <span>CH</span>
-              <span>Bytes</span>
-            </div>
-
-            {/* LISTA */}
-            <div className="flex-1">
-              {visible.length === 0 ? (
-                <div className="h-full min-h-[200px] flex items-center justify-center text-xs text-slate-600">
-                  {paused
-                    ? 'Monitoramento pausado.'
-                    : 'Aguardando mensagens MIDI recebidas...'}
-                </div>
-              ) : (
-                visible.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="grid grid-cols-[70px_40px_110px_1fr_40px_90px] gap-2 px-3 py-1.5 border-b border-slate-800/50 text-[10px] font-mono hover:bg-slate-800/40 transition-colors"
-                  >
-                    <span className="text-slate-500">{entry.timestamp}</span>
-                    <span className={`font-bold ${entry.direction === 'RX' ? 'text-emerald-400' : 'text-sky-400'}`}>
-                      {entry.direction}
-                    </span>
-                    <span className="text-slate-300 truncate">{entry.type}</span>
-                    <span className="text-slate-400 truncate">
-                      {entry.type.includes('Note')
-                        ? `${entry.noteName} • Vel ${entry.velocity}`
-                        : `Val: ${entry.velocity}`}
-                    </span>
-                    <span className="text-slate-500">{entry.channel}</span>
-                    <span className="text-slate-500 truncate">{entry.bytesHex}</span>
-                  </div>
-                ))
-              )}
-            </div>
-            
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+        {visible.length === 0 ? (
+          <div className="flex h-full items-center justify-center p-8 text-center text-xs text-slate-500">
+            {tr('Nenhuma mensagem ainda. Toque no teclado ou envie MIDI de um dispositivo.')}
           </div>
-        </div>
+        ) : (
+          <table className="w-full text-left font-mono text-[11px]">
+            <thead className="sticky top-0 bg-[#0f172a] text-[10px] uppercase text-slate-500">
+              <tr>
+                <th className="px-3 py-2">{tr('Hora')}</th>
+                <th className="px-2 py-2">{tr('Dir.')}</th>
+                <th className="px-2 py-2">{tr('Tipo')}</th>
+                <th className="px-2 py-2">CH</th>
+                <th className="px-2 py-2">{tr('Nota')}</th>
+                <th className="px-2 py-2">Vel/Val</th>
+                <th className="hidden px-2 py-2 sm:table-cell">Hex</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((entry) => (
+                <tr key={entry.id} className="border-b border-slate-900 hover:bg-slate-900/60">
+                  <td className="px-3 py-1.5 text-slate-500">{entry.timestamp}</td>
+                  <td className={`px-2 py-1.5 font-bold ${entry.direction === 'TX' ? 'text-cyan-400' : 'text-emerald-400'}`}>{entry.direction}</td>
+                  <td className={`px-2 py-1.5 ${TYPE_COLORS[entry.type] ?? 'text-slate-300'}`}>{entry.type}</td>
+                  <td className="px-2 py-1.5 text-slate-300">{entry.channel || '-'}</td>
+                  <td className="px-2 py-1.5 text-slate-300">{entry.noteName}</td>
+                  <td className="px-2 py-1.5 text-slate-300">{entry.velocity}</td>
+                  <td className="hidden px-2 py-1.5 text-slate-500 sm:table-cell">{entry.bytesHex}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

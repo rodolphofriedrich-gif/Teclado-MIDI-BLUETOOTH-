@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Power, Pause, LayoutGrid, Piano, SlidersHorizontal, Maximize, MoveHorizontal, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import { MidiPadGrid } from './MidiPadGrid';
-import { KEYBOARD_PALETTES } from '../App';
+import { KEYBOARD_PALETTES } from '../constants/palettes';
+import { tr } from '../i18n';
 
 interface MidiKeyboardProps {
   isConnected: boolean;
@@ -13,7 +14,6 @@ interface MidiKeyboardProps {
   customWhiteKeyColor: string;
   customBlackKeyColor: string;
   onActiveNotesChange?: (count: number) => void;
-  onActivity?: (velocity: number) => void;
   isActive: boolean;
   onToggleActive: () => void;
   isSustainActive: boolean;
@@ -45,7 +45,7 @@ const MAX_KEY_WIDTH = 95;
 
 export function MidiKeyboard({
   isConnected, selectedChannel, onSelectChannel, onNoteOn, onNoteOff, onDisabledPress,
-  customWhiteKeyColor, customBlackKeyColor, onActiveNotesChange, onActivity,
+  customWhiteKeyColor, customBlackKeyColor, onActiveNotesChange,
   isActive, onToggleActive, isSustainActive, onToggleSustain,
   selectedVelocity, onSelectVelocity, selectedPaletteId, onSelectPalette
 }: MidiKeyboardProps) {
@@ -130,7 +130,6 @@ export function MidiKeyboard({
     if (!activeNotesRef.current.has(note)) {
       activeNotesRef.current.add(note);
       setPressedNotes((current) => { const next = new Set(current); next.add(note); return next; });
-      if (onActivity) onActivity(100 + Math.random() * 27); 
       void onNoteOn(note);
     }
     activePointersRef.current.set(pointerId, note);
@@ -288,16 +287,16 @@ export function MidiKeyboard({
               
               <div>
                 <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-1.5">
-                  <Activity size={12} /> Intensidade (Velocity)
+                  <Activity size={12} /> {tr('Intensidade (Velocity)')}
                 </label>
                 <div className="grid grid-cols-4 gap-1.5">
                   {[
-                    { id: 30, label: 'Suave' },
-                    { id: 64, label: 'Médio' },
-                    { id: 100, label: 'Forte' },
-                    { id: 127, label: 'Max' }
+                    { id: 30, label: tr('Suave') },
+                    { id: 64, label: tr('Médio') },
+                    { id: 100, label: tr('Forte') },
+                    { id: 127, label: tr('Max') }
                   ].map((v) => (
-                    <button key={v.id} onClick={() => onSelectVelocity(v.id)} className={`flex flex-col items-center justify-center py-1.5 rounded-lg border transition-all ${selectedVelocity === v.id ? 'bg-cyan-900/40 border-cyan-600/50 text-cyan-300 font-bold shadow-[0_0_10px_rgba(8,145,178,0.2)]' : 'bg-[#0a0f1c] border-slate-800 text-slate-500 hover:bg-slate-800'}`}>
+                    <button type="button" key={v.id} onClick={() => onSelectVelocity(v.id)} className={`flex flex-col items-center justify-center py-1.5 rounded-lg border transition-all ${selectedVelocity === v.id ? 'bg-cyan-900/40 border-cyan-600/50 text-cyan-300 font-bold shadow-[0_0_10px_rgba(8,145,178,0.2)]' : 'bg-[#0a0f1c] border-slate-800 text-slate-500 hover:bg-slate-800'}`}>
                       <span className="text-[10px] font-semibold">{v.label}</span>
                       <span className="text-[9px] font-mono opacity-80">{v.id}</span>
                     </button>
@@ -309,13 +308,14 @@ export function MidiKeyboard({
               
               {/* PALETAS DE CORES OTIMIZADAS (Apenas quadrados) */}
               <div>
-                <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-1.5">Cores do Teclado</label>
+                <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400 mb-1.5">{tr('Cores do Teclado')}</label>
                 <div className="grid grid-cols-6 gap-1.5">
                   {KEYBOARD_PALETTES.map((pal) => (
                     <button 
+                      type="button"
                       key={pal.id} 
                       onClick={() => onSelectPalette(pal.id)} 
-                      title={pal.name}
+                      title={tr(pal.name)}
                       className={`relative h-7 w-full rounded-lg overflow-hidden border-2 transition-all ${selectedPaletteId === pal.id ? 'border-cyan-400 scale-105 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'border-[#1e293b] hover:border-slate-500 hover:scale-105'}`}
                     >
                       <div className="absolute inset-0 flex">
@@ -331,12 +331,12 @@ export function MidiKeyboard({
                 <>
                   <div className="h-px w-full bg-slate-800" />
                   <div>
-                    <label className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-400 mb-1.5"><span>Zoom do Teclado</span><span className="font-mono text-cyan-300">{keyWidth}px</span></label>
+                    <label className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-400 mb-1.5"><span>{tr('Zoom do Teclado')}</span><span className="font-mono text-cyan-300">{keyWidth}px</span></label>
                     <input type="range" min={minKeyWidth} max={MAX_KEY_WIDTH} value={keyWidth} onChange={(e) => setKeyWidth(Number(e.target.value))} className="h-1.5 w-full cursor-pointer accent-cyan-400" />
                   </div>
                   <div className="h-px w-full bg-slate-800" />
                   <button type="button" onClick={() => setIsScrollLocked(!isScrollLocked)} className={`flex items-center justify-between w-full p-1.5 rounded-lg border transition-colors ${isScrollLocked ? 'bg-amber-900/20 border-amber-700/50 text-amber-400' : 'bg-[#0a0f1c] border-slate-800 text-slate-400'}`}>
-                    <span className="text-xs font-bold flex items-center gap-2">{isScrollLocked ? <Maximize size={14} /> : <MoveHorizontal size={14} />} Rolagem Livre</span>
+                    <span className="text-xs font-bold flex items-center gap-2">{isScrollLocked ? <Maximize size={14} /> : <MoveHorizontal size={14} />} {tr('Rolagem Livre')}</span>
                     <div className={`w-8 h-4 rounded-full transition-colors relative ${isScrollLocked ? 'bg-amber-500' : 'bg-slate-700'}`}><div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isScrollLocked ? 'left-4' : 'left-0.5'}`} /></div>
                   </button>
                 </>
@@ -351,10 +351,10 @@ export function MidiKeyboard({
           <div className="relative flex-1 flex overflow-hidden rounded-xl border border-[#1e293b]">
             {!isScrollLocked && (
               <>
-                <button onClick={() => scrollKeyboard('left')} className="absolute left-1 top-1/2 -translate-y-1/2 z-40 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm shadow-xl transition-all active:scale-95 border border-white/10">
+                <button type="button" aria-label={tr('Rolar para a esquerda')} onClick={() => scrollKeyboard('left')} className="absolute left-1 top-1/2 -translate-y-1/2 z-40 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm shadow-xl transition-all active:scale-95 border border-white/10">
                   <ChevronLeft size={24} />
                 </button>
-                <button onClick={() => scrollKeyboard('right')} className="absolute right-1 top-1/2 -translate-y-1/2 z-40 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm shadow-xl transition-all active:scale-95 border border-white/10">
+                <button type="button" aria-label={tr('Rolar para a direita')} onClick={() => scrollKeyboard('right')} className="absolute right-1 top-1/2 -translate-y-1/2 z-40 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm shadow-xl transition-all active:scale-95 border border-white/10">
                   <ChevronRight size={24} />
                 </button>
               </>
@@ -367,7 +367,7 @@ export function MidiKeyboard({
           </div>
         ) : (
           <div className="flex-1 w-full h-full py-0.5">
-            <MidiPadGrid isActive={isActive} onNoteOn={onNoteOn} onNoteOff={onNoteOff} onDisabledPress={onDisabledPress} onActivity={onActivity} />
+            <MidiPadGrid isActive={isActive} isConnected={isConnected} onNoteOn={onNoteOn} onNoteOff={onNoteOff} onDisabledPress={onDisabledPress} />
           </div>
         )}
       </div>

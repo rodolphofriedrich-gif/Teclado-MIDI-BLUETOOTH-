@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { Search, Database, VolumeX, Volume2, Headphones } from 'lucide-react';
-import { SoundFontPreset } from '../../types/soundfont';
+import { useState } from 'react';
+import { Search } from 'lucide-react';
+import { PRESET_CATEGORIES } from '../../constants/gm';
+import { tr } from '../../i18n';
+import type { SoundFontPreset } from '../../types/soundfont';
 
 interface SoundFontListProps {
   soundFonts: SoundFontPreset[];
@@ -15,14 +17,14 @@ interface SoundFontListProps {
   onToggleSolo: (ch: number) => void;
 }
 
-export const SoundFontList: React.FC<SoundFontListProps> = ({ 
+export function SoundFontList({
   soundFonts, activeChannel, onSelectChannel, channelAssignments, onAssignProgram,
   mutedChannels, soloedChannel, onToggleMute, onToggleSolo
-}) => {
+}: SoundFontListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
 
-  const categories = ['Todos', 'Piano', 'Órgão', 'Guitarra', 'Baixo', 'Cordas', 'Metais', 'Synth'];
+  const categories = PRESET_CATEGORIES;
 
   const filteredPresets = soundFonts.filter((preset) => {
     const matchesSearch = preset.name.toLowerCase().includes(searchTerm.toLowerCase()) || String(preset.programNumber).includes(searchTerm);
@@ -53,6 +55,7 @@ export const SoundFontList: React.FC<SoundFontListProps> = ({
           return (
             <div key={ch} className={`flex flex-col items-center p-1 rounded-lg border transition-colors ${isActive ? 'bg-slate-800 border-cyan-600/50' : 'bg-[#0a0f1c] border-[#1e293b]'}`}>
               <button 
+                type="button"
                 onClick={() => onSelectChannel(ch)} 
                 className={`w-7 h-6 rounded font-mono text-xs font-bold mb-1 transition-colors ${isActive ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-700'}`}
               >
@@ -60,15 +63,17 @@ export const SoundFontList: React.FC<SoundFontListProps> = ({
               </button>
               <div className="flex gap-1">
                 <button 
+                  type="button"
                   onClick={() => onToggleMute(ch)} 
-                  title="Mute"
+                  title={tr('Mute')}
                   className={`w-4 h-4 rounded flex items-center justify-center text-[8px] font-bold ${isMuted ? 'bg-rose-600 text-white' : 'bg-[#1e293b] text-slate-500 hover:bg-slate-700'}`}
                 >
                   M
                 </button>
                 <button 
+                  type="button"
                   onClick={() => onToggleSolo(ch)} 
-                  title="Solo"
+                  title={tr('Solo')}
                   className={`w-4 h-4 rounded flex items-center justify-center text-[8px] font-bold ${isSoloed ? 'bg-amber-500 text-white' : 'bg-[#1e293b] text-slate-500 hover:bg-slate-700'}`}
                 >
                   S
@@ -83,16 +88,16 @@ export const SoundFontList: React.FC<SoundFontListProps> = ({
         <div className="flex items-center justify-between gap-2">
           <div className="relative flex-1 min-w-0">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input type="text" placeholder="Buscar preset..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-8 pr-3 py-1 rounded-lg text-xs bg-[#0a0f1c] border border-[#1e293b] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 h-7 sm:h-8" />
+            <input type="text" placeholder={tr('Buscar preset...')} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-8 pr-3 py-1 rounded-lg text-xs bg-[#0a0f1c] border border-[#1e293b] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 h-7 sm:h-8" />
           </div>
           <div className="text-[10px] text-slate-400 font-medium whitespace-nowrap shrink-0">
-            <span className="font-semibold text-slate-300">{filteredPresets.length}</span> sons
+            <span className="font-semibold text-slate-300">{filteredPresets.length}</span> {tr('sons')}
           </div>
         </div>
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
           {categories.map((cat) => (
-            <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap transition-colors ${selectedCategory === cat ? 'bg-cyan-600 text-white shadow-xs font-semibold' : 'bg-[#0a0f1c] text-slate-400 hover:bg-slate-800'}`}>
-              {cat}
+            <button type="button" key={cat} onClick={() => setSelectedCategory(cat)} className={`px-2 py-0.5 rounded-md text-[10px] font-medium whitespace-nowrap transition-colors ${selectedCategory === cat ? 'bg-cyan-600 text-white shadow-xs font-semibold' : 'bg-[#0a0f1c] text-slate-400 hover:bg-slate-800'}`}>
+              {tr(cat)}
             </button>
           ))}
         </div>
@@ -115,17 +120,17 @@ export const SoundFontList: React.FC<SoundFontListProps> = ({
                     <h4 className={`text-xs sm:text-sm font-semibold truncate ${isActive ? 'text-cyan-300' : 'text-slate-200'}`}>{preset.name}</h4>
                   </div>
                   <div className="flex items-center gap-1.5 text-[10px] text-slate-500 truncate mt-0.5">
-                    <span className="font-medium text-slate-400">{preset.category}</span>
+                    <span className="font-medium text-slate-400">{tr(preset.category)}</span>
                     {activeChannels.length > 0 && (
                       <span className="text-cyan-500/80 font-mono ml-1">
-                        (Ativo: CH {activeChannels.join(', ')})
+                        {tr('(Ativo: CH {channels})', { channels: activeChannels.join(', ') })}
                       </span>
                     )}
                   </div>
                 </div>
               </div>
               <span className={`text-[9px] font-semibold px-2 py-0.5 rounded transition-colors ${isActive ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-500 group-hover:text-cyan-400'}`}>
-                {isActive ? 'ATIVO' : 'ALOCAR'}
+                {isActive ? tr('ATIVO') : tr('ALOCAR')}
               </span>
             </div>
           );
@@ -133,4 +138,4 @@ export const SoundFontList: React.FC<SoundFontListProps> = ({
       </div>
     </div>
   );
-};
+}

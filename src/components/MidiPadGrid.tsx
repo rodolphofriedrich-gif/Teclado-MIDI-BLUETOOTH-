@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { tr } from '../i18n';
 
 interface MidiPadGridProps {
   isActive: boolean;
+  isConnected: boolean;
   onNoteOn: (note: number) => void;
   onNoteOff: (note: number) => void;
   onDisabledPress: () => void;
-  onActivity?: (velocity: number) => void;
 }
 
 const ALL_PADS = [
@@ -28,7 +29,7 @@ const ALL_PADS = [
   { id: 76, label: 'Madeira', color: 'bg-stone-500', border: 'border-stone-500/30' },
 ];
 
-export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, onActivity }: MidiPadGridProps) {
+export function MidiPadGrid({ isActive, isConnected, onNoteOn, onNoteOff, onDisabledPress }: MidiPadGridProps) {
   const [padBank, setPadBank] = useState<0 | 1>(0);
   const [pressedPads, setPressedPads] = useState<Set<number>>(() => new Set());
   const activePointersRef = useRef<Map<number, number>>(new Map());
@@ -38,13 +39,12 @@ export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, on
   useEffect(() => { onNoteOffRef.current = onNoteOff; }, [onNoteOff]);
 
   const pressPad = (note: number, pointerId: number) => {
-    if (!isActive) return;
+    if (!isActive || !isConnected) { onDisabledPress(); return; }
     const previousNote = activePointersRef.current.get(pointerId);
     if (previousNote !== undefined && previousNote !== note) releasePad(previousNote, pointerId);
     if (!activeNotesRef.current.has(note)) {
       activeNotesRef.current.add(note);
       setPressedPads((current) => { const next = new Set(current); next.add(note); return next; });
-      if (onActivity) onActivity(100);
       void onNoteOn(note);
     }
     activePointersRef.current.set(pointerId, note);
@@ -94,11 +94,11 @@ export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, on
   return (
     <div className="flex flex-col w-full h-full bg-[#0a0f1c] rounded-xl border border-[#1e293b] overflow-hidden">
       <div className="flex items-center justify-between bg-[#0f172a] border-b border-[#1e293b] px-2 py-0.5 shrink-0">
-        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest pl-1">Pads de Bateria</span>
+        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest pl-1">{tr('Pads de Bateria')}</span>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => switchBank(0)} className={`flex items-center gap-0.5 px-2 py-1 rounded text-[9px] font-bold transition-all ${padBank === 0 ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50' : 'text-slate-500 hover:bg-slate-800 border border-transparent'}`}><ChevronLeft size={10} /> Banco 1</button>
+          <button type="button" onClick={() => switchBank(0)} className={`flex items-center gap-0.5 px-2 py-1 rounded text-[9px] font-bold transition-all ${padBank === 0 ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50' : 'text-slate-500 hover:bg-slate-800 border border-transparent'}`}><ChevronLeft size={10} /> {tr('Banco 1')}</button>
           <span className="text-slate-700 text-[10px]">|</span>
-          <button type="button" onClick={() => switchBank(1)} className={`flex items-center gap-0.5 px-2 py-1 rounded text-[9px] font-bold transition-all ${padBank === 1 ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50' : 'text-slate-500 hover:bg-slate-800 border border-transparent'}`}>Banco 2 <ChevronRight size={10} /></button>
+          <button type="button" onClick={() => switchBank(1)} className={`flex items-center gap-0.5 px-2 py-1 rounded text-[9px] font-bold transition-all ${padBank === 1 ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50' : 'text-slate-500 hover:bg-slate-800 border border-transparent'}`}>{tr('Banco 2')} <ChevronRight size={10} /></button>
         </div>
       </div>
 
@@ -118,7 +118,7 @@ export function MidiPadGrid({ isActive, onNoteOn, onNoteOff, onDisabledPress, on
               style={{ touchAction: 'none' }}>
               <div className={`absolute inset-0 opacity-10 ${pad.color} ${isPressed ? 'opacity-50' : ''} transition-opacity`} />
               <div className="flex flex-col items-center justify-center h-full w-full p-0.5 z-10">
-                <span className={`text-[11px] sm:text-[13px] font-extrabold text-center leading-tight drop-shadow-md truncate w-full px-0.5 ${isPressed ? 'text-white' : 'text-slate-200'}`}>{pad.label}</span>
+                <span className={`text-[11px] sm:text-[13px] font-extrabold text-center leading-tight drop-shadow-md truncate w-full px-0.5 ${isPressed ? 'text-white' : 'text-slate-200'}`}>{tr(pad.label)}</span>
                 <span className={`text-[9px] font-mono mt-0.5 font-bold ${isPressed ? 'text-white/80' : 'text-slate-500'}`}>N{pad.id}</span>
               </div>
             </div>

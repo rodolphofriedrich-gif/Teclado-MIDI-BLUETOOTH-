@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Play, Save, SlidersHorizontal, Trash2, RotateCcw, ShieldAlert } from 'lucide-react';
+import { tr } from '../i18n';
+import { uid } from '../lib/id';
 import { midiManager } from '../services/midiService';
 import { StudioFader } from './StudioFader';
 
@@ -45,7 +47,8 @@ function loadPresets(): MidiPreset[] {
   }
 }
 
-// O 'export' garante que o App.tsx consiga importar este componente
+const errorText = (error: unknown): string => (error instanceof Error && error.message ? error.message : tr('erro desconhecido'));
+
 export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
   const [modWheel, setModWheel] = useState(DEFAULT_CONTROLS.modWheel);
   const [volume, setVolume] = useState(DEFAULT_CONTROLS.volume);
@@ -55,7 +58,7 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
   const [program, setProgram] = useState(DEFAULT_CONTROLS.program);
   const [pitchBend, setPitchBend] = useState(DEFAULT_CONTROLS.pitchBend);
   const [pressure, setPressure] = useState(DEFAULT_CONTROLS.pressure);
-  const [presetName, setPresetName] = useState('Meu preset');
+  const [presetName, setPresetName] = useState(() => tr('Meu preset'));
   const [presets, setPresets] = useState<MidiPreset[]>(loadPresets);
   const [busy, setBusy] = useState(false);
 
@@ -67,23 +70,23 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
 
   const sendAction = async (action: () => Promise<unknown>, successMessage: string) => {
     if (!isConnected) {
-      onStatus('Conecte um destino MIDI antes de enviar controles.', 'warn');
+      onStatus(tr('Conecte um destino MIDI ou carregue um SoundFont antes de enviar controles.'), 'warn');
       return;
     }
     try {
       await action();
       onStatus(successMessage, 'success');
-    } catch (error: any) {
-      onStatus(`Falha ao enviar MIDI: ${error?.message || 'erro desconhecido'}`, 'error');
+    } catch (error) {
+      onStatus(tr('Falha ao enviar MIDI: {message}', { message: errorText(error) }), 'error');
     }
   };
 
   const sendCC = (controller: number, value: number, label: string) =>
-    sendAction(() => midiManager.sendControlChange(channel, controller, value), `${label}: ${value} • Canal ${channel}`);
+    sendAction(() => midiManager.sendControlChange(channel, controller, value), tr('{label}: {value} • Canal {channel}', { label, value, channel }));
 
   const applyPreset = async (preset: MidiPreset) => {
     if (!isConnected) {
-      onStatus('Conecte um destino MIDI antes de aplicar um preset.', 'warn');
+      onStatus(tr('Conecte um destino MIDI ou carregue um SoundFont antes de aplicar um preset.'), 'warn');
       return;
     }
     setBusy(true);
@@ -100,9 +103,9 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
       await midiManager.sendPitchBend(channel, preset.pitchBend);
       await midiManager.sendChannelPressure(channel, preset.pressure);
       
-      onStatus(`Preset “${preset.name}” aplicado no canal ${channel}.`, 'success');
-    } catch (error: any) {
-      onStatus(`Não foi possível aplicar o preset: ${error?.message || 'erro desconhecido'}`, 'error');
+      onStatus(tr('Preset “{name}” aplicado no canal {channel}.', { name: preset.name, channel }), 'success');
+    } catch (error) {
+      onStatus(tr('Não foi possível aplicar o preset: {message}', { message: errorText(error) }), 'error');
     } finally {
       setBusy(false);
     }
@@ -110,27 +113,27 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
 
   const savePreset = () => {
     const name = presetName.trim();
-    if (!name) { onStatus('Digite um nome para o preset.', 'warn'); return; }
-    const preset: MidiPreset = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, ...controls };
+    if (!name) { onStatus(tr('Digite um nome para o preset.'), 'warn'); return; }
+    const preset: MidiPreset = { id: uid('preset-'), name, ...controls };
     setPresets((current) => [preset, ...current]);
-    onStatus(`Preset “${name}” salvo neste dispositivo.`, 'success');
+    onStatus(tr('Preset “{name}” salvo neste dispositivo.', { name }), 'success');
   };
 
   const resetControls = () => {
     setModWheel(DEFAULT_CONTROLS.modWheel); setVolume(DEFAULT_CONTROLS.volume); setExpression(DEFAULT_CONTROLS.expression);
     setPan(DEFAULT_CONTROLS.pan); setSustain(false); setProgram(1); setPitchBend(8192); setPressure(0);
-    onStatus('Controles redefinidos localmente.', 'info');
+    onStatus(tr('Controles redefinidos localmente.'), 'info');
   };
 
   const panic = async () => {
-    if (!isConnected) { onStatus('Conecte um destino MIDI antes de executar o MIDI Panic.', 'warn'); return; }
+    if (!isConnected) { onStatus(tr('Conecte um destino MIDI ou carregue um SoundFont antes de executar o MIDI Panic.'), 'warn'); return; }
     setBusy(true);
     try {
       await midiManager.sendPanic([channel]);
       setSustain(false);
-      onStatus(`MIDI Panic enviado ao canal ${channel}.`, 'success');
-    } catch (error: any) {
-      onStatus(`Falha no MIDI Panic: ${error?.message || 'erro desconhecido'}`, 'error');
+      onStatus(tr('MIDI Panic enviado ao canal {channel}.', { channel }), 'success');
+    } catch (error) {
+      onStatus(tr('Falha no MIDI Panic: {message}', { message: errorText(error) }), 'error');
     } finally { setBusy(false); }
   };
 
@@ -143,36 +146,36 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
             <SlidersHorizontal size={20} />
           </div>
           <div>
-            <h2 className="text-base font-bold uppercase tracking-wider text-cyan-400">Controles MIDI</h2>
-            <p className="text-[10px] text-slate-400">Mensagens de controle para o canal {channel}</p>
+            <h2 className="text-base font-bold uppercase tracking-wider text-cyan-400">{tr('Controles MIDI')}</h2>
+            <p className="text-[10px] text-slate-400">{tr('Mensagens de controle para o canal {channel}', { channel })}</p>
           </div>
         </div>
         <div className={`rounded-full border px-3 py-1.5 text-[10px] font-bold tracking-wide ${isConnected ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400' : 'border-amber-700/50 bg-amber-900/20 text-amber-400'}`}>
-          {isConnected ? 'MIDI CONECTADO' : 'SEM CONEXÃO MIDI'}
+          {isConnected ? tr('MIDI CONECTADO') : tr('SEM CONEXÃO MIDI')}
         </div>
       </header>
 
       {/* MESA DE MIXAGEM - 4 FADERS */}
       <div className="grid grid-cols-4 gap-1.5 bg-[#0a0f1c] p-1.5 rounded-2xl border border-[#1e293b] shadow-inner">
         <StudioFader 
-          label="Modulação" sublabel="CC 1" 
+          label={tr(tr('Modulação'))} sublabel="CC 1" 
           value={modWheel} onChange={setModWheel} 
-          onCommit={(v) => void sendCC(1, v, 'Modulação')} 
+          onCommit={(v) => void sendCC(1, v, tr('Modulação'))} 
         />
         <StudioFader 
-          label="Volume" sublabel="CC 7" 
+          label={tr(tr('Volume'))} sublabel="CC 7" 
           value={volume} onChange={setVolume} 
-          onCommit={(v) => void sendCC(7, v, 'Volume')} 
+          onCommit={(v) => void sendCC(7, v, tr('Volume'))} 
         />
         <StudioFader 
-          label="Expressão" sublabel="CC 11" 
+          label={tr(tr('Expressão'))} sublabel="CC 11" 
           value={expression} onChange={setExpression} 
-          onCommit={(v) => void sendCC(11, v, 'Expressão')} 
+          onCommit={(v) => void sendCC(11, v, tr('Expressão'))} 
         />
         <StudioFader 
-          label="Panorama" sublabel="CC 10" 
+          label={tr(tr('Panorama'))} sublabel="CC 10" 
           value={pan} onChange={setPan} 
-          onCommit={(v) => void sendCC(10, v, 'Panorama')} 
+          onCommit={(v) => void sendCC(10, v, tr('Panorama'))} 
         />
       </div>
 
@@ -181,7 +184,7 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
         {/* CARD PERFORMANCE (Sustain e Program Change lado a lado) */}
         <div className="rounded-xl border border-[#1e293b] bg-[#0f172a] p-4 space-y-3 shadow-sm flex flex-col">
           <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span> Performance
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span> {tr('Performance')}
           </h3>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
@@ -189,14 +192,14 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
             <div className="flex flex-col justify-between gap-3 rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-3">
               <div>
                 <div className="text-xs font-semibold text-slate-200">Sustain • CC64</div>
-                <div className="text-[10px] text-slate-500 mt-1 leading-tight">Mantém as notas soando.</div>
+                <div className="text-[10px] text-slate-500 mt-1 leading-tight">{tr('Mantém as notas soando.')}</div>
               </div>
               <button 
                 disabled={busy || !isConnected} 
-                onClick={() => { const next = !sustain; setSustain(next); void sendCC(64, next ? 127 : 0, next ? 'Sustain ligado' : 'Sustain desligado'); }} 
+                onClick={() => { const next = !sustain; setSustain(next); void sendCC(64, next ? 127 : 0, next ? tr('Sustain ligado') : tr('Sustain desligado')); }} 
                 className={`w-full rounded-lg border px-4 py-2.5 text-xs font-bold transition-all disabled:opacity-40 ${sustain ? 'border-emerald-500 bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
               >
-                {sustain ? 'Ligado' : 'Desligado'}
+                {sustain ? tr('Ligado') : tr('Desligado')}
               </button>
             </div>
 
@@ -213,10 +216,10 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
                 />
                 <button 
                   disabled={busy || !isConnected} 
-                  onClick={() => void sendAction(() => midiManager.sendProgramChange(channel, program - 1), `Program ${program} enviado • Canal ${channel}`)} 
+                  onClick={() => void sendAction(() => midiManager.sendProgramChange(channel, program - 1), tr('Program {program} enviado • Canal {channel}', { program, channel }))} 
                   className="flex-1 rounded-lg bg-cyan-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40 hover:bg-cyan-600 transition"
                 >
-                  Enviar
+                  {tr('Enviar')}
                 </button>
               </div>
             </div>
@@ -226,14 +229,14 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
         {/* CARD PITCH BEND E PANIC */}
         <div className="rounded-xl border border-[#1e293b] bg-[#0f172a] p-4 space-y-3 shadow-sm flex flex-col">
           <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-500"></span> Pitch Bend (Roda de Pitch)
+            <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-500"></span> {tr('Pitch Bend (Roda de Pitch)')}
           </h3>
           
           <div className="rounded-lg bg-[#0a0f1c] border border-[#1e293b] p-4 flex-1 flex flex-col justify-center">
             <div className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-500 mb-3">
-              <span>Grave (-)</span>
+              <span>{tr('Grave (-)')}</span>
               <span className="font-mono text-sm text-fuchsia-400">{pitchBend - 8192 > 0 ? '+' : ''}{pitchBend - 8192}</span>
-              <span>Agudo (+)</span>
+              <span>{tr('Agudo (+)')}</span>
             </div>
             
             {/* CONTAINER DA RODA DE PITCH */}
@@ -260,8 +263,8 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
                 className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-20" 
                 type="range" min="0" max="16383" value={pitchBend} 
                 onChange={(event) => setPitchBend(Number(event.target.value))} 
-                onPointerUp={(event) => void sendAction(() => midiManager.sendPitchBend(channel, Number((event.target as HTMLInputElement).value)), `Pitch Bend enviado • Canal ${channel}`)} 
-                onKeyUp={(event) => void sendAction(() => midiManager.sendPitchBend(channel, Number((event.target as HTMLInputElement).value)), `Pitch Bend enviado • Canal ${channel}`)} 
+                onPointerUp={(event) => void sendAction(() => midiManager.sendPitchBend(channel, Number((event.target as HTMLInputElement).value)), tr('Pitch Bend enviado • Canal {channel}', { channel }))} 
+                onKeyUp={(event) => void sendAction(() => midiManager.sendPitchBend(channel, Number((event.target as HTMLInputElement).value)), tr('Pitch Bend enviado • Canal {channel}', { channel }))} 
               />
 
               {/* O "Pino" da Roda de Pitch */}
@@ -279,10 +282,10 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
 
             <button 
               disabled={busy || !isConnected} 
-              onClick={() => { setPitchBend(8192); void sendAction(() => midiManager.sendPitchBend(channel, 8192), `Pitch Bend centralizado • Canal ${channel}`); }} 
+              onClick={() => { setPitchBend(8192); void sendAction(() => midiManager.sendPitchBend(channel, 8192), tr('Pitch Bend centralizado • Canal {channel}', { channel })); }} 
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-300 disabled:opacity-40 hover:bg-slate-700 transition"
             >
-              <RotateCcw size={14} /> Centralizar Roda
+              <RotateCcw size={14} /> {tr('Centralizar Roda')}
             </button>
           </div>
 
@@ -292,7 +295,7 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
               onClick={() => void panic()} 
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-800/60 bg-red-950/40 px-3 py-2.5 text-xs font-extrabold uppercase tracking-wide text-red-400 hover:bg-red-900/60 transition shadow-[inset_0_0_15px_rgba(220,38,38,0.1)] disabled:opacity-40"
             >
-              <ShieldAlert size={16} /> MIDI Panic — Canal {channel}
+              <ShieldAlert size={16} /> {tr('MIDI Panic — Canal {channel}', { channel })}
             </button>
           </div>
         </div>
@@ -303,27 +306,27 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Save size={16} className="text-emerald-400" />
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">Presets de Controles</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">{tr('Presets de Controles')}</h3>
           </div>
           <button onClick={resetControls} className="text-[10px] text-slate-400 hover:text-white transition flex items-center gap-1">
-            <RotateCcw size={12} /> Redefinir tudo
+            <RotateCcw size={12} /> {tr('Redefinir tudo')}
           </button>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2">
           <input 
-            aria-label="Nome do preset" value={presetName} onChange={(event) => setPresetName(event.target.value)} 
-            maxLength={40} placeholder="Nome do preset" 
+            aria-label={tr('Nome do preset')} value={presetName} onChange={(event) => setPresetName(event.target.value)} 
+            maxLength={40} placeholder={tr('Nome do preset')} 
             className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-[#0a0f1c] px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500 transition" 
           />
           <button onClick={savePreset} className="flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 transition">
-            <Save size={14} /> Salvar
+            <Save size={14} /> {tr('Salvar')}
           </button>
         </div>
         
         {presets.length === 0 ? (
           <div className="py-4 text-center border border-dashed border-slate-800 rounded-lg">
-            <p className="text-[11px] text-slate-500">Nenhum preset salvo ainda.</p>
+            <p className="text-[11px] text-slate-500">{tr('Nenhum preset salvo ainda.')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
@@ -335,13 +338,13 @@ export function MidiControlsScreen({ channel, isConnected, onStatus }: Props) {
                 </div>
                 <div className="flex gap-1">
                   <button 
-                    title={`Aplicar ${preset.name}`} disabled={busy || !isConnected} onClick={() => void applyPreset(preset)} 
+                    title={tr('Aplicar {name}', { name: preset.name })} disabled={busy || !isConnected} onClick={() => void applyPreset(preset)} 
                     className="rounded bg-cyan-900/40 p-1.5 text-cyan-400 hover:bg-cyan-800/60 disabled:opacity-40 transition-colors"
                   >
                     <Play size={12} />
                   </button>
                   <button 
-                    title={`Excluir ${preset.name}`} onClick={() => setPresets((current) => current.filter((item) => item.id !== preset.id))} 
+                    title={tr('Excluir {name}', { name: preset.name })} onClick={() => setPresets((current) => current.filter((item) => item.id !== preset.id))} 
                     className="rounded border border-slate-800 p-1.5 text-slate-500 hover:bg-red-950/50 hover:text-red-400 hover:border-red-900/50 transition-colors"
                   >
                     <Trash2 size={12} />

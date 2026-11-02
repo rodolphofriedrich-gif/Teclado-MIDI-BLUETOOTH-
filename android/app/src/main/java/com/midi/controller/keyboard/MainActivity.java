@@ -1,6 +1,8 @@
 package com.midi.controller.keyboard;
 
+import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
+import android.webkit.WebView;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -13,9 +15,13 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // REGRA DO CAPACITOR: Registrar plugins ANTES do super.onCreate
         registerPlugin(NativeMidiPlugin.class);
-        
+
         super.onCreate(savedInstanceState);
-        
+
+        // Depuração via chrome://inspect somente em builds debug (nunca no APK de release).
+        boolean isDebuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        WebView.setWebContentsDebuggingEnabled(isDebuggable);
+
         // Aplica o Modo Imersivo logo na inicialização
         hideSystemUI();
     }
@@ -38,15 +44,14 @@ public class MainActivity extends BridgeActivity {
         // A API moderna do Android (recomendada para Android 11+)
         // Funciona nativamente em versões antigas também graças ao androidx
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        
+
         WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        
+
         if (controller != null) {
             // Esconde as barras de status e navegação
             controller.hide(WindowInsetsCompat.Type.systemBars());
-            
-            // Define o comportamento "Sticky": a barra some, mas se o usuário deslizar,
-            // ela aparece temporariamente.
+
+            // Comportamento "Sticky": a barra some, mas se o usuário deslizar, aparece temporariamente.
             controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         }
     }

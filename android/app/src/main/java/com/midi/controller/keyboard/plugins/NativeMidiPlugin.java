@@ -51,12 +51,24 @@ import java.util.concurrent.ConcurrentHashMap;
                 Manifest.permission.BLUETOOTH_CONNECT
             },
             alias = "bluetooth"
+        ),
+        @Permission(
+            strings = {
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.BLUETOOTH_CONNECT
+            },
+            alias = "bluetoothServer"
+        ),
+        @Permission(
+            strings = { Manifest.permission.ACCESS_FINE_LOCATION },
+            alias = "location"
         )
     }
 )
 public class NativeMidiPlugin extends Plugin {
 
     private static final UUID MIDI_SERVICE_UUID = UUID.fromString("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
+    private static final String BLE_SERVER_ID = "ble-server";
 
     private MidiManager midiManager;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -69,11 +81,36 @@ public class NativeMidiPlugin extends Plugin {
     private BluetoothLeScanner bleScanner;
     private ScanCallback activeScanCallback;
     private PluginCall pendingScanCall;
+    private Runnable scanTimeoutRunnable;
+
+    private BleMidiServer bleServer;
+    private MidiManager.DeviceCallback deviceCallback;
 
     @Override
     public void load() {
         super.load();
         midiManager = (MidiManager) getContext().getSystemService(Context.MIDI_SERVICE);
+        registerDeviceCallback();
+    }
+
+    /** Avisa o JS quando um dispositivo MIDI é plugado/removido (hot-plug) e fecha conexões órfãs. */
+    private void registerDeviceCallback() {
+        if (midiManager == null) return;
+        deviceCallback = new MidiManager.DeviceCallback() {
+            @Override
+            public void onDeviceAdded(MidiDeviceInfo info) {
+                notifyListeners("devicesChanged", new JSObject());
+            }
+
+            @Override
+            public void onDeviceRemoved(MidiDeviceInfo info) {
+                String id = String.valueOf(info.getId());
+                closeOutputConnection(id);
+                closeInputConnection(id);
+                notifyListeners("devicesChanged", new JSObject());
+            }
+        };
+        midiManager.registerDeviceCallback(deviceCallback, mainHandler);
     }
 
     @PluginMethod
@@ -90,9 +127,21 @@ public class NativeMidiPlugin extends Plugin {
     // ================================================================
     @PermissionCallback
     private void blePermissionCallback(PluginCall call) {
-        if (hasBlePermissions()) {
-            // Se o usuário aceitou, tenta rodar a busca novamente
-            scanBleDevices(call);
+        boolean isScan = "scanBleDevices".equals(call.getMethodName());
+        if (!hasBlePermissions(isScan)) {
+            call.reject("Permissão negada. Vá nas configurações do Android e permita o acesso ao Bluetooth"
+                    + (isScan && Build.VERSION.SDK_INT < Build.VERSION_CODES.S ? " (localização)." : "."));
+            return;
+        }
+        // Retoma a operação que estava aguardando a permissão.
+        if (isScan) scanBleDevices(call);
+        else connectBleMidi(call);
+    }
+
+    @PermissionCallback
+    private void serverPermissionCallback(PluginCall call) {
+        if (hasServerPermissions()) {
+            startBleServer(call);
         } else {
             call.reject("Permissão de Bluetooth negada. Vá nas configurações do Android e permita.");
         }
@@ -148,8 +197,8 @@ public class NativeMidiPlugin extends Plugin {
     // ================================================================
     @PluginMethod
     public void scanBleDevices(PluginCall call) {
-        if (!hasBlePermissions()) {
-            requestPermissionForAlias("bluetooth", call, "blePermissionCallback");
+        if (!hasBlePermissions(true)) {
+            requestBlePermissions(call);
             return;
         }
 
@@ -168,9 +217,10 @@ public class NativeMidiPlugin extends Plugin {
         }
 
         stopBleScanInternal();
+        resolvePendingScan(new JSArray()); // uma busca anterior ainda aberta é encerrada
 
         int durationMs = call.getInt("durationMs", 10000);
-        
+
         pendingScanCall = call;
         final JSArray foundDevices = new JSArray();
         final Set<String> foundAddresses = new HashSet<>();
@@ -204,30 +254,34 @@ public class NativeMidiPlugin extends Plugin {
 
         bleScanner.startScan(java.util.Collections.singletonList(filter), settings, activeScanCallback);
 
-        mainHandler.postDelayed(() -> {
+        scanTimeoutRunnable = () -> {
             stopBleScanInternal();
-            if (pendingScanCall != null) {
-                JSObject result = new JSObject();
-                result.put("devices", foundDevices);
-                pendingScanCall.resolve(result);
-                pendingScanCall = null;
-            }
-        }, durationMs);
+            resolvePendingScan(foundDevices);
+        };
+        mainHandler.postDelayed(scanTimeoutRunnable, durationMs);
+    }
+
+    private void resolvePendingScan(JSArray devices) {
+        if (pendingScanCall != null) {
+            JSObject result = new JSObject();
+            result.put("devices", devices);
+            pendingScanCall.resolve(result);
+            pendingScanCall = null;
+        }
     }
 
     @PluginMethod
     public void stopBleScan(PluginCall call) {
         stopBleScanInternal();
-        if (pendingScanCall != null) {
-            JSObject result = new JSObject();
-            result.put("devices", new JSArray());
-            pendingScanCall.resolve(result);
-            pendingScanCall = null;
-        }
+        resolvePendingScan(new JSArray());
         call.resolve();
     }
 
     private void stopBleScanInternal() {
+        if (scanTimeoutRunnable != null) {
+            mainHandler.removeCallbacks(scanTimeoutRunnable);
+            scanTimeoutRunnable = null;
+        }
         if (bleScanner != null && activeScanCallback != null) {
             try {
                 bleScanner.stopScan(activeScanCallback);
@@ -241,13 +295,13 @@ public class NativeMidiPlugin extends Plugin {
     // ================================================================
     @PluginMethod
     public void connectBleMidi(PluginCall call) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            call.reject("A conexão direta BLE requer Android 13 ou superior. Use o emparelhamento nas configurações do sistema.");
+        if (midiManager == null) {
+            call.reject("MidiManager indisponível neste dispositivo");
             return;
         }
 
-        if (!hasBlePermissions()) {
-            requestPermissionForAlias("bluetooth", call, "blePermissionCallback");
+        if (!hasBlePermissions(false)) {
+            requestBlePermissions(call);
             return;
         }
 
@@ -494,14 +548,9 @@ public class NativeMidiPlugin extends Plugin {
             return;
         }
 
-        MidiInputPort port = outputPorts.get(id);
-        if (port == null) {
-            call.reject("Saída MIDI não está conectada");
-            return;
-        }
-
+        byte[] bytes;
         try {
-            byte[] bytes = new byte[data.length()];
+            bytes = new byte[data.length()];
             for (int i = 0; i < data.length(); i++) {
                 int value = data.getInt(i);
                 if (value < 0 || value > 255) {
@@ -510,6 +559,29 @@ public class NativeMidiPlugin extends Plugin {
                 }
                 bytes[i] = (byte) value;
             }
+        } catch (Exception e) {
+            call.reject("Dados MIDI inválidos: " + e.getMessage());
+            return;
+        }
+
+        // Destino especial: clientes conectados ao nosso servidor BLE MIDI ("Ficar Visível").
+        if (BLE_SERVER_ID.equals(id)) {
+            if (bleServer == null || !bleServer.isRunning()) {
+                call.reject("Servidor BLE MIDI inativo");
+                return;
+            }
+            bleServer.sendMidi(bytes);
+            call.resolve();
+            return;
+        }
+
+        MidiInputPort port = outputPorts.get(id);
+        if (port == null) {
+            call.reject("Saída MIDI não está conectada");
+            return;
+        }
+
+        try {
             port.send(bytes, 0, bytes.length, System.nanoTime());
             call.resolve();
         } catch (Exception e) {
@@ -518,14 +590,88 @@ public class NativeMidiPlugin extends Plugin {
     }
 
     // ================================================================
+    // BLE – Servidor ("Ficar Visível" como instrumento BLE MIDI)
+    // ================================================================
+    private BleMidiServer ensureBleServer() {
+        if (bleServer == null) {
+            bleServer = new BleMidiServer(getContext(), new BleMidiServer.Listener() {
+                @Override
+                public void onMidi(byte[] midiBytes) {
+                    JSArray messageData = new JSArray();
+                    for (byte b : midiBytes) messageData.put(b & 0xFF);
+                    JSObject message = new JSObject();
+                    message.put("data", messageData);
+                    message.put("sourceId", BLE_SERVER_ID);
+                    notifyListeners("midiMessage", message);
+                }
+
+                @Override
+                public void onStateChanged() {
+                    notifyListeners("bleServerChanged", bleServerStatus());
+                }
+            });
+        }
+        return bleServer;
+    }
+
+    private JSObject bleServerStatus() {
+        JSObject status = new JSObject();
+        status.put("active", bleServer != null && bleServer.isRunning());
+        status.put("clients", bleServer != null ? bleServer.getClientCount() : 0);
+        return status;
+    }
+
+    @PluginMethod
+    public void startBleServer(PluginCall call) {
+        if (!hasServerPermissions()) {
+            requestPermissionForAlias("bluetoothServer", call, "serverPermissionCallback");
+            return;
+        }
+        ensureBleServer().start((success, errorMessage) -> {
+            if (success) call.resolve(bleServerStatus());
+            else call.reject(errorMessage != null ? errorMessage : "Falha ao iniciar o BLE MIDI");
+        });
+    }
+
+    @PluginMethod
+    public void stopBleServer(PluginCall call) {
+        if (bleServer != null) bleServer.stop();
+        call.resolve(bleServerStatus());
+    }
+
+    @PluginMethod
+    public void isBleServerRunning(PluginCall call) {
+        call.resolve(bleServerStatus());
+    }
+
+    // ================================================================
     // Utilitários
     // ================================================================
-    private boolean hasBlePermissions() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            return true;
+    private boolean granted(String permission) {
+        return ContextCompat.checkSelfPermission(getContext(), permission) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * Android 12+: BLUETOOTH_SCAN (busca) e BLUETOOTH_CONNECT.
+     * Android 11 ou anterior: a busca BLE exige a permissão de localização; conectar não exige nada em tempo de execução.
+     */
+    private boolean hasBlePermissions(boolean forScan) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return (!forScan || granted(Manifest.permission.BLUETOOTH_SCAN))
+                && granted(Manifest.permission.BLUETOOTH_CONNECT);
         }
-        return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
-            && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+        return !forScan || granted(Manifest.permission.ACCESS_FINE_LOCATION);
+    }
+
+    private void requestBlePermissions(PluginCall call) {
+        String alias = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? "bluetooth" : "location";
+        requestPermissionForAlias(alias, call, "blePermissionCallback");
+    }
+
+    /** Servidor BLE MIDI (Android 12+): BLUETOOTH_ADVERTISE e BLUETOOTH_CONNECT. */
+    private boolean hasServerPermissions() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true;
+        return granted(Manifest.permission.BLUETOOTH_ADVERTISE) && granted(Manifest.permission.BLUETOOTH_CONNECT);
     }
 
     private int getPortIndex(PluginCall call) {
@@ -610,6 +756,10 @@ public class NativeMidiPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         stopBleScanInternal();
+        if (bleServer != null) bleServer.stop();
+        if (midiManager != null && deviceCallback != null) {
+            midiManager.unregisterDeviceCallback(deviceCallback);
+        }
         closeAllInputConnections();
         closeAllOutputConnections();
         super.handleOnDestroy();

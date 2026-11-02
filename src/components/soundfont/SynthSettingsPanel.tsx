@@ -1,107 +1,133 @@
-import React, { useState } from 'react';
-import { SlidersHorizontal, Volume2, Settings2, Zap, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { RotateCcw, Settings2, Volume2, Zap } from 'lucide-react';
+import { tr } from '../../i18n';
+import type { SynthSettings } from '../../services/synthTypes';
 
-interface SynthSettingsPanelProps {
-  // Aqui passaremos os estados e funções via props ou context. 
-  // Para simplificar a integração, usaremos um objeto de configurações.
-  settings: any;
-  onUpdateSetting: (key: string, value: any) => void;
+interface Props {
+  settings: SynthSettings;
+  onUpdateSetting: (key: keyof SynthSettings, value: number) => void;
   onReset: () => void;
-  activeChannel: number;
 }
 
-export function SynthSettingsPanel({ settings, onUpdateSetting, onReset, activeChannel }: SynthSettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<'fx' | 'sound' | 'system'>('fx');
+interface SliderRowProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  unit?: string;
+  onChange: (value: number) => void;
+}
 
-  const SliderRow = ({ label, value, min, max, step, onChange, unit = '%' }: any) => (
-    <div className="flex flex-col gap-1 mb-3">
+// Definido FORA do painel: se fosse criado dentro, cada movimento do slider remontaria o componente
+// e o arraste seria interrompido.
+function SliderRow({ label, value, min, max, step = 1, unit = '%', onChange }: SliderRowProps) {
+  return (
+    <div className="mb-3 flex flex-col gap-1">
       <label className="flex items-center justify-between text-[11px] font-bold text-slate-300">
         <span>{label}</span>
-        <span className="text-cyan-400 font-mono bg-cyan-950/50 px-1.5 py-0.5 rounded border border-cyan-900/50">{value}{unit}</span>
+        <span className="rounded border border-cyan-900/50 bg-cyan-950/50 px-1.5 py-0.5 font-mono text-cyan-400">
+          {value}
+          {unit}
+        </span>
       </label>
-      <input 
-        type="range" min={min} max={max} step={step} value={value} 
-        onChange={(e) => onChange(Number(e.target.value))} 
-        className="h-1.5 w-full cursor-pointer accent-cyan-500" 
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-1.5 w-full cursor-pointer accent-cyan-500"
       />
     </div>
   );
+}
+
+type TabId = 'fx' | 'sound' | 'system';
+
+export function SynthSettingsPanel({ settings, onUpdateSetting, onReset }: Props) {
+  const [activeTab, setActiveTab] = useState<TabId>('fx');
+  const set = (key: keyof SynthSettings) => (value: number) => onUpdateSetting(key, value);
+  const tabClass = (id: TabId, active: string) =>
+    `flex h-7 items-center gap-1.5 rounded-md px-3 text-[10px] font-bold transition-colors ${activeTab === id ? active : 'text-slate-500 hover:text-slate-300'}`;
+  const sectionTitle = 'mb-3 border-b border-[#1e293b] pb-1 text-xs font-bold text-cyan-400';
 
   return (
-    <div className="w-full h-full flex flex-col min-h-0 bg-[#0f172a] border border-[#1e293b] rounded-xl overflow-hidden">
-      
-      {/* HEADER DO PAINEL */}
-      <div className="flex items-center justify-between bg-[#0a0f1c] border-b border-[#1e293b] p-2 shrink-0">
-        <div className="flex bg-[#0f172a] rounded-lg p-0.5 border border-[#1e293b]">
-          <button type="button" onClick={() => setActiveTab('fx')} className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${activeTab === 'fx' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Zap size={12} /> EFEITOS
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border border-[#1e293b] bg-[#0f172a]">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#1e293b] bg-[#0a0f1c] p-2">
+        <div className="flex rounded-lg border border-[#1e293b] bg-[#0f172a] p-0.5">
+          <button type="button" onClick={() => setActiveTab('fx')} className={tabClass('fx', 'bg-slate-700 text-white')}>
+            <Zap size={12} /> {tr('EFEITOS')}
           </button>
-          <button type="button" onClick={() => setActiveTab('sound')} className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${activeTab === 'sound' ? 'bg-cyan-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Volume2 size={12} /> TIMBRE
+          <button type="button" onClick={() => setActiveTab('sound')} className={tabClass('sound', 'bg-cyan-700 text-white')}>
+            <Volume2 size={12} /> {tr('TIMBRE')}
           </button>
-          <button type="button" onClick={() => setActiveTab('system')} className={`flex h-7 items-center gap-1.5 px-3 text-[10px] font-bold rounded-md transition-colors ${activeTab === 'system' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-            <Settings2 size={12} /> SISTEMA
+          <button type="button" onClick={() => setActiveTab('system')} className={tabClass('system', 'bg-slate-700 text-white')}>
+            <Settings2 size={12} /> {tr('SISTEMA')}
           </button>
         </div>
-
-        <button onClick={onReset} className="flex items-center gap-1 px-2 py-1 bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 rounded-md text-[10px] font-bold border border-rose-900/50 transition-colors">
-          <RotateCcw size={12} /> Reset
+        <button
+          type="button"
+          onClick={onReset}
+          className="flex items-center gap-1 rounded-md border border-rose-900/50 bg-rose-950/30 px-2 py-1 text-[10px] font-bold text-rose-400 transition-colors hover:bg-rose-900/50"
+        >
+          <RotateCcw size={12} /> {tr('Reset')}
         </button>
       </div>
 
-      {/* CONTEÚDO DAS ABAS */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-        
+      <div className="custom-scrollbar flex-1 overflow-y-auto p-4">
         {activeTab === 'fx' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
             <div>
-              <h3 className="text-xs font-bold text-cyan-400 mb-3 border-b border-[#1e293b] pb-1">Delay Customizado</h3>
-              <SliderRow label="Tempo (Delay)" value={settings.delayTime} min={0} max={1000} step={10} unit="ms" onChange={(v: number) => onUpdateSetting('delayTime', v)} />
-              <SliderRow label="Feedback" value={settings.delayFeedback} min={0} max={95} onChange={(v: number) => onUpdateSetting('delayFeedback', v)} />
-              <SliderRow label="Mix (Nível)" value={settings.delayMix} min={0} max={100} onChange={(v: number) => onUpdateSetting('delayMix', v)} />
+              <h3 className={sectionTitle}>{tr('Delay Customizado')}</h3>
+              <SliderRow label={tr('Tempo (Delay)')} value={settings.delayTime} min={0} max={1000} step={10} unit="ms" onChange={set('delayTime')} />
+              <SliderRow label={tr('Feedback')} value={settings.delayFeedback} min={0} max={90} onChange={set('delayFeedback')} />
+              <SliderRow label={tr('Mix (Nível)')} value={settings.delayMix} min={0} max={100} onChange={set('delayMix')} />
             </div>
-            
             <div>
-              <h3 className="text-xs font-bold text-cyan-400 mb-3 border-b border-[#1e293b] pb-1">EQ & Compressor</h3>
-              <SliderRow label="EQ Graves (Low)" value={settings.eqLow} min={-15} max={15} step={1} unit="dB" onChange={(v: number) => onUpdateSetting('eqLow', v)} />
-              <SliderRow label="EQ Médios (Mid)" value={settings.eqMid} min={-15} max={15} step={1} unit="dB" onChange={(v: number) => onUpdateSetting('eqMid', v)} />
-              <SliderRow label="EQ Agudos (High)" value={settings.eqHigh} min={-15} max={15} step={1} unit="dB" onChange={(v: number) => onUpdateSetting('eqHigh', v)} />
-              <SliderRow label="Compressor Threshold" value={settings.compThreshold} min={-60} max={0} step={1} unit="dB" onChange={(v: number) => onUpdateSetting('compThreshold', v)} />
+              <h3 className={sectionTitle}>{tr('EQ & Compressor')}</h3>
+              <SliderRow label={tr('EQ Graves (Low)')} value={settings.eqLow} min={-15} max={15} unit="dB" onChange={set('eqLow')} />
+              <SliderRow label={tr('EQ Médios (Mid)')} value={settings.eqMid} min={-15} max={15} unit="dB" onChange={set('eqMid')} />
+              <SliderRow label={tr('EQ Agudos (High)')} value={settings.eqHigh} min={-15} max={15} unit="dB" onChange={set('eqHigh')} />
+              <SliderRow label={tr('Compressor Threshold')} value={settings.compThreshold} min={-60} max={0} unit="dB" onChange={set('compThreshold')} />
             </div>
           </div>
         )}
 
         {activeTab === 'sound' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
             <div>
-              <h3 className="text-xs font-bold text-cyan-400 mb-3 border-b border-[#1e293b] pb-1">Envelope (ADSR)</h3>
-              <SliderRow label="Attack (Ataque)" value={settings.attack} min={0} max={127} onChange={(v: number) => onUpdateSetting('attack', v)} />
-              <SliderRow label="Release (Liberação)" value={settings.release} min={0} max={127} onChange={(v: number) => onUpdateSetting('release', v)} />
+              <h3 className={sectionTitle}>{tr('Envelope (ADSR)')}</h3>
+              <SliderRow label={tr('Attack (Ataque)')} value={settings.attack} min={0} max={127} unit="" onChange={set('attack')} />
+              <SliderRow label={tr('Release (Liberação)')} value={settings.release} min={0} max={127} unit="" onChange={set('release')} />
             </div>
             <div>
-              <h3 className="text-xs font-bold text-cyan-400 mb-3 border-b border-[#1e293b] pb-1">Filtro & Modulação</h3>
-              <SliderRow label="Cutoff (Corte)" value={settings.cutoff} min={0} max={127} onChange={(v: number) => onUpdateSetting('cutoff', v)} />
-              <SliderRow label="Resonance (Ressonância)" value={settings.resonance} min={0} max={127} onChange={(v: number) => onUpdateSetting('resonance', v)} />
-              <SliderRow label="Vibrato (Profundidade)" value={settings.vibrato} min={0} max={127} onChange={(v: number) => onUpdateSetting('vibrato', v)} />
+              <h3 className={sectionTitle}>{tr('Filtro & Modulação')}</h3>
+              <SliderRow label={tr('Cutoff (Corte)')} value={settings.cutoff} min={0} max={127} unit="" onChange={set('cutoff')} />
+              <SliderRow label={tr('Resonance (Ressonância)')} value={settings.resonance} min={0} max={127} unit="" onChange={set('resonance')} />
+              <SliderRow label={tr('Vibrato (Profundidade)')} value={settings.vibrato} min={0} max={127} unit="" onChange={set('vibrato')} />
             </div>
           </div>
         )}
 
         {activeTab === 'system' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
             <div>
-              <h3 className="text-xs font-bold text-cyan-400 mb-3 border-b border-[#1e293b] pb-1">Afinação e Pitch</h3>
-              <SliderRow label="Ajuste Fino (Fine Tune)" value={settings.fineTune} min={-100} max={100} step={1} unit="ct" onChange={(v: number) => onUpdateSetting('fineTune', v)} />
-              <SliderRow label="Alcance do Pitch Bend" value={settings.pitchBendRange} min={1} max={24} step={1} unit="st" onChange={(v: number) => onUpdateSetting('pitchBendRange', v)} />
+              <h3 className={sectionTitle}>{tr('Afinação e Pitch')}</h3>
+              <SliderRow label={tr('Ajuste Fino (Fine Tune)')} value={settings.fineTune} min={-100} max={100} unit="ct" onChange={set('fineTune')} />
+              <SliderRow label={tr('Alcance do Pitch Bend')} value={settings.pitchBendRange} min={1} max={24} unit="st" onChange={set('pitchBendRange')} />
             </div>
             <div>
-              <h3 className="text-xs font-bold text-cyan-400 mb-3 border-b border-[#1e293b] pb-1">Desempenho (Mobile)</h3>
-              <SliderRow label="Polifonia Máxima" value={settings.maxPolyphony} min={1} max={128} step={1} unit="vozes" onChange={(v: number) => onUpdateSetting('maxPolyphony', v)} />
-              <p className="text-[10px] text-slate-500 mt-2 leading-tight">Limita a quantidade de notas simultâneas para evitar travamentos em celulares mais antigos.</p>
+              <h3 className={sectionTitle}>{tr('Desempenho (Mobile)')}</h3>
+              <SliderRow label={tr('Polifonia Máxima')} value={settings.maxPolyphony} min={1} max={128} unit={` ${tr('vozes')}`} onChange={set('maxPolyphony')} />
+              <p className="mt-2 text-[10px] leading-tight text-slate-500">
+                {tr('Ao atingir o limite, a nota mais antiga é encerrada para dar lugar à nova. Reduza em celulares mais antigos.')}
+              </p>
+              <p className="mt-2 text-[10px] leading-tight text-slate-500">{tr('As configurações são salvas automaticamente.')}</p>
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
