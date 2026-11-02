@@ -527,7 +527,7 @@ export default function App() {
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4"><MidiControlsScreen channel={selectedChannel} isConnected={isConnected} onStatus={(message, type = 'info') => showMessage(message, type, 3000)} /></div>
         ) : activeTab === 'soundfont' ? (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden">
-            <SoundFontScreen onStatus={(message, type = 'info') => showMessage(message, type, 3000)} />
+          <SoundFontScreen onStatus={(message, type) => showMessage(message, type || 'info', 3000)} />
           </div>
         ) : (
           <div className="nexus-screen-container flex min-h-0 flex-1 flex-col overflow-hidden"><MidiMonitorScreen /></div>
