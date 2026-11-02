@@ -1,0 +1,119 @@
+/* =========================================================
+   APP E CABEÇALHO
+   ========================================================= */
+
+.nexus-app {
+  isolation: isolate;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--nexus-text);
+  background:
+    radial-gradient(
+      ellipse at 50% -20%,
+      rgba(59, 130, 246, 0.09),
+      transparent 58%
+    ),
+    linear-gradient(
+      180deg,
+      var(--nexus-bg-top),
+      var(--nexus-bg-bottom)
+    );
+}
+
+.nexus-header {
+  gap: 12px;
+  background: rgba(10, 14, 26, 0.91);
+  border-bottom: 1px solid var(--nexus-border);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.nexus-brand {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nexus-brand-icon {
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--nexus-primary),
+    var(--nexus-primary-end)
+  );
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.22);
+}
+
+.nexus-brand-name {
+  color: var(--nexus-text);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.35px;
+  line-height: 1.2;
+}
+
+.nexus-brand-name > span {
+  color: var(--nexus-accent);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+/* NAVEGAÇÃO */
+
+.nexus-nav {
+  padding: 4px;
+  border: 1px solid var(--nexus-border);
+  border-radius: 14px;
+  background: rgba(5, 7, 13, 0.7);
+}
+
+.nexus-nav-button {
+  flex: 0 0 auto;
+  color: var(--nexus-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.nexus-nav-button:hover {
+  color: var(--nexus-text);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.nexus-nav-button:active {
+  transform: scale(0.96);
+}
+
+.nexus-nav-button.is-active {
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--nexus-primary),
+    var(--nexus-primary-end)
+  );
+  border-color: rgba(147, 197, 253, 0.16);
+  box-shadow: 0 3px 14px rgba(59, 130, 246, 0.22);
+}
+
+.nexus-nav-button.is-active svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.16));
+}
+
+.nexus-nav-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--nexus-success);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.45);
+}

@@ -1,0 +1,65 @@
+/* =========================================================
+   TOASTS (Mensagens de Status)
+   ========================================================= */
+
+.nexus-toast-container {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.nexus-toast {
+  width: fit-content;
+  border: 1px solid var(--nexus-border-strong);
+  background: rgba(15, 23, 42, 0.97);
+  box-shadow: var(--nexus-shadow-float);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: nexus-toast-in 180ms ease-out;
+}
+
+.nexus-toast.is-success {
+  color: #a7f3d0;
+  border-color: rgba(16, 185, 129, 0.28);
+  background: rgba(6, 40, 35, 0.96);
+}
+
+.nexus-toast.is-warning {
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(55, 37, 9, 0.97);
+}
+
+.nexus-toast.is-error {
+  color: #fecdd3;
+  border-color: rgba(244, 63, 94, 0.3);
+  background: rgba(60, 14, 29, 0.97);
+}
+
+.nexus-toast.is-info {
+  color: #bae6fd;
+  border-color: rgba(56, 189, 248, 0.24);
+  background: rgba(12, 32, 52, 0.97);
+}
+
+.nexus-toast-close {
+  display: flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.nexus-toast-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 1;
+}
+
+@keyframes nexus-toast-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}

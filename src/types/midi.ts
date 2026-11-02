@@ -47,13 +47,13 @@ export interface MidiMessage {
   sourceId?: string;
 }
 
-// NOVO: Rota de Roteamento
+/** Rota do patchbay. */
 export interface MidiRoute {
   id: string;
   enabled: boolean;
-  sourceId: string | null; // 'virtual-main' para teclado, null para todos, ou ID do dispositivo
-  destinationId: string;   // ID do dispositivo de saída
-  inputChannel: number;    // 0 = Omni
-  outputChannel: number;   // 0 = Manter
+  sourceId: string | null; // 'virtual-main' = teclado/pads do app, null = todas as entradas
+  destinationId: string; // ID do dispositivo de saída
+  inputChannel: number; // 0 = Omni
+  outputChannel: number; // 0 = manter
   transpose: number;
 }

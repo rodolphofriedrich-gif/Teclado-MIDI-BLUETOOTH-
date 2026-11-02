@@ -1,0 +1,32 @@
+/* =========================================================
+   ESTILOS DE APOIO E FORMULÁRIOS
+   ========================================================= */
+
+input, select, textarea {
+  color: var(--nexus-text);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--nexus-text-muted);
+}
+
+input[type="range"] {
+  accent-color: var(--nexus-primary);
+}
+
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--nexus-primary);
+}
+
+a, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button svg {
+  flex-shrink: 0;
+}
+
+.nexus-app, .nexus-app button {
+  -webkit-user-select: none;
+  user-select: none;
+}

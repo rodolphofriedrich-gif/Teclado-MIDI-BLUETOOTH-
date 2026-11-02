@@ -1,0 +1,66 @@
+/* =========================================================
+   NEXUSMIDI PRO — MIDNIGHT STUDIO
+   Tema global • Azul índigo • Ciano • Superfícies escuras
+   ========================================================= */
+
+:root {
+  color-scheme: dark;
+
+  --nexus-bg-top: #0a0e1a;
+  --nexus-bg-bottom: #05070d;
+  --nexus-panel: #111827;
+  --nexus-panel-raised: #151e2e;
+  --nexus-panel-hover: #1b2638;
+
+  --nexus-primary: #3b82f6;
+  --nexus-primary-end: #6366f1;
+  --nexus-accent: #22d3ee;
+
+  --nexus-text: #f1f5f9;
+  --nexus-text-secondary: #94a3b8;
+  --nexus-text-muted: #64748b;
+
+  --nexus-success: #10b981;
+  --nexus-success-end: #059669;
+  --nexus-warning: #f59e0b;
+  --nexus-danger: #f43f5e;
+
+  --nexus-border: rgba(255, 255, 255, 0.07);
+  --nexus-border-strong: rgba(255, 255, 255, 0.12);
+  --nexus-glass: rgba(255, 255, 255, 0.045);
+
+  --nexus-radius-sm: 10px;
+  --nexus-radius-md: 14px;
+  --nexus-radius-lg: 16px;
+  --nexus-radius-xl: 20px;
+
+  --nexus-shadow-card:
+    0 4px 24px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+
+  --nexus-shadow-float:
+    0 18px 48px rgba(0, 0, 0, 0.48),
+    0 4px 12px rgba(0, 0, 0, 0.25);
+
+  --nexus-shadow-primary:
+    0 4px 18px rgba(59, 130, 246, 0.2);
+
+  font-family:
+    Inter,
+    "SF Pro Display",
+    "Segoe UI",
+    Roboto,
+    system-ui,
+    -apple-system,
+    sans-serif;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Breakpoint extra usado nas classes `xs:` (antes não existia e essas classes eram ignoradas). */
+@theme {
+  --breakpoint-xs: 30rem;
+}

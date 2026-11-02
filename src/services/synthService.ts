@@ -1,126 +1,279 @@
-import workletUrl from 'spessasynth_lib/dist/spessasynth_processor.min.js?url';
-import { WorkletSynthesizer } from 'spessasynth_lib';
+import { clampInt } from '../lib/midiMath';
+import type { BackendFactory, SynthBackend, SynthSettings } from './synthTypes';
 
-class SynthService {
-  private audioContext: AudioContext | null = null;
-  private synth: WorkletSynthesizer | null = null;
-  private isReady: boolean = false;
-  private currentFileName: string | null = null;
-  private workletLoaded: boolean = false;
-  private transpose: number = 0;
+export interface SynthSnapshot {
+  ready: boolean;
+  loading: boolean;
+  fileName: string | null;
+}
 
-  public async init(): Promise<void> {
-    if (this.audioContext) return;
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    this.audioContext = new AudioCtx({ sampleRate: 44100 });
-    if (this.audioContext.state === 'suspended') await this.audioContext.resume();
+const DRUM_CHANNEL_INDEX = 9; // canal 10 (GM): percussão não deve ser transposta
+const toCc = (percent: number): number => clampInt(Math.round(percent * 1.27), 0, 127);
+
+/**
+ * Orquestra o sintetizador: controle de polifonia (com "voice stealing"), transposição segura,
+ * aplicação de configurações e recarga de SoundFonts — sem conhecer Web Audio/SpessaSynth.
+ */
+export class SynthService {
+  private backend: SynthBackend | null = null;
+  private backendPromise: Promise<SynthBackend> | null = null;
+  private snapshot: SynthSnapshot = { ready: false, loading: false, fileName: null };
+  private readonly listeners = new Set<() => void>();
+
+  /** `canal:nota` tocada → nota realmente enviada ao motor (mantém a ordem de chegada). */
+  private readonly active = new Map<string, number>();
+  private readonly channelPrograms = new Map<number, number>();
+  private maxPolyphony = 64;
+  private transpose = 0;
+
+  constructor(private readonly factory: BackendFactory) {}
+
+  // ---- estado observável (useSyncExternalStore) ----
+  getSnapshot = (): SynthSnapshot => this.snapshot;
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  private update(patch: Partial<SynthSnapshot>): void {
+    this.snapshot = { ...this.snapshot, ...patch };
+    this.listeners.forEach((l) => l());
   }
 
-  private async ensureWorkletLoaded(): Promise<void> {
-    if (this.workletLoaded || !this.audioContext) return;
-    try {
-      await this.audioContext.audioWorklet.addModule(workletUrl);
-      this.workletLoaded = true;
-    } catch (error) {
-      console.error('Erro ao carregar o worklet:', error);
-      throw error;
+  getIsReady(): boolean {
+    return this.snapshot.ready;
+  }
+
+  getCurrentFileName(): string | null {
+    return this.snapshot.fileName;
+  }
+
+  // ---- ciclo de vida ----
+  private ensureBackend(): Promise<SynthBackend> {
+    if (this.backend) return Promise.resolve(this.backend);
+    if (!this.backendPromise) {
+      this.backendPromise = this.factory().then(
+        (backend) => {
+          this.backend = backend;
+          return backend;
+        },
+        (error: unknown) => {
+          this.backendPromise = null; // permite tentar de novo
+          throw error;
+        },
+      );
     }
+    return this.backendPromise;
   }
 
-  public async loadSoundFontBuffer(buffer: ArrayBuffer, fileName: string): Promise<boolean> {
+  /** Retoma o AudioContext (navegadores exigem um gesto do usuário). */
+  async resume(): Promise<void> {
+    await this.backend?.resume();
+  }
+
+  async loadSoundFontBuffer(buffer: ArrayBuffer, fileName: string): Promise<boolean> {
+    this.update({ loading: true });
     try {
-      await this.init();
-      if (!this.audioContext) throw new Error('AudioContext indisponível');
-      await this.ensureWorkletLoaded();
-
-      this.synth = new WorkletSynthesizer(this.audioContext);
-      this.synth.soundBankManager.addSoundBank(buffer, fileName);
-      this.synth.connect(this.audioContext.destination);
-
-      this.isReady = true;
-      this.currentFileName = fileName;
+      const backend = await this.ensureBackend();
+      this.allNotesOff();
+      await backend.engine.loadSoundBank(buffer, fileName);
+      // Reaplica os programas por canal (o novo banco começa do zero).
+      for (const [channel, program] of this.channelPrograms) backend.engine.programChange(channel, program);
+      this.update({ ready: true, loading: false, fileName });
       return true;
     } catch (error) {
       console.error('Erro ao carregar SoundFont:', error);
-      this.isReady = false;
+      this.update({ loading: false, ready: this.snapshot.ready });
       return false;
     }
   }
 
-  public async loadSoundFont(file: File): Promise<boolean> {
-    const buffer = await file.arrayBuffer();
-    return this.loadSoundFontBuffer(buffer, file.name);
+  async loadSoundFont(file: File): Promise<boolean> {
+    return this.loadSoundFontBuffer(await file.arrayBuffer(), file.name);
   }
 
-  public getIsReady(): boolean { return this.isReady; }
-  public getCurrentFileName(): string | null { return this.currentFileName; }
-
-  public noteOn(note: number, velocity: number, channel: number = 1): void {
-    if (!this.isReady || !this.synth) return;
-    const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    const transposedNote = Math.max(0, Math.min(127, note + this.transpose));
-    this.synth.noteOn(safeChannel, transposedNote, velocity);
+  dispose(): void {
+    this.allNotesOff();
+    this.backend?.dispose();
+    this.backend = null;
+    this.backendPromise = null;
+    this.update({ ready: false, loading: false, fileName: null });
   }
 
-  public noteOff(note: number, channel: number = 1): void {
-    if (!this.isReady || !this.synth) return;
-    const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    const transposedNote = Math.max(0, Math.min(127, note + this.transpose));
-    this.synth.noteOff(safeChannel, transposedNote);
+  // ---- notas ----
+  private index(channel: number): number {
+    return clampInt(channel - 1, 0, 15);
   }
 
-  public controlChange(controller: number, value: number, channel: number = 1): void {
-    if (!this.isReady || !this.synth) return;
-    const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    // "as any" resolve o erro de tipo MIDIController sem quebrar a lógica
-    this.synth.controllerChange(safeChannel, controller as any, value);
+  noteOn(note: number, velocity: number, channel = 1): void {
+    const engine = this.backend?.engine;
+    if (!this.snapshot.ready || !engine) return;
+    void this.backend?.resume();
+
+    const ch = this.index(channel);
+    const original = clampInt(note, 0, 127);
+    const key = `${ch}:${original}`;
+
+    // Retoque da mesma nota: encerra a anterior para não deixar voz presa.
+    const previous = this.active.get(key);
+    if (previous !== undefined) {
+      engine.noteOff(ch, previous);
+      this.active.delete(key);
+    }
+
+    // Polifonia cheia: "rouba" a voz mais antiga em vez de ignorar a nota nova.
+    while (this.active.size >= this.maxPolyphony) {
+      const oldest = this.active.entries().next().value as [string, number] | undefined;
+      if (!oldest) break;
+      const [oldKey, oldSounding] = oldest;
+      engine.noteOff(Number(oldKey.split(':')[0]), oldSounding);
+      this.active.delete(oldKey);
+    }
+
+    const shift = ch === DRUM_CHANNEL_INDEX ? 0 : this.transpose;
+    const sounding = clampInt(original + shift, 0, 127);
+    this.active.set(key, sounding);
+    engine.noteOn(ch, sounding, clampInt(velocity, 1, 127));
   }
 
-  public programChange(program: number, channel: number = 1): void {
-    if (!this.isReady || !this.synth) return;
-    const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    this.synth.programChange(safeChannel, program);
+  noteOff(note: number, channel = 1): void {
+    const engine = this.backend?.engine;
+    if (!this.snapshot.ready || !engine) return;
+    const ch = this.index(channel);
+    const original = clampInt(note, 0, 127);
+    const key = `${ch}:${original}`;
+    // Usa a nota registrada no noteOn: se a transposição mudou no meio, a nota certa é desligada.
+    const sounding = this.active.get(key) ?? original;
+    this.active.delete(key);
+    engine.noteOff(ch, sounding);
   }
 
-  public pitchWheel(channel: number, value: number): void {
-    if (!this.isReady || !this.synth) return;
-    const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    const safeValue = Math.max(0, Math.min(16383, value));
-    const lsb = safeValue & 0x7F;
-    const msb = (safeValue >> 7) & 0x7F;
-    (this.synth as any).pitchWheel(safeChannel, msb, lsb);
+  allNotesOff(): void {
+    this.active.clear();
+    if (this.snapshot.ready) this.backend?.engine.allSoundOff();
   }
 
-  public channelPressure(channel: number, value: number): void {
-    if (!this.isReady || !this.synth) return;
-    const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    const safeValue = Math.max(0, Math.min(127, value));
-    (this.synth as any).channelPressure(safeChannel, safeValue);
+  // ---- mensagens de canal ----
+  controlChange(controller: number, value: number, channel = 1): void {
+    const engine = this.backend?.engine;
+    if (!this.snapshot.ready || !engine) return;
+    const ch = this.index(channel);
+    if (controller === 120 || controller === 123) {
+      for (const key of [...this.active.keys()]) if (key.startsWith(`${ch}:`)) this.active.delete(key);
+    }
+    engine.controlChange(ch, clampInt(controller, 0, 127), clampInt(value, 0, 127));
   }
 
-  public setMasterVolume(volume: number, channel: number = 1): void {
-    this.controlChange(7, Math.round(Math.max(0, Math.min(100, volume)) * 1.27), channel);
-  }
-  
-  public setReverb(amount: number, channel: number = 1): void {
-    this.controlChange(91, Math.round(Math.max(0, Math.min(100, amount)) * 1.27), channel);
-  }
-
-  public setChorus(amount: number, channel: number = 1): void {
-    this.controlChange(93, Math.round(Math.max(0, Math.min(100, amount)) * 1.27), channel);
+  programChange(program: number, channel = 1): void {
+    const ch = this.index(channel);
+    const p = clampInt(program, 0, 127);
+    this.channelPrograms.set(ch, p);
+    if (this.snapshot.ready) this.backend?.engine.programChange(ch, p);
   }
 
-  public setFilterCutoff(amount: number, channel: number = 1): void {
-    this.controlChange(74, Math.round(Math.max(0, Math.min(100, amount)) * 1.27), channel);
+  /** `value14`: 0–16383 (8192 = centro). */
+  pitchBend(value14: number, channel = 1): void {
+    if (!this.snapshot.ready) return;
+    this.backend?.engine.pitchBend(this.index(channel), clampInt(value14, 0, 16383));
   }
 
-  public setFilterResonance(amount: number, channel: number = 1): void {
-    this.controlChange(71, Math.round(Math.max(0, Math.min(100, amount)) * 1.27), channel);
+  channelPressure(pressure: number, channel = 1): void {
+    if (!this.snapshot.ready) return;
+    this.backend?.engine.channelPressure(this.index(channel), clampInt(pressure, 0, 127));
   }
 
-  public setTranspose(semitones: number): void {
-    this.transpose = Math.max(-24, Math.min(24, semitones));
+  polyPressure(note: number, pressure: number, channel = 1): void {
+    if (!this.snapshot.ready) return;
+    this.backend?.engine.polyPressure(this.index(channel), clampInt(note, 0, 127), clampInt(pressure, 0, 127));
+  }
+
+  /** Reaplica programas salvos (ex.: restaurados do armazenamento) sem exigir SoundFont carregado. */
+  setChannelPrograms(assignments: Record<number, number>): void {
+    for (const [ch, program] of Object.entries(assignments)) {
+      this.programChange(program, Number(ch));
+    }
+  }
+
+  // ---- parâmetros (CC) ----
+  setMasterVolume(volumePercent: number, channel = 1): void { this.controlChange(7, toCc(volumePercent), channel); }
+  setPan(percent: number, channel = 1): void { this.controlChange(10, toCc(percent), channel); }
+  setReverb(percent: number, channel = 1): void { this.controlChange(91, toCc(percent), channel); }
+  setChorus(percent: number, channel = 1): void { this.controlChange(93, toCc(percent), channel); }
+  // Attack/Release/Cutoff/Resonance/Vibrato já usam a escala de CC (0–127) nos sliders.
+  setAttack(cc: number, channel = 1): void { this.controlChange(73, cc, channel); }
+  setRelease(cc: number, channel = 1): void { this.controlChange(72, cc, channel); }
+  setFilterCutoff(cc: number, channel = 1): void { this.controlChange(74, cc, channel); }
+  setFilterResonance(cc: number, channel = 1): void { this.controlChange(71, cc, channel); }
+  setVibratoDepth(cc: number, channel = 1): void { this.controlChange(1, cc, channel); }
+
+  /** Afinação fina em centésimos (-100…+100) via RPN 1. */
+  setFineTuning(cents: number, channel = 1): void {
+    const value = clampInt(Math.round(((cents + 100) / 200) * 16383), 0, 16383);
+    this.sendRpn(1, (value >> 7) & 0x7f, value & 0x7f, channel);
+  }
+
+  /** Alcance do pitch bend em semitons via RPN 0. */
+  setPitchBendRange(semitones: number, channel = 1): void {
+    this.sendRpn(0, clampInt(semitones, 0, 24), 0, channel);
+  }
+
+  private sendRpn(parameter: number, msb: number, lsb: number, channel: number): void {
+    this.controlChange(101, 0, channel);
+    this.controlChange(100, parameter, channel);
+    this.controlChange(6, msb, channel);
+    this.controlChange(38, lsb, channel);
+    this.controlChange(101, 127, channel); // encerra o RPN para não capturar CCs seguintes
+    this.controlChange(100, 127, channel);
+  }
+
+  // ---- efeitos globais ----
+  setDelay(timeMs: number, feedback: number, mix: number): void { this.backend?.fx.setDelay(timeMs, feedback, mix); }
+  setEQ(low: number, mid: number, high: number): void { this.backend?.fx.setEQ(low, mid, high); }
+  setCompressor(threshold: number, ratio: number): void { this.backend?.fx.setCompressor(threshold, ratio); }
+  setTranspose(semitones: number): void { this.transpose = clampInt(semitones, -24, 24); }
+  setMaxPolyphony(max: number): void { this.maxPolyphony = clampInt(max, 1, 256); }
+
+  /**
+   * Aplica as configurações do painel. Com `previous`, só reenvia o que mudou
+   * (arrastar um slider não gera 144 mensagens por movimento).
+   */
+  applySettings(next: SynthSettings, previous?: SynthSettings): void {
+    if (!this.snapshot.ready) return;
+    const changed = (...keys: Array<keyof SynthSettings>): boolean =>
+      !previous || keys.some((k) => previous[k] !== next[k]);
+
+    if (changed('transpose')) this.setTranspose(next.transpose);
+    if (changed('maxPolyphony')) this.setMaxPolyphony(next.maxPolyphony);
+    if (changed('delayTime', 'delayFeedback', 'delayMix')) this.setDelay(next.delayTime, next.delayFeedback, next.delayMix);
+    if (changed('eqLow', 'eqMid', 'eqHigh')) this.setEQ(next.eqLow, next.eqMid, next.eqHigh);
+    if (changed('compThreshold')) this.setCompressor(next.compThreshold, 4);
+
+    for (let ch = 1; ch <= 16; ch++) {
+      if (changed('reverb')) this.setReverb(next.reverb, ch);
+      if (changed('chorus')) this.setChorus(next.chorus, ch);
+      if (changed('attack')) this.setAttack(next.attack, ch);
+      if (changed('release')) this.setRelease(next.release, ch);
+      if (changed('cutoff')) this.setFilterCutoff(next.cutoff, ch);
+      if (changed('resonance')) this.setFilterResonance(next.resonance, ch);
+      if (changed('vibrato')) this.setVibratoDepth(next.vibrato, ch);
+      if (changed('fineTune')) this.setFineTuning(next.fineTune, ch);
+      if (changed('pitchBendRange')) this.setPitchBendRange(next.pitchBendRange, ch);
+    }
+  }
+
+  /** Mute/solo por canal usando o volume (CC 7). */
+  applyMix(volumePercent: number, muted: Record<number, boolean>, solo: number | null): void {
+    if (!this.snapshot.ready) return;
+    for (let ch = 1; ch <= 16; ch++) {
+      const silenced = muted[ch] === true || (solo !== null && solo !== ch);
+      this.setMasterVolume(silenced ? 0 : volumePercent, ch);
+    }
   }
 }
 
-export const synthService = new SynthService();
+/** Instância usada pelo app. O backend real (SpessaSynth) só é carregado no primeiro uso. */
+export const synthService = new SynthService(async () => {
+  const { createWebAudioBackend } = await import('./audio/spessaEngine');
+  return createWebAudioBackend();
+});

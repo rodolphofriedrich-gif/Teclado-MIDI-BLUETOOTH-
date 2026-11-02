@@ -1,0 +1,44 @@
+/* =========================================================
+   BARRA DE STATUS MIDI (Inferior)
+   ========================================================= */
+
+.nexus-midi-status {
+  min-height: 34px;
+  color: var(--nexus-text-muted);
+  background: rgba(15, 23, 42, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.035);
+  border-radius: 10px;
+}
+
+.nexus-tx-indicator {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #475569;
+}
+
+.nexus-tx-indicator.is-active {
+  background: var(--nexus-success);
+  box-shadow: 0 0 9px rgba(16, 185, 129, 0.48);
+}
+
+.nexus-midi-status-value {
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.nexus-midi-status-empty {
+  color: var(--nexus-text-muted);
+  font-size: 10px;
+  font-style: italic;
+}
+
+.nexus-studio-label {
+  color: #475569;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.15px;
+}

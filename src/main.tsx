@@ -1,15 +1,18 @@
 import { createRoot } from 'react-dom/client';
-import App from './App.tsx';
+import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { startAppServices } from './bootstrap';
 import './index.css';
 
-// Captura o elemento root e garante que ele existe
 const rootElement = document.getElementById('root');
+if (!rootElement) throw new Error('Elemento #root não encontrado no index.html');
 
-if (!rootElement) {
-  throw new Error("Elemento #root não encontrado no index.html");
-}
+startAppServices();
 
-// Renderiza o App
-// NOTA: StrictMode foi intencionalmente omitido para evitar
-// listeners duplicados no motor MIDI durante o desenvolvimento.
-createRoot(rootElement).render(<App />);
+// StrictMode foi omitido de propósito: ele monta/desmonta efeitos duas vezes em desenvolvimento,
+// o que duplicaria as conexões com o motor MIDI nativo.
+createRoot(rootElement).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+);
