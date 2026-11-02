@@ -72,13 +72,30 @@ class SynthService {
   public controlChange(controller: number, value: number, channel: number = 1): void {
     if (!this.isReady || !this.synth) return;
     const safeChannel = Math.max(0, Math.min(15, channel - 1));
-    this.synth.controllerChange(safeChannel, controller, value);
+    // "as any" resolve o erro de tipo MIDIController sem quebrar a lógica
+    this.synth.controllerChange(safeChannel, controller as any, value);
   }
 
   public programChange(program: number, channel: number = 1): void {
     if (!this.isReady || !this.synth) return;
     const safeChannel = Math.max(0, Math.min(15, channel - 1));
     this.synth.programChange(safeChannel, program);
+  }
+
+  public pitchWheel(channel: number, value: number): void {
+    if (!this.isReady || !this.synth) return;
+    const safeChannel = Math.max(0, Math.min(15, channel - 1));
+    const safeValue = Math.max(0, Math.min(16383, value));
+    const lsb = safeValue & 0x7F;
+    const msb = (safeValue >> 7) & 0x7F;
+    (this.synth as any).pitchWheel(safeChannel, msb, lsb);
+  }
+
+  public channelPressure(channel: number, value: number): void {
+    if (!this.isReady || !this.synth) return;
+    const safeChannel = Math.max(0, Math.min(15, channel - 1));
+    const safeValue = Math.max(0, Math.min(127, value));
+    (this.synth as any).channelPressure(safeChannel, safeValue);
   }
 
   public setMasterVolume(volume: number, channel: number = 1): void {
