@@ -1,0 +1,46 @@
+# Changelog
+
+Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
+
+## [1.0.0]
+
+### Corrigido
+- **Falhas que derrubavam o app**: `sendPanic` e `sendChannelPressure` (tela de Controles: MIDI Panic e aplicar preset) eram chamados mas não existiam.
+- **"Ficar visível" (BLE) não funcionava**: o JS chamava `startBleServer`/`stopBleServer`/`isBleServerRunning`, que não existiam no plugin Java. Agora há um servidor BLE MIDI completo (`BleMidiServer`).
+- **Teclados USB não conectavam**: o app só abria a porta de saída (um teclado controlador não tem). Agora conecta entrada e/ou saída conforme as portas do dispositivo.
+- Sem rota, o teclado virtual não chegava aos dispositivos externos: uma rota padrão é criada ao conectar.
+- O SoundFont salvo só era restaurado ao abrir a aba "Sintetizador" — agora é restaurado na abertura do app.
+- O sintetizador era recriado a cada carregamento (vazamento de nós de áudio e de memória). Agora o grafo é criado uma vez.
+- Sliders de Attack/Release/Cutoff/Resonance/Vibrato saturavam em ~79% (escala de CC multiplicada por 1,27 indevidamente).
+- Os sliders do painel de configuração eram remontados a cada movimento (componente definido dentro de outro componente).
+- Notas presas ao mudar a transposição entre note-on e note-off; polifonia cheia ignorava a nota nova (agora encerra a mais antiga); a percussão (canal 10) era transposta.
+- Pitch Bend, Channel Pressure e Poly Aftertouch agora chegam ao sintetizador.
+- Pacotes MIDI com várias mensagens / running status eram lidos pela metade.
+- O monitor MIDI perdia o histórico ao trocar de aba e não mostrava as mensagens enviadas (TX).
+- Erros de envio eram silenciados: agora 3 falhas seguidas desconectam o destino e avisam o usuário.
+- `allNotesOff` enviava os 16 canais em sequência; agora em paralelo.
+- `AudioContext` não força mais 44,1 kHz (menos reamostragem/latência).
+- Escaneamento BLE no Android ≤ 11 exigia permissão de localização que nunca era pedida; conexão BLE direta não é mais limitada ao Android 13+.
+- Callback de permissão rodava sempre a busca, mesmo quando a chamada original era "conectar".
+- Ícone `icon-192.png` referenciado no `index.html` não existia; PWA com ícones PNG (192/512/maskable).
+- O nome "NEXUSMIDI Pro" no cabeçalho nunca aparecia: as classes `xs:` não tinham breakpoint definido (agora `--breakpoint-xs: 30rem`).
+- Importação circular `MidiKeyboard` ↔ `App` removida; VU não usa mais valores aleatórios.
+- IndexedDB: transação do SoundFont não depende mais de `FileReader` dentro da transação.
+
+### Adicionado
+- Biblioteca com vários SoundFonts. Rotas, configurações do sintetizador, canais, ferramentas e MIDI Learn são salvos.
+- Tela **Ferramentas**: curva de velocity, escalas, acordes, arpejador, metrônomo/tap tempo/MIDI Clock, gravador com exportação `.mid`, MIDI Learn e idioma.
+- Plug/unplug USB detectado (`devicesChanged`); roteamento de Clock/Start/Stop.
+- Interface em Português e Inglês; `ErrorBoundary`.
+- Testes (Vitest), Oxlint, Prettier, CI com cache, build de release assinado e GitHub Release por tag.
+
+### Alterado
+- `index.css` (24 KB) dividido em `src/styles/*.css`, um arquivo por área.
+- `App.tsx` dividido em hooks e componentes; `services/` reorganizado com injeção de dependências.
+- Build Android sem Service Worker (`vite build --mode android`).
+- Release com R8/shrinkResources; `allowBackup` desativado; depuração de WebView só em builds debug.
+- Nome padronizado para **NexusMIDI Pro**.
+
+### Removido
+- Componentes sem uso, workflow duplicado (`Yaml`), arquivos do AI Studio e dependências não utilizadas (`@google/genai`, `express`, `dotenv`, `motion`, `tsx`, `esbuild`, `autoprefixer`).
+- Arquivos gerados (`android/app/src/main/assets/public`) que estavam versionados.

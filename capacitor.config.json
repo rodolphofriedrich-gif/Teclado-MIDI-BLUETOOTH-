@@ -1,20 +1,13 @@
 {
-"appId": "com.midi.controller.keyboard",
-"appName": "NexusMIDI Pro",
-"webDir": "dist",
-"bundledWebRuntime": false,
-"server": {
-"androidScheme": "https"
-},
-"android": {
-"webContentsDebuggingEnabled": false,
-"allowMixedContent": false
-},
-"plugins": {
-"SplashScreen": {
-"launchShowDuration": 2000,
-"backgroundColor": "#090d16",
-"showSpinner": false
-}
-}
+  "appId": "com.midi.controller.keyboard",
+  "appName": "NexusMIDI Pro",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false,
+    "backgroundColor": "#0a0e1a"
+  }
 }

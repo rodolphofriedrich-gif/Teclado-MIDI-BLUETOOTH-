@@ -7,13 +7,17 @@ Este projeto utiliza as seguintes bibliotecas de código aberto. Agradecemos aos
 *   **Vite** - Licença MIT
 *   **Tailwind CSS** - Licença MIT
 *   **Lucide React (Ícones)** - Licença ISC
+*   **vite-plugin-pwa / Workbox** - Licença MIT
 
 ### Áudio / MIDI
 *   **SpessaSynth / spessasynth_lib** - Licença Apache 2.0 (Motor de áudio SoundFont para Web)
-*   **Capacitor** - Licença MIT (Ponte nativa para Android)
+*   **Capacitor** (`@capacitor/core`, `@capacitor/filesystem`, `@capacitor/share`) - Licença MIT (Ponte nativa para Android; arquivos e compartilhamento)
 
 ### Nativo Android
 *   **Android MIDI API** - Fornecida pelo Android Open Source Project (Apache 2.0)
+
+### Ferramentas de desenvolvimento
+*   **Vitest**, **Oxlint**, **Prettier**, **TypeScript** - Licença MIT / Apache 2.0
 
 ### SoundFonts
 *   Os arquivos `.sf2` não estão inclusos neste repositório. Os usuários devem fornecer seus próprios arquivos de som. Certifique-se de usar SoundFonts de domínio público ou licenciados corretamente.
