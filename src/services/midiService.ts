@@ -10,7 +10,6 @@ export interface MidiMessage {
   sourceId?: string;
 }
 
-// EXPORTAÇÃO CORRETA
 export const getNoteName = (note: number): string => {
   const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   if (!Number.isInteger(note) || note < 0 || note > 127) return '--';
@@ -179,6 +178,39 @@ class MidiService {
     return { hex: this.toHex([status, cc, safeValue]) };
   }
 
+  public async sendProgramChange(channel: number, program: number): Promise<{ hex: string }> {
+    const status = 0xC0 + this.clamp(Math.trunc(channel), 1, 16) - 1;
+    const safeProgram = this.clamp(Math.trunc(program), 0, 127);
+    this.routeMessage(status, safeProgram, 0, 'virtual-main');
+    return { hex: this.toHex([status, safeProgram]) };
+  }
+
+  public async sendPitchBend(channel: number, value: number): Promise<{ hex: string }> {
+    const safeChannel = this.clamp(Math.trunc(channel), 1, 16);
+    const safeValue = this.clamp(Math.trunc(value), 0, 16383);
+    const lsb = safeValue & 0x7F;
+    const msb = (safeValue >> 7) & 0x7F;
+    this.routeMessage(0xE0 + safeChannel - 1, lsb, msb, 'virtual-main');
+    return { hex: this.toHex([0xE0 + safeChannel - 1, lsb, msb]) };
+  }
+
+  public async sendChannelPressure(channel: number, pressure: number): Promise<{ hex: string }> {
+    const status = 0xD0 + this.clamp(Math.trunc(channel), 1, 16) - 1;
+    const safePressure = this.clamp(Math.trunc(pressure), 0, 127);
+    this.routeMessage(status, safePressure, 0, 'virtual-main');
+    return { hex: this.toHex([status, safePressure]) };
+  }
+
+  public async sendPanic(channels: number[]): Promise<void> {
+    for (const ch of channels) {
+      const safeCh = this.clamp(Math.trunc(ch), 1, 16);
+      const status = 0xB0 + safeCh - 1;
+      this.routeMessage(status, 120, 0, 'virtual-main');
+      this.routeMessage(status, 121, 0, 'virtual-main');
+      this.routeMessage(status, 123, 0, 'virtual-main');
+    }
+  }
+
   public routeMessage(status: number, data1: number, data2: number, sourceId?: string): void {
     const command = status & 0xF0;
     const inputChannel = (status & 0x0F) + 1;
@@ -187,6 +219,12 @@ class MidiService {
       if (command === 0x90 && data2 > 0) synthService.noteOn(data1, data2, inputChannel);
       else if (command === 0x80 || (command === 0x90 && data2 === 0)) synthService.noteOff(data1, inputChannel);
       else if (command === 0xB0) synthService.controlChange(data1, data2, inputChannel);
+      else if (command === 0xC0) synthService.programChange(data1, inputChannel);
+      else if (command === 0xD0) synthService.channelPressure(inputChannel, data1);
+      else if (command === 0xE0) {
+        const val = (data2 << 7) | data1;
+        synthService.pitchWheel(inputChannel, val);
+      }
     }
 
     for (const route of this.routes) {
